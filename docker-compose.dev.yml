@@ -1,0 +1,27 @@
+# ==============================================================================
+# Docker Compose — Development Overrides
+# ==============================================================================
+# Usage: docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+# ==============================================================================
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    # Override production command with Django dev server
+    command: python manage.py runserver 0.0.0.0:8000
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.development
+    volumes:
+      # Mount source code for hot-reload
+      - ./backend:/app
+    ports:
+      - "8000:8000"
+
+  celery:
+    command: celery -A config worker --loglevel=debug
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.development
+    volumes:
+      - ./backend:/app

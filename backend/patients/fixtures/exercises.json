@@ -1,0 +1,54 @@
+[
+  {
+    "model": "patients.exercise",
+    "pk": 1,
+    "fields": {
+      "exercise_id": "a_n",
+      "title": "Vokal A",
+      "description": "Sagen Sie ca. 2 Sekunden ein klares \"Aaaaa\".",
+      "example_audio_url_female": "/examples/female/1-a_n.mp3",
+      "example_audio_url_male": "/examples/male/4-a_n.mp3",
+      "order": 1,
+      "is_active": true
+    }
+  },
+  {
+    "model": "patients.exercise",
+    "pk": 2,
+    "fields": {
+      "exercise_id": "i_n",
+      "title": "Vokal I",
+      "description": "Sagen Sie ca. 2 Sekunden ein klares \"Iiiii\".",
+      "example_audio_url_female": "/examples/female/1-i_n.mp3",
+      "example_audio_url_male": "/examples/male/4-i_n.mp3",
+      "order": 2,
+      "is_active": true
+    }
+  },
+  {
+    "model": "patients.exercise",
+    "pk": 3,
+    "fields": {
+      "exercise_id": "u_n",
+      "title": "Vokal U",
+      "description": "Sagen Sie ca. 2 Sekunden ein klares \"Uuuuu\".",
+      "example_audio_url_female": "/examples/female/1-u_n.mp3",
+      "example_audio_url_male": "/examples/male/4-u_n.mp3",
+      "order": 3,
+      "is_active": true
+    }
+  },
+  {
+    "model": "patients.exercise",
+    "pk": 4,
+    "fields": {
+      "exercise_id": "phrase",
+      "title": "Satz",
+      "description": "Bitte lesen Sie den folgenden Satz laut vor: \"Guten Morgen, wie geht es Ihnen?\"",
+      "example_audio_url_female": "/examples/female/1-phrase.mp3",
+      "example_audio_url_male": "/examples/male/4-phrase.mp3",
+      "order": 4,
+      "is_active": true
+    }
+  }
+]
