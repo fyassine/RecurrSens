@@ -1,0 +1,106 @@
+import {
+  Alert,
+  Box,
+  Button,
+  Card,
+  CardActions,
+  CardContent,
+  CardHeader,
+  CircularProgress,
+  Typography,
+} from '@mui/material';
+import AudioRecorder from '../AudioRecorder';
+import { useExerciseSession } from '../../hooks/useExerciseSession';
+import type { PatientPublic } from '../../types';
+
+export default function RecordingScreen({
+  token,
+  patient,
+  phase,
+  onComplete,
+}: {
+  token: string;
+  patient: PatientPublic;
+  phase: 'PRE_OP' | 'POST_OP';
+  onComplete: () => void;
+}) {
+  const {
+    exercises,
+    currentIndex,
+    currentExercise,
+    currentBlob,
+    audioQualityError,
+    handleRecordingComplete,
+    handleRecordingReset,
+    handleNext,
+    isLoading,
+    isUploading,
+  } = useExerciseSession(token, onComplete);
+
+  if (isLoading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  if (!currentExercise) return null;
+
+  const exampleUrl =
+    patient.gender === 'M'
+      ? currentExercise.example_audio_url_male
+      : currentExercise.example_audio_url_female;
+
+  return (
+    <Card sx={{ maxWidth: 640, mx: 'auto' }}>
+      <CardHeader
+        title={phase === 'PRE_OP' ? 'Pre-OP Aufnahme' : 'Post-OP Aufnahme'}
+        subheader={`Übung ${currentIndex + 1} von ${exercises.length}`}
+      />
+      <CardContent sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+        <Box sx={{ p: 3, borderRadius: 2, bgcolor: '#e3f2fd' }}>
+          <Typography variant="subtitle1" fontWeight={600} gutterBottom>
+            {currentExercise.title}
+          </Typography>
+          <Typography variant="body2">{currentExercise.description}</Typography>
+        </Box>
+
+        <AudioRecorder
+          key={currentExercise.exercise_id}
+          exampleAudioUrl={exampleUrl}
+          onRecordingComplete={handleRecordingComplete}
+          onRecordingReset={handleRecordingReset}
+        />
+
+        {currentBlob && audioQualityError && (
+          <Alert severity="error">
+            <strong>Aufnahmequalität nicht ausreichend</strong>
+            <br />
+            {audioQualityError}
+          </Alert>
+        )}
+        {currentBlob && !audioQualityError && (
+          <Alert severity="success">Aufnahme in Ordnung</Alert>
+        )}
+      </CardContent>
+      <CardActions sx={{ px: 2, pb: 2 }}>
+        <Button
+          fullWidth
+          variant="contained"
+          size="large"
+          disabled={!currentBlob || isUploading || !!audioQualityError}
+          onClick={handleNext}
+        >
+          {isUploading ? (
+            <CircularProgress size={24} />
+          ) : currentIndex < exercises.length - 1 ? (
+            'Nächste Übung'
+          ) : (
+            'Abschließen'
+          )}
+        </Button>
+      </CardActions>
+    </Card>
+  );
+}

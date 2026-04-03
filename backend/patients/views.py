@@ -62,6 +62,7 @@ class PatientViewSet(viewsets.ModelViewSet):
     Requires JWT authentication.
     """
     permission_classes = [IsAuthenticated]
+    pagination_class = None
     lookup_field = 'pk'
 
     def get_queryset(self):

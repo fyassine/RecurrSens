@@ -13,6 +13,7 @@ services:
     command: python manage.py runserver 0.0.0.0:8000
     environment:
       DJANGO_SETTINGS_MODULE: config.settings.development
+      APP_URL: http://localhost:5173
     volumes:
       # Mount source code for hot-reload
       - ./backend:/app
@@ -25,3 +26,8 @@ services:
       DJANGO_SETTINGS_MODULE: config.settings.development
     volumes:
       - ./backend:/app
+
+  # In dev, nginx is not used — run frontend dev server directly:
+  #   cd frontend && npm run dev
+  nginx:
+    profiles: [production]  # Disable in dev
