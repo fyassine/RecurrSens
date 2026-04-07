@@ -52,7 +52,7 @@ export default function DashboardPage() {
         </Toolbar>
       </AppBar>
 
-      <Box sx={{ maxWidth: 1400, mx: 'auto', p: 3 }}>
+      <Box sx={{ px: 5, py: 3 }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
           <Typography variant="h5" fontWeight={600}>
             Patienten

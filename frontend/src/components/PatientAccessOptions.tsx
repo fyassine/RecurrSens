@@ -11,7 +11,7 @@ import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import CheckIcon from '@mui/icons-material/Check';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
-import { getPatientPdfUrl } from '../api/client';
+import { downloadPatientPdf } from '../api/client';
 
 export default function PatientAccessOptions({
   patientId,
@@ -30,12 +30,7 @@ export default function PatientAccessOptions({
   return (
     <>
       <List disablePadding>
-        <ListItemButton
-          component="a"
-          href={getPatientPdfUrl(patientId)}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
+        <ListItemButton onClick={() => downloadPatientPdf(patientId)}>
           <ListItemIcon>
             <PictureAsPdfIcon color="primary" />
           </ListItemIcon>

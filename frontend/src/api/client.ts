@@ -122,8 +122,12 @@ export async function getCompleteness(id: string): Promise<Completeness> {
   return data;
 }
 
-export function getPatientPdfUrl(id: string): string {
-  return `/api/patients/${id}/pdf/`;
+export async function downloadPatientPdf(id: string): Promise<void> {
+  const { data } = await api.get(`/patients/${id}/pdf/`, { responseType: 'blob' });
+  const url = URL.createObjectURL(data);
+  window.open(url, '_blank', 'noopener,noreferrer');
+  // Revoke after a short delay to allow the new tab to load
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
 }
 
 // ---------------------------------------------------------------------------

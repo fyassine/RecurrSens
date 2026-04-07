@@ -34,6 +34,7 @@ from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework_simplejwt.authentication import JWTAuthentication
 
 from .models import Patient, AudioFile, Exercise
 from .serializers import (
@@ -137,6 +138,7 @@ class PatientPublicView(APIView):
     Patient-facing endpoint accessed via UUID token in the URL.
     Supports GET (read data) and PATCH (update demographics).
     """
+    authentication_classes = []  # No session/JWT — UUID token in URL
     permission_classes = [IsPatientTokenValid]
 
     def get(self, request, token):
@@ -185,6 +187,7 @@ class PatientPublicView(APIView):
 
 class PatientPublicAdvanceView(APIView):
     """Advance patient workflow step (accessed via UUID token)."""
+    authentication_classes = []  # No session/JWT — UUID token in URL
     permission_classes = [IsPatientTokenValid]
 
     def post(self, request, token):
@@ -217,6 +220,7 @@ class AudioUploadView(APIView):
     Server-side audio file upload.
     For clients that can't use pre-signed URLs directly.
     """
+    authentication_classes = [JWTAuthentication]  # JWT for admin, or UUID token via IsAdminOrPatientToken
     permission_classes = [IsAdminOrPatientToken]
 
     def post(self, request, token):

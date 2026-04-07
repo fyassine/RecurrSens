@@ -1,15 +1,4 @@
-# ==============================================================================
-# Docker Compose — Stimmbandläsion Web App
-# ==============================================================================
-# Usage:
-#   Development:  docker compose -f docker-compose.yml -f docker-compose.dev.yml up
-#   Production:   docker compose up -d
-# ==============================================================================
-
 services:
-  # --------------------------------------------------------------------------
-  # PostgreSQL Database
-  # --------------------------------------------------------------------------
   db:
     image: postgres:16-alpine
     restart: unless-stopped
@@ -27,9 +16,6 @@ services:
       timeout: 5s
       retries: 5
 
-  # --------------------------------------------------------------------------
-  # MinIO (S3-compatible object storage)
-  # --------------------------------------------------------------------------
   minio:
     image: minio/minio:latest
     restart: unless-stopped
@@ -48,9 +34,6 @@ services:
       timeout: 5s
       retries: 5
 
-  # --------------------------------------------------------------------------
-  # Redis (Celery broker + cache)
-  # --------------------------------------------------------------------------
   redis:
     image: redis:7-alpine
     restart: unless-stopped
@@ -62,9 +45,6 @@ services:
       timeout: 5s
       retries: 5
 
-  # --------------------------------------------------------------------------
-  # Django Backend
-  # --------------------------------------------------------------------------
   backend:
     build:
       context: ./backend
@@ -98,9 +78,6 @@ services:
     volumes:
       - static_files:/app/staticfiles
 
-  # --------------------------------------------------------------------------
-  # Celery Worker
-  # --------------------------------------------------------------------------
   celery:
     build:
       context: ./backend
