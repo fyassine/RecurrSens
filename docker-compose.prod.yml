@@ -69,6 +69,7 @@ services:
       - "443:443"
     volumes:
       - /etc/letsencrypt:/etc/letsencrypt:ro
+      - /var/www/certbot:/var/www/certbot:ro
     deploy:
       resources:
         limits:
@@ -89,4 +90,7 @@ services:
         limits:
           memory: 32M
 
-# SSL renewal is handled by the host's certbot systemd timer (native Apache install).
+# SSL renewal is handled by host certbot (systemd timer).
+# If certbot writes ACME challenges in webroot mode, nginx serves them from /var/www/certbot.
+# After successful renewal, reload nginx inside the running container to pick up new certificates:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml exec -T nginx nginx -s reload
