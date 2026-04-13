@@ -75,48 +75,46 @@ export default function PatientDetailsPage() {
   }
 
   return (
-    <Box sx={{ minHeight: '100vh', bgcolor: 'background.default', p: { xs: 2, md: 4 } }}>
-      <Box sx={{ maxWidth: 1400, mx: 'auto' }}>
-        <Button
-          startIcon={<ArrowBackIcon />}
-          onClick={() => navigate('/')}
-          sx={{ mb: 3 }}
-        >
-          Zurück zur Übersicht
-        </Button>
+    <Box sx={{ minHeight: '100vh', bgcolor: 'background.default', px: { xs: 2, md: 3 }, py: 3 }}>
+      <Button
+        startIcon={<ArrowBackIcon />}
+        onClick={() => navigate('/')}
+        sx={{ mb: 3 }}
+      >
+        Zurück zur Übersicht
+      </Button>
 
-        <Grid container spacing={3}>
-          {/* Left column */}
-          <Grid size={{ xs: 12, lg: 4 }}>
-            <PatientInfoCard patient={patient} onUpdated={fetchPatient} />
-            <DiagnosisCard patient={patient} />
-          </Grid>
-
-          {/* Right column */}
-          <Grid size={{ xs: 12, lg: 8 }}>
-            <AudioSection
-              title="Prä-OP Aufnahmen"
-              audioFiles={patient.audio_files_pre}
-              phase="PRE_OP"
-              date={patient.pre_op_date}
-              patientId={patient.id}
-              patientStatus={patient.status}
-              showUpload={patient.status === 'CONSENT_GIVEN'}
-              onUploaded={fetchPatient}
-            />
-            <AudioSection
-              title="Post-OP Aufnahmen"
-              audioFiles={patient.audio_files_post}
-              phase="POST_OP"
-              date={patient.post_op_date}
-              patientId={patient.id}
-              patientStatus={patient.status}
-              showUpload={patient.status === 'PRE_OP_DONE' || patient.status === 'POST_OP_STARTED'}
-              onUploaded={fetchPatient}
-            />
-          </Grid>
+      <Grid container spacing={3}>
+        {/* Left column */}
+        <Grid size={{ xs: 12, lg: 4 }}>
+          <PatientInfoCard patient={patient} onUpdated={fetchPatient} />
+          <DiagnosisCard patient={patient} />
         </Grid>
-      </Box>
+
+        {/* Right column */}
+        <Grid size={{ xs: 12, lg: 8 }}>
+          <AudioSection
+            title="Prä-OP Aufnahmen"
+            audioFiles={patient.audio_files_pre}
+            phase="PRE_OP"
+            date={patient.pre_op_date}
+            patientId={patient.id}
+            patientStatus={patient.status}
+            showUpload={patient.status === 'CONSENT_GIVEN'}
+            onUploaded={fetchPatient}
+          />
+          <AudioSection
+            title="Post-OP Aufnahmen"
+            audioFiles={patient.audio_files_post}
+            phase="POST_OP"
+            date={patient.post_op_date}
+            patientId={patient.id}
+            patientStatus={patient.status}
+            showUpload={patient.status === 'PRE_OP_DONE' || patient.status === 'POST_OP_STARTED'}
+            onUploaded={fetchPatient}
+          />
+        </Grid>
+      </Grid>
     </Box>
   );
 }
