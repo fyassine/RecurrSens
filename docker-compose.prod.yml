@@ -1,0 +1,83 @@
+# ==============================================================================
+# Docker Compose — Production Overrides (Strato VPS: 1 vCPU / 1GB RAM)
+# ==============================================================================
+# Usage: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+# ==============================================================================
+
+services:
+  db:
+    # Remove external port exposure — internal only
+    ports: !reset []
+    # Memory tuning for 1GB server
+    command: >
+      postgres
+        -c shared_buffers=64MB
+        -c work_mem=4MB
+        -c maintenance_work_mem=32MB
+        -c effective_cache_size=128MB
+        -c max_connections=20
+    deploy:
+      resources:
+        limits:
+          memory: 192M
+
+  minio:
+    # Remove external port exposure — internal only
+    ports: !reset []
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY}
+    deploy:
+      resources:
+        limits:
+          memory: 192M
+
+  redis:
+    # Remove external port exposure — internal only
+    ports: !reset []
+    command: redis-server --maxmemory 32mb --maxmemory-policy allkeys-lru
+    deploy:
+      resources:
+        limits:
+          memory: 48M
+
+  backend:
+    image: ghcr.io/fyassine/stimmbandlaesion-backend:latest
+    build: !reset null
+    # Single Gunicorn worker for RAM constraint
+    command: >
+      gunicorn config.wsgi:application
+        --bind 0.0.0.0:8000
+        --workers 1
+        --timeout 120
+        --access-logfile -
+        --error-logfile -
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  celery:
+    image: ghcr.io/fyassine/stimmbandlaesion-backend:latest
+    build: !reset null
+    command: celery -A config worker --loglevel=info --concurrency=1
+    deploy:
+      resources:
+        limits:
+          memory: 192M
+
+  celery-beat:
+    image: ghcr.io/fyassine/stimmbandlaesion-backend:latest
+    build: !reset null
+    deploy:
+      resources:
+        limits:
+          memory: 96M
+
+  nginx:
+    image: ghcr.io/fyassine/stimmbandlaesion-nginx:latest
+    build: !reset null
+    deploy:
+      resources:
+        limits:
+          memory: 48M
