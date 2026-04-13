@@ -2,13 +2,12 @@
 API integration tests for the patients app.
 Tests cover all major endpoints, authentication, and business logic flows.
 """
-from datetime import date
 from django.test import TestCase
 from django.contrib.auth.models import User
 from rest_framework.test import APIClient
 from rest_framework import status
 
-from patients.models import Patient, AudioFile, Exercise
+from patients.models import Patient, AudioFile, Exercise, RecordingSession
 
 
 class BaseAPITest(TestCase):
@@ -98,8 +97,7 @@ class PatientCRUDTest(BaseAPITest):
         self.create_test_patient('LIST-002')
         response = self.client.get('/api/patients/')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        # Response is paginated
-        self.assertEqual(response.data['count'], 2)
+        self.assertEqual(len(response.data), 2)
 
     def test_get_patient_detail(self):
         patient = self.create_test_patient('DET-001')
@@ -107,23 +105,26 @@ class PatientCRUDTest(BaseAPITest):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data['patient_id'], 'DET-001')
         self.assertIn('audio_files', response.data)
+        self.assertIn('sessions', response.data)
+        self.assertIn('deleted_at', response.data)
+        self.assertIsNone(response.data['deleted_at'])
 
     def test_update_patient(self):
         patient = self.create_test_patient('UPD-001')
         response = self.client.patch(f'/api/patients/{patient.id}/', {
-            'gender': 'M',
-            'diagnosis': 'LEFT',
+            'patient_id': 'UPD-001-renamed',
         })
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         patient.refresh_from_db()
-        self.assertEqual(patient.gender, 'M')
-        self.assertEqual(patient.diagnosis, 'LEFT')
+        self.assertEqual(patient.patient_id, 'UPD-001-renamed')
 
     def test_delete_patient(self):
+        """Delete via API performs soft delete — patient still exists but is marked deleted."""
         patient = self.create_test_patient('DEL-001')
         response = self.client.delete(f'/api/patients/{patient.id}/')
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
-        self.assertFalse(Patient.objects.filter(id=patient.id).exists())
+        patient.refresh_from_db()
+        self.assertTrue(patient.is_deleted)
 
 
 class PatientWorkflowTest(BaseAPITest):
@@ -134,23 +135,21 @@ class PatientWorkflowTest(BaseAPITest):
         response = self.client.post(f'/api/patients/{patient.id}/advance/')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data['status'], 'CONSENT_GIVEN')
+        # Should auto-create a PRE_OP session
+        self.assertEqual(
+            RecordingSession.objects.filter(
+                patient=patient, phase='PRE_OP'
+            ).count(), 1
+        )
 
     def test_advance_full_workflow(self):
         """Test advancing through all steps (except COMPLETED which needs data)."""
-        patient = self.create_test_patient(
-            'WF-002',
-            gender='M',
-            birth_date=date(1990, 1, 1),
-        )
+        patient = self.create_test_patient('WF-002')
         # NEW → CONSENT_GIVEN
         r = self.client.post(f'/api/patients/{patient.id}/advance/')
         self.assertEqual(r.data['status'], 'CONSENT_GIVEN')
 
-        # CONSENT_GIVEN → DEMOGRAPHICS_DONE
-        r = self.client.post(f'/api/patients/{patient.id}/advance/')
-        self.assertEqual(r.data['status'], 'DEMOGRAPHICS_DONE')
-
-        # DEMOGRAPHICS_DONE → PRE_OP_DONE
+        # CONSENT_GIVEN → PRE_OP_DONE
         r = self.client.post(f'/api/patients/{patient.id}/advance/')
         self.assertEqual(r.data['status'], 'PRE_OP_DONE')
 
@@ -190,17 +189,13 @@ class CompletenessTest(BaseAPITest):
         response = self.client.get(f'/api/patients/{patient.id}/completeness/')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertFalse(response.data['complete'])
-        self.assertIn('gender', response.data['missing'])
-        self.assertIn('birthDate', response.data['missing'])
-        self.assertIn('diagnosis', response.data['missing'])
+        # Missing entries include exercise IDs, e.g. 'preOpAudio:a_n,i_n'
+        self.assertTrue(
+            any(m.startswith('preOpAudio') for m in response.data['missing'])
+        )
 
     def test_complete_patient(self):
-        patient = self.create_test_patient(
-            'CMP-002',
-            gender='M',
-            birth_date=date(1990, 1, 1),
-            diagnosis=Patient.Diagnosis.LEFT,
-        )
+        patient = self.create_test_patient('CMP-002')
         # Create audio files for all active exercises, both phases
         for exercise in Exercise.objects.filter(is_active=True):
             AudioFile.objects.create(
@@ -239,19 +234,6 @@ class PatientPublicTest(BaseAPITest):
             status.HTTP_401_UNAUTHORIZED,
             status.HTTP_403_FORBIDDEN,
         ])
-
-    def test_update_demographics(self):
-        patient = self.create_test_patient('PUB-002')
-        client = APIClient()
-        response = client.patch(
-            f'/api/p/{patient.id}/',
-            {'gender': 'W', 'birth_date': '1985-06-15'},
-            format='json',
-        )
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        patient.refresh_from_db()
-        self.assertEqual(patient.gender, 'W')
-        self.assertEqual(patient.birth_date, date(1985, 6, 15))
 
     def test_advance_via_token(self):
         patient = self.create_test_patient('PUB-003')
@@ -292,3 +274,63 @@ class ExportTest(BaseAPITest):
         response = self.client.get('/api/export/')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response['Content-Type'], 'application/zip')
+
+
+class SessionCreationTest(BaseAPITest):
+    """Tests for the recording session creation endpoint."""
+
+    def test_create_postop_session(self):
+        patient = self.create_test_patient('SES-001')
+        response = self.client.post(
+            f'/api/patients/{patient.id}/sessions/',
+            {'phase': 'POST_OP'},
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data['phase'], 'POST_OP')
+        self.assertEqual(response.data['session_number'], 1)
+
+    def test_create_multiple_sessions(self):
+        patient = self.create_test_patient('SES-002')
+        self.client.post(
+            f'/api/patients/{patient.id}/sessions/',
+            {'phase': 'POST_OP'},
+        )
+        response = self.client.post(
+            f'/api/patients/{patient.id}/sessions/',
+            {'phase': 'POST_OP'},
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data['session_number'], 2)
+
+    def test_create_session_missing_phase(self):
+        patient = self.create_test_patient('SES-003')
+        response = self.client.post(
+            f'/api/patients/{patient.id}/sessions/',
+            {},
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_create_session_requires_auth(self):
+        patient = self.create_test_patient('SES-004')
+        client = APIClient()
+        response = client.post(
+            f'/api/patients/{patient.id}/sessions/',
+            {'phase': 'POST_OP'},
+        )
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+
+class ExerciseSerializerTest(BaseAPITest):
+    """Tests that exercise serializer returns single example_audio_url."""
+
+    def test_exercise_has_single_example_url(self):
+        Exercise.objects.all().delete()
+        Exercise.objects.create(
+            exercise_id='i_h', title='Vokal I hoch',
+            description='Test', order=1,
+            example_audio_url='/examples/i_h.flac',
+        )
+        client = APIClient()
+        response = client.get('/api/exercises/')
+        self.assertEqual(len(response.data), 1)
+        self.assertEqual(response.data[0]['example_audio_url'], '/examples/i_h.flac')

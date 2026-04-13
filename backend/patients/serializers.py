@@ -7,7 +7,7 @@ Provides different serializer variants depending on the consumer:
 - Create/update operations get dedicated serializers with validation
 """
 from rest_framework import serializers
-from .models import Patient, AudioFile, Exercise
+from .models import Patient, AudioFile, Exercise, RecordingSession
 
 
 # =============================================================================
@@ -21,7 +21,7 @@ class ExerciseSerializer(serializers.ModelSerializer):
         model = Exercise
         fields = [
             'id', 'exercise_id', 'title', 'description',
-            'example_audio_url_female', 'example_audio_url_male',
+            'example_audio_url',
             'order', 'is_active',
         ]
         read_only_fields = fields
@@ -31,13 +31,22 @@ class ExerciseSerializer(serializers.ModelSerializer):
 # AudioFile Serializers
 # =============================================================================
 
+class RecordingSessionSerializer(serializers.ModelSerializer):
+    """Serializer for recording sessions."""
+
+    class Meta:
+        model = RecordingSession
+        fields = ['id', 'phase', 'session_number', 'created_at']
+        read_only_fields = fields
+
+
 class AudioFileSerializer(serializers.ModelSerializer):
     """Full audio file metadata (admin view)."""
 
     class Meta:
         model = AudioFile
         fields = [
-            'id', 'patient', 'exercise_id', 'phase',
+            'id', 'patient', 'session', 'exercise_id', 'phase',
             'storage_key', 'created_at',
         ]
         read_only_fields = ['id', 'created_at']
@@ -48,7 +57,7 @@ class AudioFileCompactSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = AudioFile
-        fields = ['id', 'exercise_id', 'phase', 'created_at']
+        fields = ['id', 'exercise_id', 'phase', 'session', 'created_at']
         read_only_fields = fields
 
 
@@ -67,12 +76,11 @@ class PatientListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Patient
         fields = [
-            'id', 'patient_id', 'status', 'gender', 'birth_date',
-            'diagnosis', 'diagnosis_text',
+            'id', 'patient_id', 'status',
             'prediction_pre', 'prediction_post',
             'audio_count_pre', 'audio_count_post',
             'pre_op_date', 'post_op_date',
-            'created_at', 'updated_at',
+            'expires_at', 'created_at', 'updated_at',
         ]
         read_only_fields = fields
 
@@ -91,14 +99,13 @@ class PatientDetailSerializer(serializers.ModelSerializer):
     audio_files = AudioFileCompactSerializer(many=True, read_only=True)
     audio_files_pre = serializers.SerializerMethodField()
     audio_files_post = serializers.SerializerMethodField()
-    age = serializers.IntegerField(read_only=True)
+    sessions = RecordingSessionSerializer(many=True, read_only=True)
 
     class Meta:
         model = Patient
         fields = [
-            'id', 'patient_id', 'status', 'gender', 'birth_date',
+            'id', 'patient_id', 'status',
             'pre_op_date', 'post_op_date',
-            'diagnosis', 'diagnosis_text',
             # Pre-OP AI
             'prediction_pre', 'ai_percentage_rp_pre',
             'gradcam_prediction_pre', 'gradcam_percentage_pre',
@@ -108,11 +115,11 @@ class PatientDetailSerializer(serializers.ModelSerializer):
             'gradcam_prediction_post', 'gradcam_percentage_post',
             'ai_reasoning_post',
             # Metadata
-            'created_at', 'updated_at', 'age',
-            # Audio
-            'audio_files', 'audio_files_pre', 'audio_files_post',
+            'deleted_at', 'expires_at', 'created_at', 'updated_at',
+            # Sessions & Audio
+            'sessions', 'audio_files', 'audio_files_pre', 'audio_files_post',
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at', 'age']
+        read_only_fields = ['id', 'created_at', 'updated_at', 'deleted_at']
 
     def get_audio_files_pre(self, obj):
         pre_files = obj.audio_files.filter(phase='PRE_OP')
@@ -134,8 +141,7 @@ class PatientPublicSerializer(serializers.ModelSerializer):
     class Meta:
         model = Patient
         fields = [
-            'status', 'gender', 'birth_date', 'patient_id',
-            'diagnosis',
+            'status', 'patient_id',
             'audio_file_ids_pre', 'audio_file_ids_post',
             'created_at',
         ]
@@ -159,7 +165,8 @@ class PatientCreateSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Patient
-        fields = ['patient_id']
+        fields = ['id', 'patient_id']
+        read_only_fields = ['id']
 
     def validate_patient_id(self, value):
         if not value or not value.strip():
@@ -180,9 +187,8 @@ class PatientUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Patient
         fields = [
-            'patient_id', 'status', 'gender', 'birth_date',
+            'patient_id', 'status',
             'pre_op_date', 'post_op_date',
-            'diagnosis', 'diagnosis_text',
             # AI fields (set by inference service, but allowed via API too)
             'prediction_pre', 'ai_percentage_rp_pre',
             'gradcam_prediction_pre', 'gradcam_percentage_pre',

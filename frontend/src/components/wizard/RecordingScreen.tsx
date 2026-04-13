@@ -11,16 +11,13 @@ import {
 } from '@mui/material';
 import AudioRecorder from '../AudioRecorder';
 import { useExerciseSession } from '../../hooks/useExerciseSession';
-import type { PatientPublic } from '../../types';
 
 export default function RecordingScreen({
   token,
-  patient,
   phase,
   onComplete,
 }: {
   token: string;
-  patient: PatientPublic;
   phase: 'PRE_OP' | 'POST_OP';
   onComplete: () => void;
 }) {
@@ -47,10 +44,7 @@ export default function RecordingScreen({
 
   if (!currentExercise) return null;
 
-  const exampleUrl =
-    patient.gender === 'M'
-      ? currentExercise.example_audio_url_male
-      : currentExercise.example_audio_url_female;
+  const exampleUrl = currentExercise.example_audio_url;
 
   return (
     <Card sx={{ maxWidth: 640, mx: 'auto' }}>

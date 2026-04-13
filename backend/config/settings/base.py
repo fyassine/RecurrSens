@@ -30,6 +30,7 @@ INSTALLED_APPS = [
     'django_filters',
     'storages',
     'django_celery_results',
+    'django_celery_beat',
     # Local apps
     'patients.apps.PatientsConfig',
 ]
@@ -173,6 +174,15 @@ STORAGES = {
 }
 
 # ==============================================================================
+# DATA RETENTION
+# ==============================================================================
+# Number of days before patient data expires and is marked EXPIRED.
+DATA_RETENTION_DAYS = config('DATA_RETENTION_DAYS', default=3, cast=int)
+
+# Admin email that receives an expiry-warning notification (see tasks.py TODO).
+ADMIN_NOTIFICATION_EMAIL = config('ADMIN_NOTIFICATION_EMAIL', default='admin@example.com')
+
+# ==============================================================================
 # CELERY
 # ==============================================================================
 CELERY_BROKER_URL = config('CELERY_BROKER_URL', default='redis://localhost:6379/0')
@@ -181,6 +191,15 @@ CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE
+CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
+
+# Run expiry check every day at 02:00 local time.
+CELERY_BEAT_SCHEDULE = {
+    'check-data-expiry-daily': {
+        'task': 'patients.tasks.check_data_expiry',
+        'schedule': timedelta(hours=24),
+    },
+}
 
 # ==============================================================================
 # INFERENCE SERVICE

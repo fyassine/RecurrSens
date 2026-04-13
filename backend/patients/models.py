@@ -1,13 +1,17 @@
 """
 Data models for the Recurrensparese Diagnose application.
 
-Ported from the deprecated Next.js/Prisma schema. Key models:
-- Patient: Core entity with demographics, diagnosis, AI predictions, and workflow status.
-- AudioFile: Audio recordings linked to a patient, exercise, and phase (PRE_OP / POST_OP).
+Models:
+- Patient: Core entity with pseudonym, AI predictions, and workflow status.
+- RecordingSession: Groups audio recordings for a single recording visit.
+- AudioFile: Audio recordings linked to a patient, session, exercise, and phase.
 - Exercise: Voice exercise configuration (vowels, phrases) used for recordings.
 """
 import uuid
+from datetime import timedelta
 from django.db import models
+from django.utils import timezone
+from django.conf import settings
 
 
 class Exercise(models.Model):
@@ -17,17 +21,13 @@ class Exercise(models.Model):
     """
     exercise_id = models.CharField(
         max_length=50, unique=True,
-        help_text='Unique exercise identifier, e.g. "a_n", "i_n", "phrase"'
+        help_text='Unique exercise identifier, e.g. "a_n", "i_h", "phrase"'
     )
     title = models.CharField(max_length=100, help_text='Display title, e.g. "Vokal A"')
     description = models.TextField(help_text='Instructions for the patient')
-    example_audio_url_female = models.CharField(
+    example_audio_url = models.CharField(
         max_length=500, blank=True, default='',
-        help_text='Path to female example audio'
-    )
-    example_audio_url_male = models.CharField(
-        max_length=500, blank=True, default='',
-        help_text='Path to male example audio'
+        help_text='Path to example audio file'
     )
     order = models.PositiveIntegerField(default=0, help_text='Display order')
     is_active = models.BooleanField(default=True, help_text='Whether this exercise is currently in use')
@@ -43,64 +43,44 @@ class Exercise(models.Model):
 
 class Patient(models.Model):
     """
-    Core patient entity. The UUID primary key doubles as the patient access token.
+    Core patient entity. The UUID primary key doubles as the patient access token
+    and as the linking key for the offline server.
+
+    Only voice samples and a pseudonym (patient_id) are stored — no demographics.
 
     Workflow statuses:
-        NEW → CONSENT_GIVEN → DEMOGRAPHICS_DONE → PRE_OP_DONE →
-        POST_OP_STARTED → POST_OP_DONE → COMPLETED
+        NEW → PRE_OP_DONE →
+        POST_OP_STARTED → POST_OP_DONE → COMPLETED → EXPIRED
     """
 
     class Status(models.TextChoices):
         NEW = 'NEW', 'Neu'
         CONSENT_GIVEN = 'CONSENT_GIVEN', 'Einwilligung erteilt'
-        DEMOGRAPHICS_DONE = 'DEMOGRAPHICS_DONE', 'Demografie abgeschlossen'
         PRE_OP_DONE = 'PRE_OP_DONE', 'Prä-OP abgeschlossen'
         POST_OP_STARTED = 'POST_OP_STARTED', 'Post-OP begonnen'
         POST_OP_DONE = 'POST_OP_DONE', 'Post-OP abgeschlossen'
         COMPLETED = 'COMPLETED', 'Abgeschlossen'
-
-    class Diagnosis(models.TextChoices):
-        LEFT = 'LEFT', 'Links'
-        RIGHT = 'RIGHT', 'Rechts'
-        BOTH = 'BOTH', 'Beidseitig'
-        HEALTHY = 'HEALTHY', 'Gesund'
-        TODO = 'TODO', 'Ausstehend'
+        EXPIRED = 'EXPIRED', 'Abgelaufen'
 
     class PredictionStatus(models.TextChoices):
         TODO = 'TODO', 'Ausstehend'
         INFECTED = 'INFECTED', 'Pathologisch'
         HEALTHY = 'HEALTHY', 'Gesund'
 
-    class Gender(models.TextChoices):
-        MALE = 'M', 'Männlich'
-        FEMALE = 'W', 'Weiblich'
-        DIVERSE = 'D', 'Divers'
-        UNKNOWN = '?', 'Unbekannt'
-
-    # Primary key is UUID — also serves as the patient access token
+    # Primary key is UUID — also serves as the patient access token and offline linking key
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
 
-    # Human-readable patient ID (e.g. assigned by the hospital)
+    # Pseudonym assigned by the clinic (no real patient identity stored here)
     patient_id = models.CharField(
         max_length=100, unique=True,
-        verbose_name='Patienten-ID',
-        help_text='Lesbare Patienten-ID (z.B. vom Krankenhaus vergeben)'
+        verbose_name='Pseudonym',
+        help_text='Pseudonym des Patienten (kein echter Name)'
     )
 
     # Workflow
     status = models.CharField(
         max_length=20, choices=Status.choices, default=Status.NEW,
         verbose_name='Status'
-    )
-
-    # Demographics
-    gender = models.CharField(
-        max_length=1, choices=Gender.choices, default=Gender.UNKNOWN,
-        verbose_name='Geschlecht'
-    )
-    birth_date = models.DateField(
-        null=True, blank=True,
-        verbose_name='Geburtsdatum'
     )
 
     # Operation dates
@@ -111,17 +91,6 @@ class Patient(models.Model):
     post_op_date = models.DateTimeField(
         null=True, blank=True,
         verbose_name='Post-OP Datum'
-    )
-
-    # Diagnosis
-    diagnosis = models.CharField(
-        max_length=10, choices=Diagnosis.choices, default=Diagnosis.TODO,
-        verbose_name='Diagnose'
-    )
-    diagnosis_text = models.TextField(
-        blank=True, default='',
-        verbose_name='Diagnose (Freitext)',
-        help_text='Optionale zusätzliche Diagnose-Details'
     )
 
     # --- Pre-Op AI Results ---
@@ -172,6 +141,24 @@ class Patient(models.Model):
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='Erstellt am')
     updated_at = models.DateTimeField(auto_now=True, verbose_name='Aktualisiert am')
 
+    # Data retention
+    expires_at = models.DateTimeField(
+        verbose_name='Läuft ab am',
+        help_text='Datum, ab dem der Datensatz gelöscht werden soll'
+    )
+    notification_sent_at = models.DateTimeField(
+        null=True, blank=True,
+        verbose_name='Benachrichtigung gesendet am',
+        help_text='Zeitpunkt, zu dem die Ablauf-Benachrichtigung versendet wurde'
+    )
+
+    # Soft delete
+    deleted_at = models.DateTimeField(
+        null=True, blank=True,
+        verbose_name='Gelöscht am',
+        help_text='Zeitpunkt der Soft-Löschung (Audiodaten entfernt, Metadaten bleiben)'
+    )
+
     class Meta:
         ordering = ['-created_at']
         verbose_name = 'Patient'
@@ -180,17 +167,60 @@ class Patient(models.Model):
     def __str__(self):
         return f'Patient {self.patient_id} ({self.get_status_display()})'
 
+    def save(self, *args, **kwargs):
+        if not self.expires_at:
+            retention_days = getattr(settings, 'DATA_RETENTION_DAYS', 3)
+            self.expires_at = timezone.now() + timedelta(days=retention_days)
+        super().save(*args, **kwargs)
+
     @property
-    def age(self):
-        """Calculate patient age from birth date."""
-        if not self.birth_date:
-            return None
-        from datetime import date
-        today = date.today()
-        age = today.year - self.birth_date.year
-        if (today.month, today.day) < (self.birth_date.month, self.birth_date.day):
-            age -= 1
-        return age
+    def is_expiring_soon(self) -> bool:
+        """True if expires within the next 24 hours."""
+        return self.expires_at <= timezone.now() + timedelta(hours=24)
+
+    @property
+    def is_deleted(self) -> bool:
+        """True if this patient has been soft-deleted."""
+        return self.deleted_at is not None
+
+
+class RecordingSession(models.Model):
+    """
+    Groups audio recordings for a single recording visit.
+    Each recording session belongs to a patient and phase, with a sequential number.
+    Admin creates sessions and sends recording links to patients.
+    """
+
+    class Phase(models.TextChoices):
+        PRE_OP = 'PRE_OP', 'Prä-OP'
+        POST_OP = 'POST_OP', 'Post-OP'
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    patient = models.ForeignKey(
+        Patient, on_delete=models.CASCADE, related_name='sessions',
+        verbose_name='Patient'
+    )
+    phase = models.CharField(
+        max_length=10, choices=Phase.choices,
+        verbose_name='Phase'
+    )
+    session_number = models.PositiveIntegerField(
+        verbose_name='Sitzungsnummer',
+        help_text='Sequential number per patient and phase (1, 2, 3, …)'
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Erstellt am')
+
+    class Meta:
+        ordering = ['created_at']
+        unique_together = [('patient', 'phase', 'session_number')]
+        verbose_name = 'Aufnahmesitzung'
+        verbose_name_plural = 'Aufnahmesitzungen'
+
+    def __str__(self):
+        return (
+            f'{self.get_phase_display()} Sitzung {self.session_number} '
+            f'({self.patient.patient_id})'
+        )
 
 
 class AudioFile(models.Model):
@@ -207,6 +237,11 @@ class AudioFile(models.Model):
     patient = models.ForeignKey(
         Patient, on_delete=models.CASCADE, related_name='audio_files',
         verbose_name='Patient'
+    )
+    session = models.ForeignKey(
+        RecordingSession, on_delete=models.CASCADE, related_name='audio_files',
+        verbose_name='Aufnahmesitzung',
+        null=True, blank=True,
     )
     exercise_id = models.CharField(
         max_length=50,

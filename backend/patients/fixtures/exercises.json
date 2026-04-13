@@ -3,11 +3,10 @@
     "model": "patients.exercise",
     "pk": 1,
     "fields": {
-      "exercise_id": "a_n",
-      "title": "Vokal A",
-      "description": "Sagen Sie ca. 2 Sekunden ein klares \"Aaaaa\".",
-      "example_audio_url_female": "/examples/female/1-a_n.mp3",
-      "example_audio_url_male": "/examples/male/4-a_n.mp3",
+      "exercise_id": "i_h",
+      "title": "Vokal I (hohe Tonlage)",
+      "description": "Sagen Sie ca. 2 Sekunden ein hohes, klares \"Iiiii\".",
+      "example_audio_url": "/examples/i_h.flac",
       "order": 1,
       "is_active": true
     }
@@ -17,10 +16,9 @@
     "pk": 2,
     "fields": {
       "exercise_id": "i_n",
-      "title": "Vokal I",
-      "description": "Sagen Sie ca. 2 Sekunden ein klares \"Iiiii\".",
-      "example_audio_url_female": "/examples/female/1-i_n.mp3",
-      "example_audio_url_male": "/examples/male/4-i_n.mp3",
+      "title": "Vokal I (normale Tonlage)",
+      "description": "Sagen Sie ca. 2 Sekunden ein klares \"Iiiii\" in normaler Tonlage.",
+      "example_audio_url": "/examples/i_n.flac",
       "order": 2,
       "is_active": true
     }
@@ -29,11 +27,10 @@
     "model": "patients.exercise",
     "pk": 3,
     "fields": {
-      "exercise_id": "u_n",
-      "title": "Vokal U",
-      "description": "Sagen Sie ca. 2 Sekunden ein klares \"Uuuuu\".",
-      "example_audio_url_female": "/examples/female/1-u_n.mp3",
-      "example_audio_url_male": "/examples/male/4-u_n.mp3",
+      "exercise_id": "i_l",
+      "title": "Vokal I (tiefe Tonlage)",
+      "description": "Sagen Sie ca. 2 Sekunden ein tiefes \"Iiiii\".",
+      "example_audio_url": "/examples/i_l.flac",
       "order": 3,
       "is_active": true
     }
@@ -42,12 +39,131 @@
     "model": "patients.exercise",
     "pk": 4,
     "fields": {
+      "exercise_id": "i_lhl",
+      "title": "Vokal I (tief-hoch-tief)",
+      "description": "Sagen Sie \"Iiiii\" und variieren Sie die Tonhöhe von tief nach hoch und zurück.",
+      "example_audio_url": "/examples/i_lhl.flac",
+      "order": 4,
+      "is_active": true
+    }
+  },
+  {
+    "model": "patients.exercise",
+    "pk": 5,
+    "fields": {
+      "exercise_id": "a_h",
+      "title": "Vokal A (hohe Tonlage)",
+      "description": "Sagen Sie ca. 2 Sekunden ein hohes, klares \"Aaaaa\".",
+      "example_audio_url": "/examples/a_h.flac",
+      "order": 5,
+      "is_active": true
+    }
+  },
+  {
+    "model": "patients.exercise",
+    "pk": 6,
+    "fields": {
+      "exercise_id": "a_n",
+      "title": "Vokal A (normale Tonlage)",
+      "description": "Sagen Sie ca. 2 Sekunden ein klares \"Aaaaa\" in normaler Tonlage.",
+      "example_audio_url": "/examples/a_n.flac",
+      "order": 6,
+      "is_active": true
+    }
+  },
+  {
+    "model": "patients.exercise",
+    "pk": 7,
+    "fields": {
+      "exercise_id": "a_l",
+      "title": "Vokal A (tiefe Tonlage)",
+      "description": "Sagen Sie ca. 2 Sekunden ein tiefes \"Aaaaa\".",
+      "example_audio_url": "/examples/a_l.flac",
+      "order": 7,
+      "is_active": true
+    }
+  },
+  {
+    "model": "patients.exercise",
+    "pk": 8,
+    "fields": {
+      "exercise_id": "a_lhl",
+      "title": "Vokal A (tief-hoch-tief)",
+      "description": "Sagen Sie \"Aaaaa\" und variieren Sie die Tonhöhe von tief nach hoch und zurück.",
+      "example_audio_url": "/examples/a_lhl.flac",
+      "order": 8,
+      "is_active": true
+    }
+  },
+  {
+    "model": "patients.exercise",
+    "pk": 9,
+    "fields": {
+      "exercise_id": "u_h",
+      "title": "Vokal U (hohe Tonlage)",
+      "description": "Sagen Sie ca. 2 Sekunden ein hohes, klares \"Uuuuu\".",
+      "example_audio_url": "/examples/u_h.flac",
+      "order": 9,
+      "is_active": true
+    }
+  },
+  {
+    "model": "patients.exercise",
+    "pk": 10,
+    "fields": {
+      "exercise_id": "u_n",
+      "title": "Vokal U (normale Tonlage)",
+      "description": "Sagen Sie ca. 2 Sekunden ein klares \"Uuuuu\" in normaler Tonlage.",
+      "example_audio_url": "/examples/u_n.flac",
+      "order": 10,
+      "is_active": true
+    }
+  },
+  {
+    "model": "patients.exercise",
+    "pk": 11,
+    "fields": {
+      "exercise_id": "u_l",
+      "title": "Vokal U (tiefe Tonlage)",
+      "description": "Sagen Sie ca. 2 Sekunden ein tiefes \"Uuuuu\".",
+      "example_audio_url": "/examples/u_l.flac",
+      "order": 11,
+      "is_active": true
+    }
+  },
+  {
+    "model": "patients.exercise",
+    "pk": 12,
+    "fields": {
+      "exercise_id": "u_lhl",
+      "title": "Vokal U (tief-hoch-tief)",
+      "description": "Sagen Sie \"Uuuuu\" und variieren Sie die Tonhöhe von tief nach hoch und zurück.",
+      "example_audio_url": "/examples/u_lhl.flac",
+      "order": 12,
+      "is_active": true
+    }
+  },
+  {
+    "model": "patients.exercise",
+    "pk": 13,
+    "fields": {
+      "exercise_id": "iau",
+      "title": "Vokalfolge I-A-U",
+      "description": "Sagen Sie nacheinander \"Iiiii-Aaaaa-Uuuuu\" in einem Atemzug.",
+      "example_audio_url": "/examples/iau.flac",
+      "order": 13,
+      "is_active": true
+    }
+  },
+  {
+    "model": "patients.exercise",
+    "pk": 14,
+    "fields": {
       "exercise_id": "phrase",
       "title": "Satz",
       "description": "Bitte lesen Sie den folgenden Satz laut vor: \"Guten Morgen, wie geht es Ihnen?\"",
-      "example_audio_url_female": "/examples/female/1-phrase.mp3",
-      "example_audio_url_male": "/examples/male/4-phrase.mp3",
-      "order": 4,
+      "example_audio_url": "/examples/phrase.flac",
+      "order": 14,
       "is_active": true
     }
   }

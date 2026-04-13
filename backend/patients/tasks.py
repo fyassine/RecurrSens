@@ -47,15 +47,10 @@ def run_inference_task(self, patient_id: str, phase: str):
         )
         return
 
-    # Calculate age
-    age = patient.age or -1
-
     inference_url = settings.INFERENCE_SERVICE_URL
     payload = {
         'bucket': settings.S3_BUCKET,
         'keys': keys,
-        'gender': patient.gender,
-        'age': age,
     }
 
     # --- Call prediction endpoint ---
@@ -142,3 +137,103 @@ def run_inference_task(self, patient_id: str, phase: str):
             f'Saved inference results for {patient.patient_id} ({phase}): '
             f'updated {update_fields}'
         )
+
+
+@shared_task
+def check_data_expiry():
+    """
+    Periodic task: enforce data-retention policy.
+
+    Runs daily (configured via CELERY_BEAT_SCHEDULE in settings).
+    Two passes:
+      1. Notify admin for patients expiring within 24 hours.
+      2. Mark patients as EXPIRED if their expires_at has passed.
+    """
+    from django.utils import timezone
+    from .models import Patient
+
+    now = timezone.now()
+    soon = now + timezone.timedelta(hours=24)
+
+    # --- Pass 1: send expiry-warning notifications ---
+    expiring_soon = Patient.objects.filter(
+        expires_at__lte=soon,
+        expires_at__gt=now,
+        notification_sent_at__isnull=True,
+    )
+    for patient in expiring_soon:
+        # TODO: send notification email to settings.ADMIN_NOTIFICATION_EMAIL
+        #   Example:
+        #   from django.core.mail import send_mail
+        #   send_mail(
+        #       subject=f'Ablauf: Patient {patient.patient_id}',
+        #       message=f'Die Daten des Patienten {patient.patient_id} laufen am '
+        #               f'{patient.expires_at.strftime("%d.%m.%Y %H:%M")} ab.',
+        #       from_email=settings.DEFAULT_FROM_EMAIL,
+        #       recipient_list=[settings.ADMIN_NOTIFICATION_EMAIL],
+        #   )
+        patient.notification_sent_at = now
+        patient.save(update_fields=['notification_sent_at'])
+        logger.info(f'Expiry notification recorded for patient {patient.patient_id}')
+
+    # --- Pass 2: mark expired patients ---
+    expired = Patient.objects.filter(
+        expires_at__lte=now,
+    ).exclude(status=Patient.Status.EXPIRED)
+    count = expired.count()
+    expired.update(status=Patient.Status.EXPIRED)
+    if count:
+        logger.info(f'Marked {count} patient(s) as EXPIRED')
+
+
+@shared_task
+def send_session_email(patient_id: str, session_id: str):
+    """
+    Send an email to the patient with a QR code and link to their recording session.
+
+    TODO: Implement when SMTP server credentials are available.
+    Required settings:
+        - EMAIL_HOST, EMAIL_PORT, EMAIL_HOST_USER, EMAIL_HOST_PASSWORD
+        - DEFAULT_FROM_EMAIL
+        - APP_URL (for building the recording link)
+
+    The email should contain:
+        - A greeting and instructions in German
+        - A QR code linking to /p/{patient_token}
+        - A clickable link as fallback
+
+    Args:
+        patient_id: UUID string of the patient
+        session_id: UUID string of the recording session
+    """
+    from .models import Patient, RecordingSession
+
+    try:
+        patient = Patient.objects.get(id=patient_id)
+        session = RecordingSession.objects.get(id=session_id)
+    except (Patient.DoesNotExist, RecordingSession.DoesNotExist):
+        logger.error(f'send_session_email: Patient {patient_id} or session {session_id} not found')
+        return
+
+    recording_url = f'{settings.APP_URL}/p/{patient.id}'
+    logger.info(
+        f'TODO: Send session email to patient {patient.patient_id} '
+        f'for {session.get_phase_display()} session {session.session_number}. '
+        f'Recording URL: {recording_url}'
+    )
+    # TODO: Uncomment and configure when SMTP is available:
+    # from django.core.mail import send_mail
+    # send_mail(
+    #     subject=f'Neue Aufnahmesitzung - {session.get_phase_display()}',
+    #     message=(
+    #         f'Sehr geehrte/r Patient/in,\n\n'
+    #         f'eine neue Aufnahmesitzung ({session.get_phase_display()}, '
+    #         f'Sitzung {session.session_number}) wurde für Sie erstellt.\n\n'
+    #         f'Bitte öffnen Sie den folgenden Link, um Ihre Aufnahmen zu starten:\n'
+    #         f'{recording_url}\n\n'
+    #         f'Mit freundlichen Grüßen,\n'
+    #         f'Ihr Klinik-Team'
+    #     ),
+    #     from_email=settings.DEFAULT_FROM_EMAIL,
+    #     recipient_list=[patient_email],  # TODO: Add patient email field
+    # )

@@ -1,9 +1,11 @@
 """
 Django Admin configuration for the patients app.
-Provides a rich admin interface for managing patients, audio files, and exercises.
+Provides a rich admin interface for managing patients, audio files, exercises, and sessions.
 """
 from django.contrib import admin
-from .models import Patient, AudioFile, Exercise
+from django.utils import timezone
+from .models import Patient, AudioFile, Exercise, RecordingSession
+from . import services
 
 
 class AudioFileInline(admin.TabularInline):
@@ -11,32 +13,54 @@ class AudioFileInline(admin.TabularInline):
     model = AudioFile
     extra = 0
     readonly_fields = ('id', 'storage_key', 'created_at')
-    fields = ('exercise_id', 'phase', 'storage_key', 'created_at')
+    fields = ('exercise_id', 'phase', 'session', 'storage_key', 'created_at')
+
+
+class RecordingSessionInline(admin.TabularInline):
+    """Inline display of recording sessions on the Patient admin page."""
+    model = RecordingSession
+    extra = 0
+    readonly_fields = ('id', 'phase', 'session_number', 'created_at')
+    fields = ('phase', 'session_number', 'created_at')
+
+
+@admin.action(description='Audiodaten löschen (Soft Delete)')
+def soft_delete_patients(modeladmin, request, queryset):
+    """Soft-delete selected patients: remove audio data, keep metadata."""
+    for patient in queryset.filter(deleted_at__isnull=True):
+        services.delete_patient_with_files(patient)
+
+
+@admin.action(description='Neue POST_OP Sitzung erstellen')
+def create_postop_session(modeladmin, request, queryset):
+    """Create a new POST_OP recording session for selected patients."""
+    for patient in queryset:
+        services.create_recording_session(patient, 'POST_OP')
 
 
 @admin.register(Patient)
 class PatientAdmin(admin.ModelAdmin):
     """Admin configuration for Patient model."""
     list_display = (
-        'patient_id', 'status', 'gender', 'birth_date',
-        'diagnosis', 'prediction_pre', 'prediction_post',
+        'patient_id', 'status',
+        'prediction_pre', 'prediction_post',
         'audio_count_pre', 'audio_count_post',
-        'created_at',
+        'session_count',
+        'is_soft_deleted',
+        'expires_at', 'created_at',
     )
-    list_filter = ('status', 'gender', 'diagnosis', 'prediction_pre', 'prediction_post')
-    search_fields = ('patient_id', 'diagnosis_text')
-    readonly_fields = ('id', 'created_at', 'updated_at')
+    list_filter = ('status', 'prediction_pre', 'prediction_post', 'deleted_at')
+    search_fields = ('patient_id',)
+    readonly_fields = ('id', 'created_at', 'updated_at', 'notification_sent_at', 'deleted_at')
     ordering = ('-created_at',)
+    actions = [soft_delete_patients, create_postop_session]
 
     fieldsets = (
         ('Identifikation', {
             'fields': ('id', 'patient_id', 'status')
         }),
-        ('Demografie', {
-            'fields': ('gender', 'birth_date')
-        }),
-        ('Diagnose', {
-            'fields': ('diagnosis', 'diagnosis_text')
+        ('Datenschutz', {
+            'fields': ('expires_at', 'notification_sent_at', 'deleted_at'),
         }),
         ('Prä-OP KI-Ergebnisse', {
             'fields': (
@@ -60,25 +84,44 @@ class PatientAdmin(admin.ModelAdmin):
         }),
     )
 
-    inlines = [AudioFileInline]
+    inlines = [RecordingSessionInline, AudioFileInline]
 
     def audio_count_pre(self, obj):
         return obj.audio_files.filter(phase='PRE_OP').count()
-    audio_count_pre.short_description = 'Prä-OP Aufnahmen'
+    audio_count_pre.short_description = 'Prä-OP'
 
     def audio_count_post(self, obj):
         return obj.audio_files.filter(phase='POST_OP').count()
-    audio_count_post.short_description = 'Post-OP Aufnahmen'
+    audio_count_post.short_description = 'Post-OP'
+
+    def session_count(self, obj):
+        return obj.sessions.count()
+    session_count.short_description = 'Sitzungen'
+
+    def is_soft_deleted(self, obj):
+        return obj.deleted_at is not None
+    is_soft_deleted.boolean = True
+    is_soft_deleted.short_description = 'Gelöscht'
+
+
+@admin.register(RecordingSession)
+class RecordingSessionAdmin(admin.ModelAdmin):
+    """Admin configuration for RecordingSession model."""
+    list_display = ('patient', 'phase', 'session_number', 'created_at')
+    list_filter = ('phase',)
+    search_fields = ('patient__patient_id',)
+    readonly_fields = ('id', 'created_at')
+    raw_id_fields = ('patient',)
 
 
 @admin.register(AudioFile)
 class AudioFileAdmin(admin.ModelAdmin):
     """Admin configuration for AudioFile model."""
-    list_display = ('patient', 'exercise_id', 'phase', 'storage_key', 'created_at')
+    list_display = ('patient', 'exercise_id', 'phase', 'session', 'storage_key', 'created_at')
     list_filter = ('phase', 'exercise_id')
     search_fields = ('patient__patient_id', 'exercise_id', 'storage_key')
     readonly_fields = ('id', 'created_at')
-    raw_id_fields = ('patient',)
+    raw_id_fields = ('patient', 'session')
 
 
 @admin.register(Exercise)

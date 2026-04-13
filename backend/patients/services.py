@@ -23,7 +23,7 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import cm
 from reportlab.pdfgen import canvas
 
-from .models import Patient, AudioFile, Exercise
+from .models import Patient, AudioFile, Exercise, RecordingSession
 
 logger = logging.getLogger(__name__)
 
@@ -123,15 +123,57 @@ def get_audio_from_s3(key: str) -> Optional[bytes]:
 # Workflow State Machine
 # =============================================================================
 
-# Valid status transitions
+# Valid status transitions (CONSENT_GIVEN kept for backward compat but not used in new flow)
 STATUS_TRANSITIONS = {
     Patient.Status.NEW: Patient.Status.CONSENT_GIVEN,
-    Patient.Status.CONSENT_GIVEN: Patient.Status.DEMOGRAPHICS_DONE,
-    Patient.Status.DEMOGRAPHICS_DONE: Patient.Status.PRE_OP_DONE,
+    Patient.Status.CONSENT_GIVEN: Patient.Status.PRE_OP_DONE,
     Patient.Status.PRE_OP_DONE: Patient.Status.POST_OP_STARTED,
     Patient.Status.POST_OP_STARTED: Patient.Status.POST_OP_DONE,
     Patient.Status.POST_OP_DONE: Patient.Status.COMPLETED,
 }
+
+
+# =============================================================================
+# Recording Session Management
+# =============================================================================
+
+def create_recording_session(patient: Patient, phase: str) -> RecordingSession:
+    """
+    Create a new recording session for a patient.
+    Auto-increments session_number per patient and phase.
+    """
+    last_session = (
+        RecordingSession.objects
+        .filter(patient=patient, phase=phase)
+        .order_by('-session_number')
+        .first()
+    )
+    next_number = (last_session.session_number + 1) if last_session else 1
+
+    session = RecordingSession.objects.create(
+        patient=patient,
+        phase=phase,
+        session_number=next_number,
+    )
+    logger.info(
+        f'Created {phase} session {next_number} for patient {patient.patient_id}'
+    )
+    # TODO: Send email notification with QR code / recording link to patient
+    # Requires SMTP configuration. See tasks.py send_session_email() stub.
+    return session
+
+
+def get_active_session(patient: Patient, phase: str) -> Optional[RecordingSession]:
+    """
+    Get the latest recording session for a patient and phase.
+    This is the session that audio uploads will be assigned to.
+    """
+    return (
+        RecordingSession.objects
+        .filter(patient=patient, phase=phase)
+        .order_by('-session_number')
+        .first()
+    )
 
 
 def advance_patient_step(patient: Patient) -> Patient:
@@ -139,10 +181,15 @@ def advance_patient_step(patient: Patient) -> Patient:
     Advance a patient to the next workflow step.
 
     State machine:
-        NEW → CONSENT_GIVEN → DEMOGRAPHICS_DONE → PRE_OP_DONE →
+        NEW → CONSENT_GIVEN → PRE_OP_DONE →
         POST_OP_STARTED → POST_OP_DONE → COMPLETED
 
+    In the new flow, NEW → CONSENT_GIVEN is triggered by the landing page
+    (Start button), and CONSENT_GIVEN → PRE_OP_DONE happens when recordings
+    are complete. A PRE_OP recording session is auto-created on the first advance.
+
     Side effects:
+        - Creates first PRE_OP session when advancing from NEW
         - Sets pre_op_date when advancing to PRE_OP_DONE
         - Sets post_op_date when advancing to POST_OP_DONE
         - Triggers inference tasks on PRE_OP_DONE and POST_OP_DONE
@@ -180,6 +227,13 @@ def advance_patient_step(patient: Patient) -> Patient:
 
     patient.save()
 
+    # Auto-create first PRE_OP session when patient starts
+    if next_status == Patient.Status.CONSENT_GIVEN:
+        if not RecordingSession.objects.filter(
+            patient=patient, phase=RecordingSession.Phase.PRE_OP
+        ).exists():
+            create_recording_session(patient, RecordingSession.Phase.PRE_OP)
+
     # Trigger async inference tasks
     if next_status in (Patient.Status.PRE_OP_DONE, Patient.Status.POST_OP_DONE):
         try:
@@ -213,15 +267,9 @@ def check_completeness(patient: Patient) -> dict:
     missing = []
     warnings = []
 
-    # Required demographics
+    # Required pseudonym
     if not patient.patient_id or not patient.patient_id.strip():
         missing.append('patientId')
-    if not patient.gender or patient.gender == Patient.Gender.UNKNOWN:
-        missing.append('gender')
-    if not patient.birth_date:
-        missing.append('birthDate')
-    if not patient.diagnosis or patient.diagnosis == Patient.Diagnosis.TODO:
-        missing.append('diagnosis')
 
     # Required audio files
     active_exercises = Exercise.objects.filter(is_active=True)
@@ -322,17 +370,6 @@ def generate_patient_pdf(patient: Patient) -> bytes:
 # Data Export
 # =============================================================================
 
-def _map_diagnosis_to_pathology(diagnosis: str) -> str:
-    """Map diagnosis enum value to German pathology text."""
-    mapping = {
-        'HEALTHY': 'Keine Recurrensparese',
-        'LEFT': 'Linke Recurrensparese',
-        'RIGHT': 'Rechte Recurrensparese',
-        'BOTH': 'Beidseitige Recurrensparese',
-    }
-    return mapping.get(diagnosis, '')
-
-
 def _format_date(dt) -> str:
     """Format a date/datetime for CSV export."""
     if not dt:
@@ -347,9 +384,10 @@ def _format_date(dt) -> str:
 def export_patients_zip() -> bytes:
     """
     Export all completed patients as a ZIP containing:
-    - export.csv: Tabular data (one row per recording phase)
-    - data/: Audio files organized by patient token and phase
+    - export.csv: Tabular data (one row per recording session)
+    - data/: Audio files organized by patient token, phase, and session
 
+    Excludes soft-deleted patients.
     Returns ZIP file as bytes.
     """
     zip_buffer = io.BytesIO()
@@ -359,38 +397,26 @@ def export_patients_zip() -> bytes:
         csv_buffer = io.StringIO()
         writer = csv.writer(csv_buffer)
         writer.writerow([
-            'AufnahmeID', 'AufnahmeTyp', 'AufnahmeDatum',
-            'Diagnose', 'SprecherID', 'Geburtsdatum',
-            'Geschlecht', 'Pathologien',
+            'AufnahmeID', 'AufnahmeTyp', 'SessionNr', 'AufnahmeDatum',
+            'SprecherID',
         ])
 
         completed = Patient.objects.filter(
-            status=Patient.Status.COMPLETED
-        ).prefetch_related('audio_files')
+            status=Patient.Status.COMPLETED,
+            deleted_at__isnull=True,
+        ).prefetch_related('audio_files', 'sessions')
 
         for patient in completed:
-            # PRE-OP row
-            writer.writerow([
-                f'{patient.id}/pre',
-                'h',
-                _format_date(patient.pre_op_date),
-                '',
-                patient.patient_id,
-                _format_date(patient.birth_date),
-                patient.gender,
-                'Keine Recurrensparese',
-            ])
-            # POST-OP row
-            writer.writerow([
-                f'{patient.id}/post',
-                'h',
-                _format_date(patient.post_op_date),
-                patient.diagnosis_text,
-                patient.patient_id,
-                _format_date(patient.birth_date),
-                patient.gender,
-                _map_diagnosis_to_pathology(patient.diagnosis),
-            ])
+            for session in patient.sessions.all():
+                phase_label = 'pre' if session.phase == 'PRE_OP' else 'post'
+                op_date = patient.pre_op_date if session.phase == 'PRE_OP' else patient.post_op_date
+                writer.writerow([
+                    f'{patient.id}/{phase_label}_{session.session_number}',
+                    'h',
+                    session.session_number,
+                    _format_date(op_date),
+                    patient.patient_id,
+                ])
 
         zf.writestr('export.csv', csv_buffer.getvalue())
 
@@ -421,15 +447,38 @@ def export_patients_zip() -> bytes:
 
 def delete_patient_with_files(patient: Patient) -> None:
     """
-    Delete a patient and all associated data:
+    Soft-delete a patient: remove audio data but keep metadata.
+
     1. Delete audio files from S3/MinIO
     2. Delete AudioFile records from DB
-    3. Delete Patient record from DB
+    3. Clear AI prediction fields
+    4. Set deleted_at timestamp
+    5. Keep: patient_id, timestamps, session metadata
     """
     # Delete audio files from S3
     for audio_file in patient.audio_files.all():
         delete_audio_from_s3(audio_file.storage_key)
 
-    # Cascade delete handles AudioFile records
-    patient.delete()
-    logger.info(f'Deleted patient {patient.patient_id} and all associated files')
+    # Delete AudioFile DB records
+    patient.audio_files.all().delete()
+
+    # Clear AI prediction fields
+    patient.prediction_pre = Patient.PredictionStatus.TODO
+    patient.ai_percentage_rp_pre = None
+    patient.gradcam_prediction_pre = ''
+    patient.gradcam_percentage_pre = None
+    patient.ai_reasoning_pre = ''
+    patient.prediction_post = Patient.PredictionStatus.TODO
+    patient.ai_percentage_rp_post = None
+    patient.gradcam_prediction_post = ''
+    patient.gradcam_percentage_post = None
+    patient.ai_reasoning_post = ''
+
+    # Mark as soft-deleted
+    patient.deleted_at = timezone.now()
+    patient.save()
+
+    logger.info(
+        f'Soft-deleted patient {patient.patient_id}: '
+        f'audio files removed, metadata preserved'
+    )

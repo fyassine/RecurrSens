@@ -23,14 +23,13 @@ import SearchIcon from '@mui/icons-material/Search';
 import DeleteIcon from '@mui/icons-material/Delete';
 import LockOpenIcon from '@mui/icons-material/LockOpen';
 import VisibilityIcon from '@mui/icons-material/Visibility';
-import type { Patient, Diagnosis, PatientStatus, PredictionStatus } from '../types';
-import { StatusBadge, DiagnosisBadge, PredictionBadge } from './Badges';
-import { getAge, formatGender } from '../utils';
+import type { Patient, PatientStatus, PredictionStatus } from '../types';
+import { StatusBadge, PredictionBadge } from './Badges';
 import { deletePatient, advancePatient } from '../api/client';
 import PatientAccessDialog from './PatientAccessDialog';
 import ConfirmDialog from './ConfirmDialog';
 
-type SortKey = keyof Patient | 'age';
+type SortKey = keyof Patient;
 type Order = 'asc' | 'desc';
 
 export default function PatientList({
@@ -45,7 +44,6 @@ export default function PatientList({
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
-  const [diagnosisFilter, setDiagnosisFilter] = useState<string>('ALL');
   const [predictionFilter, setPredictionFilter] = useState<string>('ALL');
   const [orderBy, setOrderBy] = useState<SortKey>('created_at');
   const [order, setOrder] = useState<Order>('desc');
@@ -60,29 +58,17 @@ export default function PatientList({
     return patients.filter((p) => {
       if (search && !p.patient_id.toLowerCase().includes(search.toLowerCase())) return false;
       if (statusFilter !== 'ALL' && p.status !== statusFilter) return false;
-      if (diagnosisFilter !== 'ALL') {
-        if (diagnosisFilter === 'INFECTED') {
-          if (!['LEFT', 'RIGHT', 'BOTH'].includes(p.diagnosis)) return false;
-        } else if (p.diagnosis !== diagnosisFilter) return false;
-      }
       if (predictionFilter !== 'ALL') {
         if (p.prediction_pre !== predictionFilter && p.prediction_post !== predictionFilter) return false;
       }
       return true;
     });
-  }, [patients, search, statusFilter, diagnosisFilter, predictionFilter]);
+  }, [patients, search, statusFilter, predictionFilter]);
 
   const sorted = useMemo(() => {
     return [...filtered].sort((a, b) => {
-      let aVal: unknown;
-      let bVal: unknown;
-      if (orderBy === 'age') {
-        aVal = getAge(a.birth_date);
-        bVal = getAge(b.birth_date);
-      } else {
-        aVal = a[orderBy];
-        bVal = b[orderBy];
-      }
+      const aVal: unknown = a[orderBy];
+      const bVal: unknown = b[orderBy];
       if (aVal == null) return 1;
       if (bVal == null) return -1;
       if (aVal < bVal) return order === 'asc' ? -1 : 1;
@@ -149,27 +135,12 @@ export default function PatientList({
         >
           <MenuItem value="ALL">Alle Status</MenuItem>
           <MenuItem value="NEW">Neu</MenuItem>
-          <MenuItem value="CONSENT_GIVEN">Einwilligung</MenuItem>
-          <MenuItem value="DEMOGRAPHICS_DONE">Demografie</MenuItem>
+          <MenuItem value="CONSENT_GIVEN">Prä-OP</MenuItem>
           <MenuItem value="PRE_OP_DONE">Prä-OP fertig</MenuItem>
           <MenuItem value="POST_OP_STARTED">Post-OP gestartet</MenuItem>
           <MenuItem value="POST_OP_DONE">Post-OP fertig</MenuItem>
           <MenuItem value="COMPLETED">Abgeschlossen</MenuItem>
-        </TextField>
-        <TextField
-          select
-          size="small"
-          value={diagnosisFilter}
-          onChange={(e) => setDiagnosisFilter(e.target.value)}
-          sx={{ minWidth: 180, bgcolor: 'white' }}
-        >
-          <MenuItem value="ALL">Alle Diagnosen</MenuItem>
-          <MenuItem value="TODO">Ausstehend</MenuItem>
-          <MenuItem value="INFECTED">RP (alle)</MenuItem>
-          <MenuItem value="LEFT">Links (RP)</MenuItem>
-          <MenuItem value="RIGHT">Rechts (RP)</MenuItem>
-          <MenuItem value="BOTH">Beidseitig (RP)</MenuItem>
-          <MenuItem value="HEALTHY">Keine RP</MenuItem>
+          <MenuItem value="EXPIRED">Abgelaufen</MenuItem>
         </TextField>
         <TextField
           select
@@ -197,10 +168,9 @@ export default function PatientList({
             <TableRow>
               <SortCell label="Patienten-ID" field="patient_id" orderBy={orderBy} order={order} onSort={handleSort} />
               <SortCell label="Status" field="status" orderBy={orderBy} order={order} onSort={handleSort} />
-              <SortCell label="Alter / Geschlecht" field="age" orderBy={orderBy} order={order} onSort={handleSort} />
-              <SortCell label="Diagnose" field="diagnosis" orderBy={orderBy} order={order} onSort={handleSort} />
               <SortCell label="KI (Prä)" field="prediction_pre" orderBy={orderBy} order={order} onSort={handleSort} />
               <SortCell label="KI (Post)" field="prediction_post" orderBy={orderBy} order={order} onSort={handleSort} />
+              <SortCell label="Ablaufdatum" field="expires_at" orderBy={orderBy} order={order} onSort={handleSort} />
               <SortCell label="Erstellt am" field="created_at" orderBy={orderBy} order={order} onSort={handleSort} />
               <TableCell align="right">Aktionen</TableCell>
             </TableRow>
@@ -228,16 +198,13 @@ export default function PatientList({
                   )}
                 </TableCell>
                 <TableCell>
-                  {getAge(p.birth_date) > 0 ? getAge(p.birth_date) : '-'} / {formatGender(p.gender)}
-                </TableCell>
-                <TableCell>
-                  <DiagnosisBadge value={p.diagnosis as Diagnosis} />
-                </TableCell>
-                <TableCell>
                   <PredictionBadge value={p.prediction_pre as PredictionStatus} />
                 </TableCell>
                 <TableCell>
                   <PredictionBadge value={p.prediction_post as PredictionStatus} />
+                </TableCell>
+                <TableCell sx={{ color: p.status === 'EXPIRED' ? 'error.main' : new Date(p.expires_at) <= new Date(Date.now() + 86400000) ? 'warning.main' : 'text.primary', fontWeight: p.status === 'EXPIRED' ? 600 : 400 }}>
+                  {new Date(p.expires_at).toLocaleDateString('de-DE')}
                 </TableCell>
                 <TableCell>
                   {new Date(p.created_at).toLocaleDateString('de-DE')}
@@ -267,7 +234,7 @@ export default function PatientList({
             ))}
             {sorted.length === 0 && (
               <TableRow>
-                <TableCell colSpan={8} align="center" sx={{ py: 6, color: 'text.secondary' }}>
+                <TableCell colSpan={7} align="center" sx={{ py: 6, color: 'text.secondary' }}>
                   Keine Patienten gefunden.
                 </TableCell>
               </TableRow>

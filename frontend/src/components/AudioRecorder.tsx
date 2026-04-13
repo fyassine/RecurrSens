@@ -182,26 +182,38 @@ export default function AudioRecorder({
       {/* Visualizer */}
       {isRecording && stream && <AudioVisualizer stream={stream} />}
 
-      {/* Record button */}
+      {/* Record button – push-to-talk */}
       {!audioBlob && (
         <>
           <IconButton
-            onClick={isRecording ? stopRecording : startRecording}
+            onMouseDown={startRecording}
+            onMouseUp={stopRecording}
+            onMouseLeave={() => { if (isRecording) stopRecording(); }}
+            onTouchStart={(e) => { e.preventDefault(); startRecording(); }}
+            onTouchEnd={(e) => { e.preventDefault(); stopRecording(); }}
+            onContextMenu={(e) => e.preventDefault()}
             color={isRecording ? 'error' : 'primary'}
             sx={{
               width: 96,
               height: 96,
               bgcolor: isRecording ? 'error.light' : 'primary.light',
               '&:hover': { bgcolor: isRecording ? 'error.main' : 'primary.main' },
+              userSelect: 'none',
+              WebkitTouchCallout: 'none',
             }}
           >
             {isRecording ? <StopIcon sx={{ fontSize: 40 }} /> : <MicIcon sx={{ fontSize: 40 }} />}
           </IconButton>
-          <Typography variant="body2" color="text.secondary">
+          <Typography variant="body2" color="text.secondary" textAlign="center">
             {isRecording
               ? `Aufnahme läuft… (${formatTime(recordingDuration)})`
-              : 'Tippen zum Starten'}
+              : 'Gedrückt halten zum Aufnehmen'}
           </Typography>
+          {!isRecording && (
+            <Typography variant="caption" color="text.secondary" textAlign="center" sx={{ maxWidth: 300 }}>
+              Falls Sie versehentlich losgelassen haben, halten Sie den Button erneut gedrückt.
+            </Typography>
+          )}
         </>
       )}
 

@@ -11,7 +11,6 @@ import {
   CircularProgress,
   Grid,
   IconButton,
-  MenuItem,
   TextField,
   Typography,
 } from '@mui/material';
@@ -22,7 +21,7 @@ import PsychologyIcon from '@mui/icons-material/Psychology';
 import AudioFileIcon from '@mui/icons-material/AudioFile';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
-import type { PatientDetail, Diagnosis, PatientStatus } from '../types';
+import type { PatientDetail, PatientStatus } from '../types';
 import {
   getPatient,
   updatePatient,
@@ -33,7 +32,6 @@ import {
   advancePublicPatient,
 } from '../api/client';
 import { StatusBadge, PredictionBadge } from '../components/Badges';
-import { formatGender } from '../utils';
 import ConfirmDialog from '../components/ConfirmDialog';
 import type { Exercise } from '../types';
 
@@ -91,7 +89,7 @@ export default function PatientDetailsPage() {
           {/* Left column */}
           <Grid size={{ xs: 12, lg: 4 }}>
             <PatientInfoCard patient={patient} onUpdated={fetchPatient} />
-            <DiagnosisCard patient={patient} onUpdated={fetchPatient} />
+            <DiagnosisCard patient={patient} />
           </Grid>
 
           {/* Right column */}
@@ -103,7 +101,7 @@ export default function PatientDetailsPage() {
               date={patient.pre_op_date}
               patientId={patient.id}
               patientStatus={patient.status}
-              showUpload={patient.status === 'DEMOGRAPHICS_DONE'}
+              showUpload={patient.status === 'CONSENT_GIVEN'}
               onUploaded={fetchPatient}
             />
             <AudioSection
@@ -137,8 +135,6 @@ function PatientInfoCard({
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [pid, setPid] = useState(patient.patient_id);
-  const [birthDate, setBirthDate] = useState(patient.birth_date?.split('T')[0] ?? '');
-  const [gender, setGender] = useState(patient.gender);
   const [completeOpen, setCompleteOpen] = useState(false);
 
   const handleSave = async () => {
@@ -146,8 +142,6 @@ function PatientInfoCard({
     try {
       await updatePatient(patient.id, {
         patient_id: pid,
-        birth_date: birthDate || null,
-        gender,
       });
       setEditing(false);
       onUpdated();
@@ -183,28 +177,6 @@ function PatientInfoCard({
               size="small"
               fullWidth
             />
-            <TextField
-              label="Geburtsdatum"
-              type="date"
-              value={birthDate}
-              onChange={(e) => setBirthDate(e.target.value)}
-              size="small"
-              fullWidth
-              slotProps={{ inputLabel: { shrink: true } }}
-            />
-            <TextField
-              label="Geschlecht"
-              select
-              value={gender}
-              onChange={(e) => setGender(e.target.value as typeof gender)}
-              size="small"
-              fullWidth
-            >
-              <MenuItem value="M">Männlich</MenuItem>
-              <MenuItem value="W">Weiblich</MenuItem>
-              <MenuItem value="D">Divers</MenuItem>
-              <MenuItem value="?">Unbekannt</MenuItem>
-            </TextField>
             <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
               <Button size="small" onClick={() => setEditing(false)}>
                 Abbrechen
@@ -221,10 +193,9 @@ function PatientInfoCard({
               <StatusBadge status={patient.status as PatientStatus} />
             </InfoField>
             <InfoField
-              label="Geburtstag"
-              value={patient.birth_date ? new Date(patient.birth_date).toLocaleDateString('de-DE') : '-'}
+              label="Ablaufdatum"
+              value={new Date(patient.expires_at).toLocaleDateString('de-DE')}
             />
-            <InfoField label="Geschlecht" value={formatGender(patient.gender)} />
             <InfoField
               label="Erstellt am"
               value={new Date(patient.created_at).toLocaleDateString('de-DE')}
@@ -265,74 +236,13 @@ function PatientInfoCard({
 
 function DiagnosisCard({
   patient,
-  onUpdated,
 }: {
   patient: PatientDetail;
-  onUpdated: () => void;
 }) {
-  const [diagnosis, setDiagnosis] = useState(patient.diagnosis);
-  const [diagnosisText, setDiagnosisText] = useState(patient.diagnosis_text || '');
-  const [saving, setSaving] = useState(false);
-
-  const handleDiagnosisChange = async (val: string) => {
-    setDiagnosis(val as Diagnosis);
-    setSaving(true);
-    try {
-      await updatePatient(patient.id, { diagnosis: val });
-      onUpdated();
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleTextBlur = async () => {
-    if (diagnosisText === (patient.diagnosis_text || '')) return;
-    setSaving(true);
-    try {
-      await updatePatient(patient.id, { diagnosis_text: diagnosisText });
-      onUpdated();
-    } finally {
-      setSaving(false);
-    }
-  };
-
   return (
     <Card sx={{ mb: 3 }}>
-      <CardHeader avatar={<PsychologyIcon color="primary" />} title="Diagnose & KI" />
+      <CardHeader avatar={<PsychologyIcon color="primary" />} title="KI-Ergebnisse" />
       <CardContent sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-        <Box>
-          <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: 1 }}>
-            Ärztliche Diagnose
-          </Typography>
-          <TextField
-            select
-            fullWidth
-            size="small"
-            value={diagnosis}
-            onChange={(e) => handleDiagnosisChange(e.target.value)}
-            disabled={saving}
-            sx={{ mt: 1 }}
-          >
-            <MenuItem value="TODO">Ausstehend</MenuItem>
-            <MenuItem value="LEFT">Linksseitige Recurrensparese</MenuItem>
-            <MenuItem value="RIGHT">Rechtsseitige Recurrensparese</MenuItem>
-            <MenuItem value="BOTH">Beidseitige Recurrensparese</MenuItem>
-            <MenuItem value="HEALTHY">Keine Recurrensparese</MenuItem>
-          </TextField>
-          <TextField
-            fullWidth
-            multiline
-            minRows={3}
-            size="small"
-            placeholder="Zusätzliche Anmerkungen…"
-            value={diagnosisText}
-            onChange={(e) => setDiagnosisText(e.target.value)}
-            onBlur={handleTextBlur}
-            disabled={saving}
-            sx={{ mt: 2 }}
-          />
-        </Box>
-
         <Grid container spacing={2}>
           <Grid size={{ xs: 12, xl: 6 }}>
             <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: 1 }}>

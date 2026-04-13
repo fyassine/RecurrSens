@@ -2,16 +2,14 @@ export interface Patient {
   id: string;
   patient_id: string;
   status: PatientStatus;
-  gender: Gender;
-  birth_date: string | null;
-  diagnosis: Diagnosis;
-  diagnosis_text: string;
   prediction_pre: PredictionStatus;
   prediction_post: PredictionStatus;
   audio_count_pre: number;
   audio_count_post: number;
   pre_op_date: string | null;
   post_op_date: string | null;
+  deleted_at: string | null;
+  expires_at: string;
   created_at: string;
   updated_at: string;
 }
@@ -25,20 +23,24 @@ export interface PatientDetail extends Patient {
   gradcam_prediction_post: string | null;
   gradcam_percentage_post: number | null;
   ai_reasoning_post: string | null;
-  age: number | null;
   audio_files: AudioFile[];
   audio_files_pre: AudioFile[];
   audio_files_post: AudioFile[];
+  sessions: RecordingSession[];
 }
 
 export interface PatientPublic {
   status: PatientStatus;
-  gender: Gender;
-  birth_date: string | null;
   patient_id: string;
-  diagnosis: Diagnosis;
   audio_file_ids_pre: string[];
   audio_file_ids_post: string[];
+  created_at: string;
+}
+
+export interface RecordingSession {
+  id: string;
+  phase: 'PRE_OP' | 'POST_OP';
+  session_number: number;
   created_at: string;
 }
 
@@ -46,6 +48,7 @@ export interface AudioFile {
   id: string;
   exercise_id: string;
   phase: 'PRE_OP' | 'POST_OP';
+  session: string | null;
   created_at: string;
 }
 
@@ -54,8 +57,7 @@ export interface Exercise {
   exercise_id: string;
   title: string;
   description: string;
-  example_audio_url_female: string;
-  example_audio_url_male: string;
+  example_audio_url: string;
   order: number;
   is_active: boolean;
 }
@@ -69,14 +71,10 @@ export interface Completeness {
 export type PatientStatus =
   | 'NEW'
   | 'CONSENT_GIVEN'
-  | 'DEMOGRAPHICS_DONE'
   | 'PRE_OP_DONE'
   | 'POST_OP_STARTED'
   | 'POST_OP_DONE'
-  | 'COMPLETED';
-
-export type Gender = 'M' | 'W' | 'D' | '?';
-
-export type Diagnosis = 'TODO' | 'LEFT' | 'RIGHT' | 'BOTH' | 'HEALTHY';
+  | 'COMPLETED'
+  | 'EXPIRED';
 
 export type PredictionStatus = 'TODO' | 'INFECTED' | 'HEALTHY';

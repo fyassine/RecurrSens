@@ -1,10 +1,7 @@
-"""
-Model tests for the patients app.
-Tests cover model creation, field behavior, workflow status, and relationships.
-"""
-from datetime import date, datetime
+"""Model tests for the patients app."""
 from django.test import TestCase
-from patients.models import Patient, AudioFile, Exercise
+from django.utils import timezone
+from patients.models import Patient, AudioFile, Exercise, RecordingSession
 
 
 class ExerciseModelTest(TestCase):
@@ -28,6 +25,14 @@ class ExerciseModelTest(TestCase):
         self.assertEqual(exercises[0].exercise_id, 'a')
         self.assertEqual(exercises[1].exercise_id, 'b')
 
+    def test_exercise_single_example_audio(self):
+        exercise = Exercise.objects.create(
+            exercise_id='i_h', title='Vokal I hoch',
+            description='Test', order=1,
+            example_audio_url='/examples/i_h.flac',
+        )
+        self.assertEqual(exercise.example_audio_url, '/examples/i_h.flac')
+
 
 class PatientModelTest(TestCase):
     """Tests for the Patient model."""
@@ -36,32 +41,23 @@ class PatientModelTest(TestCase):
         patient = Patient.objects.create(patient_id='TEST-001')
         self.assertEqual(patient.patient_id, 'TEST-001')
         self.assertEqual(patient.status, Patient.Status.NEW)
-        self.assertEqual(patient.gender, Patient.Gender.UNKNOWN)
-        self.assertEqual(patient.diagnosis, Patient.Diagnosis.TODO)
         self.assertEqual(patient.prediction_pre, Patient.PredictionStatus.TODO)
         self.assertEqual(patient.prediction_post, Patient.PredictionStatus.TODO)
         self.assertIsNotNone(patient.id)  # UUID auto-generated
+        self.assertIsNotNone(patient.expires_at)  # auto-set by save()
 
-    def test_patient_str(self):
-        patient = Patient.objects.create(patient_id='STR-001')
-        self.assertIn('STR-001', str(patient))
-        self.assertIn('Neu', str(patient))
+    def test_patient_expires_at_auto_set(self):
+        from django.conf import settings
+        patient = Patient.objects.create(patient_id='EXP-001')
+        retention = getattr(settings, 'DATA_RETENTION_DAYS', 3)
+        delta = patient.expires_at - patient.created_at
+        self.assertAlmostEqual(delta.days, retention, delta=1)
 
-    def test_patient_age_calculation(self):
-        patient = Patient.objects.create(
-            patient_id='AGE-001',
-            birth_date=date(1990, 1, 15),
-        )
-        age = patient.age
-        expected_year = date.today().year - 1990
-        # Adjust if birthday hasn't occurred yet this year
-        if (date.today().month, date.today().day) < (1, 15):
-            expected_year -= 1
-        self.assertEqual(age, expected_year)
-
-    def test_patient_age_none_if_no_birthday(self):
-        patient = Patient.objects.create(patient_id='NOAGE-001')
-        self.assertIsNone(patient.age)
+    def test_is_expiring_soon(self):
+        from datetime import timedelta
+        patient = Patient.objects.create(patient_id='SOON-001')
+        patient.expires_at = timezone.now() + timedelta(hours=12)
+        self.assertTrue(patient.is_expiring_soon)
 
     def test_patient_unique_patient_id(self):
         Patient.objects.create(patient_id='UNIQUE-001')
@@ -76,23 +72,124 @@ class PatientModelTest(TestCase):
         self.assertEqual(patients[0].patient_id, 'ORDER-002')
         self.assertEqual(patients[1].patient_id, 'ORDER-001')
 
+    def test_soft_delete(self):
+        """Soft-deleted patients have deleted_at set and is_deleted True."""
+        patient = Patient.objects.create(patient_id='SOFT-001')
+        self.assertFalse(patient.is_deleted)
+        self.assertIsNone(patient.deleted_at)
+
+        patient.deleted_at = timezone.now()
+        patient.save()
+        self.assertTrue(patient.is_deleted)
+
+
+class RecordingSessionModelTest(TestCase):
+    """Tests for the RecordingSession model."""
+
+    def setUp(self):
+        self.patient = Patient.objects.create(patient_id='SESSION-001')
+
+    def test_create_session(self):
+        session = RecordingSession.objects.create(
+            patient=self.patient,
+            phase=RecordingSession.Phase.PRE_OP,
+            session_number=1,
+        )
+        self.assertEqual(session.phase, 'PRE_OP')
+        self.assertEqual(session.session_number, 1)
+        self.assertIsNotNone(session.id)
+
+    def test_session_str(self):
+        session = RecordingSession.objects.create(
+            patient=self.patient,
+            phase=RecordingSession.Phase.POST_OP,
+            session_number=3,
+        )
+        s = str(session)
+        self.assertIn('Post-OP', s)
+        self.assertIn('Sitzung 3', s)
+        self.assertIn('SESSION-001', s)
+
+    def test_unique_session_per_phase(self):
+        RecordingSession.objects.create(
+            patient=self.patient,
+            phase=RecordingSession.Phase.PRE_OP,
+            session_number=1,
+        )
+        with self.assertRaises(Exception):
+            RecordingSession.objects.create(
+                patient=self.patient,
+                phase=RecordingSession.Phase.PRE_OP,
+                session_number=1,
+            )
+
+    def test_multiple_sessions_different_phases(self):
+        RecordingSession.objects.create(
+            patient=self.patient,
+            phase=RecordingSession.Phase.PRE_OP,
+            session_number=1,
+        )
+        RecordingSession.objects.create(
+            patient=self.patient,
+            phase=RecordingSession.Phase.POST_OP,
+            session_number=1,
+        )
+        self.assertEqual(self.patient.sessions.count(), 2)
+
+    def test_session_cascade_delete(self):
+        RecordingSession.objects.create(
+            patient=self.patient,
+            phase=RecordingSession.Phase.PRE_OP,
+            session_number=1,
+        )
+        self.assertEqual(RecordingSession.objects.count(), 1)
+        self.patient.delete()
+        self.assertEqual(RecordingSession.objects.count(), 0)
+
+    def test_related_name(self):
+        RecordingSession.objects.create(
+            patient=self.patient,
+            phase=RecordingSession.Phase.PRE_OP,
+            session_number=1,
+        )
+        self.assertEqual(
+            self.patient.sessions.filter(phase='PRE_OP').count(), 1
+        )
+
 
 class AudioFileModelTest(TestCase):
     """Tests for the AudioFile model."""
 
     def setUp(self):
         self.patient = Patient.objects.create(patient_id='AUDIO-001')
+        self.session = RecordingSession.objects.create(
+            patient=self.patient,
+            phase=RecordingSession.Phase.PRE_OP,
+            session_number=1,
+        )
 
     def test_create_audio_file(self):
         audio = AudioFile.objects.create(
             patient=self.patient,
             exercise_id='a_n',
             phase=AudioFile.Phase.PRE_OP,
-            storage_key='token/pre/a_n.webm',
+            storage_key='token/pre_1/a_n.webm',
+            session=self.session,
         )
         self.assertEqual(audio.exercise_id, 'a_n')
         self.assertEqual(audio.phase, 'PRE_OP')
+        self.assertEqual(audio.session, self.session)
         self.assertIsNotNone(audio.id)
+
+    def test_audio_file_without_session(self):
+        """Session is optional for backward compat."""
+        audio = AudioFile.objects.create(
+            patient=self.patient,
+            exercise_id='a_n',
+            phase=AudioFile.Phase.PRE_OP,
+            storage_key='token/pre/a_n.webm',
+        )
+        self.assertIsNone(audio.session)
 
     def test_audio_file_str(self):
         audio = AudioFile.objects.create(

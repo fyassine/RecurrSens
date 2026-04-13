@@ -36,7 +36,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
-from .models import Patient, AudioFile, Exercise
+from .models import Patient, AudioFile, Exercise, RecordingSession
 from .serializers import (
     PatientListSerializer,
     PatientDetailSerializer,
@@ -46,6 +46,7 @@ from .serializers import (
     ExerciseSerializer,
     AudioFileSerializer,
     CompletenessSerializer,
+    RecordingSessionSerializer,
 )
 from .permissions import IsAdminUser, IsPatientTokenValid, IsAdminOrPatientToken
 from . import services
@@ -128,6 +129,27 @@ class PatientViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
+    @action(detail=True, methods=['post'], url_path='sessions')
+    def create_session(self, request, pk=None):
+        """Create a new recording session for a patient (admin triggers post-op sessions)."""
+        patient = self.get_object()
+        phase = request.data.get('phase')
+
+        if phase not in ('PRE_OP', 'POST_OP'):
+            return Response(
+                {'error': 'Phase muss PRE_OP oder POST_OP sein.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        session = services.create_recording_session(patient, phase)
+        # TODO: Send email notification with QR code / recording link to patient
+        # Requires SMTP configuration. The email should contain a link to /p/{token}
+        # and a QR code for the patient to scan.
+        return Response(
+            RecordingSessionSerializer(session).data,
+            status=status.HTTP_201_CREATED,
+        )
+
 
 # =============================================================================
 # Patient-Facing Views (UUID token auth, no JWT)
@@ -154,7 +176,7 @@ class PatientPublicView(APIView):
         return Response(serializer.data)
 
     def patch(self, request, token):
-        """Update patient demographics (gender, birth_date, etc.)."""
+        """Update patient status (patient-facing PATCH)."""
         try:
             patient = Patient.objects.get(id=token)
         except Patient.DoesNotExist:
@@ -167,9 +189,8 @@ class PatientPublicView(APIView):
         allowed_statuses = [
             Patient.Status.NEW,
             Patient.Status.CONSENT_GIVEN,
-            Patient.Status.DEMOGRAPHICS_DONE,
         ]
-        allowed_fields = {'gender', 'birth_date', 'diagnosis', 'diagnosis_text'}
+        allowed_fields = {'status'}
 
         # Filter to only allowed fields
         filtered_data = {
@@ -249,9 +270,15 @@ class AudioUploadView(APIView):
         phase = 'POST_OP' if is_post_op else 'PRE_OP'
         phase_folder = 'post' if is_post_op else 'pre'
 
-        # Build storage key
+        # Find active session for this phase
+        session = services.get_active_session(patient, phase)
+
+        # Build storage key (include session number if session exists)
         extension = file.name.split('.')[-1] if '.' in file.name else 'wav'
-        key = f'{token}/{phase_folder}/{exercise_id}.{extension}'
+        if session:
+            key = f'{token}/{phase_folder}_{session.session_number}/{exercise_id}.{extension}'
+        else:
+            key = f'{token}/{phase_folder}/{exercise_id}.{extension}'
 
         # Upload to S3
         try:
@@ -268,6 +295,7 @@ class AudioUploadView(APIView):
         try:
             audio_file = AudioFile.objects.create(
                 patient=patient,
+                session=session,
                 exercise_id=exercise_id,
                 phase=phase,
                 storage_key=key,
