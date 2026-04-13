@@ -3,8 +3,14 @@ name: Deploy to Production
 on:
   push:
     branches:
-      - main
+      - main    # runs tests only
+      - deploy  # runs tests → deploys to production
   workflow_dispatch:
+    inputs:
+      environment:
+        description: "Deploy to production?"
+        required: true
+        default: "production"
 
 concurrency:
   group: production
@@ -65,6 +71,7 @@ jobs:
   deploy:
     name: Deploy to VPS
     needs: test
+    if: github.ref == 'refs/heads/deploy' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     environment: production       # ← protected env: requires manual approval
 
