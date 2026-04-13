@@ -33,7 +33,7 @@ export default function LandingScreen({
 
   return (
     <Card sx={{ maxWidth: 640, mx: 'auto' }}>
-      <CardHeader title="Willkommen zur TUM Stimmprobenerfassung" />
+      <CardHeader title="Willkommen zur RecurrSens Stimmprobenerfassung" />
       <CardContent>
         <Typography variant="body1" paragraph>
           Vielen Dank, dass Sie an unserer Studie zur Erfassung von Stimmproben teilnehmen.

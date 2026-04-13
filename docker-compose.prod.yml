@@ -6,9 +6,7 @@
 
 services:
   db:
-    # Remove external port exposure — internal only
     ports: !reset []
-    # Memory tuning for 1GB server
     command: >
       postgres
         -c shared_buffers=64MB
@@ -22,7 +20,6 @@ services:
           memory: 192M
 
   minio:
-    # Remove external port exposure — internal only
     ports: !reset []
     environment:
       MINIO_ROOT_USER: ${S3_ACCESS_KEY}
@@ -33,7 +30,6 @@ services:
           memory: 192M
 
   redis:
-    # Remove external port exposure — internal only
     ports: !reset []
     command: redis-server --maxmemory 32mb --maxmemory-policy allkeys-lru
     deploy:
@@ -42,9 +38,8 @@ services:
           memory: 48M
 
   backend:
-    image: ghcr.io/fyassine/stimmbandlaesion-backend:latest
+    image: ghcr.io/fyassine/recurrsens-backend:latest
     build: !reset null
-    # Single Gunicorn worker for RAM constraint
     command: >
       gunicorn config.wsgi:application
         --bind 0.0.0.0:8000
@@ -58,7 +53,7 @@ services:
           memory: 256M
 
   celery:
-    image: ghcr.io/fyassine/stimmbandlaesion-backend:latest
+    image: ghcr.io/fyassine/recurrsens-backend:latest
     build: !reset null
     command: celery -A config worker --loglevel=info --concurrency=1
     deploy:
@@ -67,7 +62,7 @@ services:
           memory: 192M
 
   celery-beat:
-    image: ghcr.io/fyassine/stimmbandlaesion-backend:latest
+    image: ghcr.io/fyassine/recurrsens-backend:latest
     build: !reset null
     deploy:
       resources:
@@ -75,9 +70,46 @@ services:
           memory: 96M
 
   nginx:
-    image: ghcr.io/fyassine/stimmbandlaesion-nginx:latest
+    image: ghcr.io/fyassine/recurrsens-nginx:latest
     build: !reset null
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - certbot_data:/etc/letsencrypt:ro
+      - certbot_webroot:/var/www/certbot:ro
     deploy:
       resources:
         limits:
           memory: 48M
+
+  # --- Dozzle: container log viewer ---
+  dozzle:
+    image: amir20/dozzle:latest
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./dozzle-users.yml:/data/users.yml:ro
+    environment:
+      DOZZLE_AUTH_PROVIDER: simple
+      DOZZLE_BASE: /logs
+    deploy:
+      resources:
+        limits:
+          memory: 32M
+
+  # --- Certbot: SSL certificate renewal ---
+  certbot:
+    image: certbot/certbot:latest
+    volumes:
+      - certbot_data:/etc/letsencrypt
+      - certbot_webroot:/var/www/certbot
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot --quiet; sleep 12h & wait $${!}; done'"
+    deploy:
+      resources:
+        limits:
+          memory: 32M
+
+volumes:
+  certbot_data:
+  certbot_webroot:

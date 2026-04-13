@@ -104,8 +104,17 @@ export default function AudioRecorder({
       recordingTimerRef.current = setInterval(() => {
         setRecordingDuration((Date.now() - recordingStartTimeRef.current) / 1000);
       }, 100);
-    } catch {
-      alert('Zugriff auf das Mikrofon fehlgeschlagen. Bitte erlauben Sie den Zugriff.');
+    } catch (err: any) {
+      if (!window.isSecureContext) {
+        alert('Mikrofon erfordert eine sichere Verbindung (HTTPS). '
+            + 'Bitte verwenden Sie https://recurrsens.eu');
+      } else if (err?.name === 'NotAllowedError') {
+        alert('Zugriff auf das Mikrofon wurde verweigert. '
+            + 'Bitte erlauben Sie den Zugriff in den Browser-Einstellungen.');
+      } else {
+        alert('Mikrofon konnte nicht gefunden werden. '
+            + 'Bitte stellen Sie sicher, dass ein Mikrofon angeschlossen ist.');
+      }
     }
   };
 

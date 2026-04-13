@@ -46,7 +46,7 @@ export default function LoginPage() {
       <Card sx={{ maxWidth: 400, width: '100%', mx: 2 }}>
         <CardContent sx={{ p: 4 }}>
           <Typography variant="h5" gutterBottom align="center">
-            Stimmbandläsion
+            RecurrSens
           </Typography>
           <Typography variant="body2" color="text.secondary" align="center" sx={{ mb: 3 }}>
             Admin-Anmeldung

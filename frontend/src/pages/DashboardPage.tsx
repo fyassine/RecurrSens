@@ -44,7 +44,7 @@ export default function DashboardPage() {
       <AppBar position="static" elevation={1}>
         <Toolbar>
           <Typography variant="h6" sx={{ flexGrow: 1 }}>
-            Stimmbandläsion — Dashboard
+            RecurrSens — Dashboard
           </Typography>
           <Button color="inherit" startIcon={<LogoutIcon />} onClick={handleLogout}>
             Abmelden
@@ -52,7 +52,7 @@ export default function DashboardPage() {
         </Toolbar>
       </AppBar>
 
-      <Box sx={{ px: 5, py: 3 }}>
+      <Box sx={{ px: { xs: 2, md: 3 }, py: 3 }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
           <Typography variant="h5" fontWeight={600}>
             Patienten

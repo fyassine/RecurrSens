@@ -9,7 +9,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    # Override production command with Django dev server
+    # OPTIMIZE: Override production command with Django dev server
     command: python manage.py runserver 0.0.0.0:8000
     environment:
       DJANGO_SETTINGS_MODULE: config.settings.development
@@ -27,7 +27,7 @@ services:
     volumes:
       - ./backend:/app
 
-  # In dev, nginx is not used — run frontend dev server directly:
+  # OPTIMIZE: In dev, nginx is not used — run frontend dev server directly:
   #   cd frontend && npm run dev
   nginx:
     profiles: [production]  # Disable in dev

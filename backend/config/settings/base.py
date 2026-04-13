@@ -145,6 +145,15 @@ CORS_ALLOWED_ORIGINS = config(
 CORS_ALLOW_CREDENTIALS = True
 
 # ==============================================================================
+# CSRF
+# ==============================================================================
+CSRF_TRUSTED_ORIGINS = config(
+    'CSRF_TRUSTED_ORIGINS',
+    default='http://localhost:5173,http://localhost:3000,http://localhost',
+    cast=Csv(),
+)
+
+# ==============================================================================
 # S3 / MinIO STORAGE
 # ==============================================================================
 S3_REGION = config('S3_REGION', default='us-east-1')
