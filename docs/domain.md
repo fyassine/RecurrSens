@@ -5,6 +5,7 @@
 - Domain: `recurrsens.eu` registered
 - Server IP: `212.227.176.203` (Strato VPS)
 - Docker + Docker Compose installed on server
+- Host certbot installed (`sudo apt install certbot`)
 
 ---
 
@@ -57,28 +58,18 @@ Before obtaining SSL certificates, nginx needs to serve the ACME challenge over 
 
 ---
 
-## Step 3: Obtain SSL Certificate
+## Step 3: Obtain SSL Certificate (host certbot)
 
-Run Certbot in standalone mode (or use the webroot method):
-
-```bash
-docker compose -f docker-compose.yml -f docker-compose.prod.yml run --rm certbot \
-  certbot certonly --webroot -w /var/www/certbot \
-  -d recurrsens.eu -d www.recurrsens.eu \
-  --email admin@recurrsens.eu \
-  --agree-tos --no-eff-email
-```
-
-If the webroot method fails (nginx not yet serving ACME), stop nginx temporarily and use standalone:
+Use certbot directly on the VPS (host-managed SSL):
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.prod.yml stop nginx
-docker run --rm -p 80:80 -v certbot_data:/etc/letsencrypt certbot/certbot \
-  certonly --standalone \
-  -d recurrsens.eu -d www.recurrsens.eu \
-  --email admin@recurrsens.eu \
-  --agree-tos --no-eff-email
+sudo certbot certonly --webroot -w /var/www/certbot \
+   -d recurrsens.eu -d www.recurrsens.eu \
+   --email admin@recurrsens.eu \
+   --agree-tos --no-eff-email
 ```
+
+If your existing renewal profile still references Apache from a prior `--apache` issuance, re-issue once with the webroot command above so future renewals are independent from Apache.
 
 ---
 
@@ -100,19 +91,18 @@ docker run --rm -p 80:80 -v certbot_data:/etc/letsencrypt certbot/certbot \
 
 ## Step 5: Certificate Renewal
 
-The `certbot` service in `docker-compose.prod.yml` automatically renews certificates every 12 hours (only acts when renewal is due, ~30 days before expiry).
+Renewal is handled by host certbot's systemd timer.
 
 To manually test renewal:
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.prod.yml run --rm certbot \
-  certbot renew --dry-run
+sudo certbot renew --dry-run
 ```
 
-After renewal, reload nginx to pick up new certs:
+After renewal, reload nginx in the running container so it picks up new cert files:
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.prod.yml exec nginx nginx -s reload
+docker compose -f docker-compose.yml -f docker-compose.prod.yml exec -T nginx nginx -s reload
 ```
 
 ---
