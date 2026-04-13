@@ -38,8 +38,6 @@ services:
           memory: 48M
 
   backend:
-    image: ghcr.io/fyassine/recurrsens-backend:latest
-    build: !reset null
     command: >
       gunicorn config.wsgi:application
         --bind 0.0.0.0:8000
@@ -53,8 +51,6 @@ services:
           memory: 256M
 
   celery:
-    image: ghcr.io/fyassine/recurrsens-backend:latest
-    build: !reset null
     command: celery -A config worker --loglevel=info --concurrency=1
     deploy:
       resources:
@@ -62,22 +58,17 @@ services:
           memory: 192M
 
   celery-beat:
-    image: ghcr.io/fyassine/recurrsens-backend:latest
-    build: !reset null
     deploy:
       resources:
         limits:
           memory: 96M
 
   nginx:
-    image: ghcr.io/fyassine/recurrsens-nginx:latest
-    build: !reset null
     ports:
       - "80:80"
       - "443:443"
     volumes:
-      - certbot_data:/etc/letsencrypt:ro
-      - certbot_webroot:/var/www/certbot:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
     deploy:
       resources:
         limits:
@@ -98,18 +89,4 @@ services:
         limits:
           memory: 32M
 
-  # --- Certbot: SSL certificate renewal ---
-  certbot:
-    image: certbot/certbot:latest
-    volumes:
-      - certbot_data:/etc/letsencrypt
-      - certbot_webroot:/var/www/certbot
-    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot --quiet; sleep 12h & wait $${!}; done'"
-    deploy:
-      resources:
-        limits:
-          memory: 32M
-
-volumes:
-  certbot_data:
-  certbot_webroot:
+# SSL renewal is handled by the host's certbot systemd timer (native Apache install).
