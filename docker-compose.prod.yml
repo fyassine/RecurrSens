@@ -38,6 +38,7 @@ services:
           memory: 48M
 
   backend:
+    image: ghcr.io/fyassine/recurrsens-backend:latest
     command: >
       gunicorn config.wsgi:application
         --bind 0.0.0.0:8000
@@ -51,6 +52,7 @@ services:
           memory: 256M
 
   celery:
+    image: ghcr.io/fyassine/recurrsens-backend:latest
     command: celery -A config worker --loglevel=info --concurrency=1
     deploy:
       resources:
@@ -58,12 +60,14 @@ services:
           memory: 192M
 
   celery-beat:
+    image: ghcr.io/fyassine/recurrsens-backend:latest
     deploy:
       resources:
         limits:
           memory: 96M
 
   nginx:
+    image: ghcr.io/fyassine/recurrsens-nginx:latest
     ports:
       - "80:80"
       - "443:443"

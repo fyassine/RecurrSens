@@ -62,15 +62,67 @@ jobs:
           APP_URL: http://localhost
         run: python manage.py test --verbosity=2
 
-  # ── 2. Deploy ───────────────────────────────────────────────────────────────
-  deploy:
-    name: Deploy to VPS
+  # ── 2. Build & push images ──────────────────────────────────────────────────
+  build:
+    name: Build & push images
     needs: test
     if: ${{ github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build & push backend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: true
+          platforms: linux/amd64
+          tags: ghcr.io/${{ github.repository_owner }}/recurrsens-backend:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build & push nginx
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./nginx/Dockerfile
+          push: true
+          platforms: linux/amd64
+          tags: ghcr.io/${{ github.repository_owner }}/recurrsens-nginx:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ── 3. Deploy ───────────────────────────────────────────────────────────────
+  deploy:
+    name: Deploy to VPS
+    needs: build
     runs-on: ubuntu-latest
     environment: production
 
     steps:
+      - uses: actions/checkout@v4
+
+      - name: Copy compose files to VPS
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: "docker-compose.yml,docker-compose.prod.yml"
+          target: ~/deploy
+
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.2.0
         with:
@@ -79,13 +131,17 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
             set -e
-            cd ~/RecurrSens
+            cd ~/deploy
 
-            echo "=== Pulling latest code ==="
-            git pull origin main
+            echo "=== Pulling latest images ==="
+            echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.repository_owner }} --password-stdin
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml pull
 
-            echo "=== Rebuilding and restarting containers ==="
-            docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+            echo "=== Restarting containers ==="
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+
+            echo "=== Pruning old images ==="
+            docker image prune -f
 
             echo "=== Verifying health ==="
             sleep 10
