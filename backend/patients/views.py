@@ -500,12 +500,34 @@ class ExerciseListView(generics.ListAPIView):
 # =============================================================================
 
 class ExportView(APIView):
-    """Export completed patient data as a ZIP file."""
+    """Export patient data as a ZIP file.
+
+    Query params:
+        ids: Optional comma-separated list of patient UUIDs to export.
+             When omitted, exports all completed patients.
+    """
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        import uuid as _uuid
+
+        ids_param = request.query_params.get('ids', '').strip()
+        patient_ids = None
+
+        if ids_param:
+            patient_ids = []
+            for raw in ids_param.split(','):
+                raw = raw.strip()
+                try:
+                    patient_ids.append(str(_uuid.UUID(raw)))
+                except ValueError:
+                    return Response(
+                        {'error': f'Ungültige Patienten-ID: {raw}'},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
         try:
-            zip_bytes = services.export_patients_zip()
+            zip_bytes = services.export_patients_zip(patient_ids=patient_ids)
             today = datetime.now().strftime('%Y-%m-%d')
             response = HttpResponse(zip_bytes, content_type='application/zip')
             response['Content-Disposition'] = (

@@ -9,7 +9,7 @@ import {
 import LogoutIcon from '@mui/icons-material/Logout';
 import DownloadIcon from '@mui/icons-material/Download';
 import { useNavigate } from 'react-router-dom';
-import { getPatients, clearTokens, getExportUrl } from '../api/client';
+import { getPatients, clearTokens, exportPatients } from '../api/client';
 import type { Patient } from '../types';
 import PatientList from '../components/PatientList';
 import CreatePatientDialog from '../components/CreatePatientDialog';
@@ -18,6 +18,19 @@ export default function DashboardPage() {
   const navigate = useNavigate();
   const [patients, setPatients] = useState<Patient[]>([]);
   const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const ids = selectedIds.size > 0 ? [...selectedIds] : undefined;
+      await exportPatients(ids);
+      if (selectedIds.size > 0) setSelectedIds(new Set());
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const fetchPatients = useCallback(async () => {
     try {
@@ -61,17 +74,26 @@ export default function DashboardPage() {
             <Button
               variant="outlined"
               startIcon={<DownloadIcon />}
-              component="a"
-              href={getExportUrl()}
-              target="_blank"
+              onClick={handleExport}
+              disabled={exporting}
             >
-              Daten exportieren
+              {exporting
+                ? 'Exportiere…'
+                : selectedIds.size > 0
+                  ? `Auswahl exportieren (${selectedIds.size})`
+                  : 'Alle exportieren'}
             </Button>
             <CreatePatientDialog onCreated={fetchPatients} />
           </Box>
         </Box>
 
-        <PatientList patients={patients} loading={loading} onRefresh={fetchPatients} />
+        <PatientList
+          patients={patients}
+          loading={loading}
+          onRefresh={fetchPatients}
+          selectedIds={selectedIds}
+          onSelectionChange={setSelectedIds}
+        />
       </Box>
     </Box>
   );

@@ -381,13 +381,17 @@ def _format_date(dt) -> str:
     return ''
 
 
-def export_patients_zip() -> bytes:
+def export_patients_zip(patient_ids: list | None = None) -> bytes:
     """
-    Export all completed patients as a ZIP containing:
+    Export patients as a ZIP containing:
     - export.csv: Tabular data (one row per recording session)
     - data/: Audio files organized by patient token, phase, and session
 
-    Excludes soft-deleted patients.
+    Args:
+        patient_ids: Optional list of UUID strings. When provided, exports those
+                     specific patients (any status, non-deleted). When None,
+                     exports all completed non-deleted patients.
+
     Returns ZIP file as bytes.
     """
     zip_buffer = io.BytesIO()
@@ -401,10 +405,16 @@ def export_patients_zip() -> bytes:
             'SprecherID',
         ])
 
-        completed = Patient.objects.filter(
-            status=Patient.Status.COMPLETED,
-            deleted_at__isnull=True,
-        ).prefetch_related('audio_files', 'sessions')
+        if patient_ids is not None:
+            completed = Patient.objects.filter(
+                id__in=patient_ids,
+                deleted_at__isnull=True,
+            ).prefetch_related('audio_files', 'sessions')
+        else:
+            completed = Patient.objects.filter(
+                status=Patient.Status.COMPLETED,
+                deleted_at__isnull=True,
+            ).prefetch_related('audio_files', 'sessions')
 
         for patient in completed:
             for session in patient.sessions.all():

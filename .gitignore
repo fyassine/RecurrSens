@@ -57,3 +57,6 @@ htmlcov/
 
 # LLM Conversations
 docs/conversation
+
+# tmp files
+__artifacts__/
