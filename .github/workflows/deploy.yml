@@ -138,14 +138,14 @@ jobs:
 
             echo "=== Pulling latest images ==="
             echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.repository_owner }} --password-stdin
-            docker compose -f docker-compose.yml -f docker-compose.prod.yml pull
+            docker compose -p recurrsens -f docker-compose.yml -f docker-compose.prod.yml pull
 
             echo "=== Restarting containers ==="
-            docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+            docker compose -p recurrsens -f docker-compose.yml -f docker-compose.prod.yml up -d
 
             echo "=== Pruning old images ==="
             docker image prune -f
 
             echo "=== Verifying health ==="
             sleep 10
-            docker compose -f docker-compose.yml -f docker-compose.prod.yml ps --format "table {{.Name}}\t{{.Status}}"
+            docker compose -p recurrsens -f docker-compose.yml -f docker-compose.prod.yml ps --format "table {{.Name}}\t{{.Status}}"
