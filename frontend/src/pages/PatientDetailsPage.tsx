@@ -11,13 +11,17 @@ import {
   CircularProgress,
   Grid,
   IconButton,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableRow,
   TextField,
   Typography,
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import EditIcon from '@mui/icons-material/Edit';
 import PersonIcon from '@mui/icons-material/Person';
-import PsychologyIcon from '@mui/icons-material/Psychology';
 import AudioFileIcon from '@mui/icons-material/AudioFile';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
@@ -31,7 +35,7 @@ import {
   getExercises,
   advancePublicPatient,
 } from '../api/client';
-import { StatusBadge, PredictionBadge } from '../components/Badges';
+import { StatusBadge } from '../components/Badges';
 import ConfirmDialog from '../components/ConfirmDialog';
 import type { Exercise } from '../types';
 
@@ -75,48 +79,40 @@ export default function PatientDetailsPage() {
   }
 
   return (
-    <Box sx={{ minHeight: '100vh', bgcolor: 'background.default', p: { xs: 2, md: 4 } }}>
-      <Box sx={{ maxWidth: 1400, mx: 'auto' }}>
-        <Button
-          startIcon={<ArrowBackIcon />}
-          onClick={() => navigate('/')}
-          sx={{ mb: 3 }}
-        >
-          Zurück zur Übersicht
-        </Button>
+    <Box sx={{ minHeight: '100vh', bgcolor: 'background.default', px: { xs: 2, md: 3 }, py: 3 }}>
+      <Button
+        startIcon={<ArrowBackIcon />}
+        onClick={() => navigate('/')}
+        sx={{ mb: 3 }}
+      >
+        Zurück zur Übersicht
+      </Button>
 
-        <Grid container spacing={3}>
-          {/* Left column */}
-          <Grid size={{ xs: 12, lg: 4 }}>
-            <PatientInfoCard patient={patient} onUpdated={fetchPatient} />
-            <DiagnosisCard patient={patient} />
-          </Grid>
-
-          {/* Right column */}
-          <Grid size={{ xs: 12, lg: 8 }}>
-            <AudioSection
-              title="Prä-OP Aufnahmen"
-              audioFiles={patient.audio_files_pre}
-              phase="PRE_OP"
-              date={patient.pre_op_date}
-              patientId={patient.id}
-              patientStatus={patient.status}
-              showUpload={patient.status === 'CONSENT_GIVEN'}
-              onUploaded={fetchPatient}
-            />
-            <AudioSection
-              title="Post-OP Aufnahmen"
-              audioFiles={patient.audio_files_post}
-              phase="POST_OP"
-              date={patient.post_op_date}
-              patientId={patient.id}
-              patientStatus={patient.status}
-              showUpload={patient.status === 'PRE_OP_DONE' || patient.status === 'POST_OP_STARTED'}
-              onUploaded={fetchPatient}
-            />
-          </Grid>
+      <Grid container spacing={3} justifyContent="center">
+        <Grid size={{ xs: 12, lg: 8 }}>
+          <PatientInfoCard patient={patient} onUpdated={fetchPatient} />
+          <AudioSection
+            title="Prä-OP Aufnahmen"
+            audioFiles={patient.audio_files_pre}
+            phase="PRE_OP"
+            date={patient.pre_op_date}
+            patientId={patient.id}
+            patientStatus={patient.status}
+            showUpload={patient.status === 'CONSENT_GIVEN'}
+            onUploaded={fetchPatient}
+          />
+          <AudioSection
+            title="Post-OP Aufnahmen"
+            audioFiles={patient.audio_files_post}
+            phase="POST_OP"
+            date={patient.post_op_date}
+            patientId={patient.id}
+            patientStatus={patient.status}
+            showUpload
+            onUploaded={fetchPatient}
+          />
         </Grid>
-      </Box>
+      </Grid>
     </Box>
   );
 }
@@ -225,62 +221,6 @@ function PatientInfoCard({
             />
           </Box>
         )}
-      </CardContent>
-    </Card>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Diagnosis & AI card
-// ---------------------------------------------------------------------------
-
-function DiagnosisCard({
-  patient,
-}: {
-  patient: PatientDetail;
-}) {
-  return (
-    <Card sx={{ mb: 3 }}>
-      <CardHeader avatar={<PsychologyIcon color="primary" />} title="KI-Ergebnisse" />
-      <CardContent sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-        <Grid container spacing={2}>
-          <Grid size={{ xs: 12, xl: 6 }}>
-            <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: 1 }}>
-              KI (Prä-OP)
-            </Typography>
-            <Box sx={{ mt: 1 }}>
-              <PredictionBadge
-                value={patient.prediction_pre}
-                percentage={patient.ai_percentage_rp_pre}
-                gradcamPrediction={patient.gradcam_prediction_pre}
-                gradcamPercentage={patient.gradcam_percentage_pre}
-              />
-            </Box>
-            {patient.ai_reasoning_pre && (
-              <Typography variant="body2" sx={{ mt: 1, p: 1, bgcolor: 'grey.50', borderRadius: 1 }}>
-                {patient.ai_reasoning_pre}
-              </Typography>
-            )}
-          </Grid>
-          <Grid size={{ xs: 12, xl: 6 }}>
-            <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: 1 }}>
-              KI (Post-OP)
-            </Typography>
-            <Box sx={{ mt: 1 }}>
-              <PredictionBadge
-                value={patient.prediction_post}
-                percentage={patient.ai_percentage_rp_post}
-                gradcamPrediction={patient.gradcam_prediction_post}
-                gradcamPercentage={patient.gradcam_percentage_post}
-              />
-            </Box>
-            {patient.ai_reasoning_post && (
-              <Typography variant="body2" sx={{ mt: 1, p: 1, bgcolor: 'grey.50', borderRadius: 1 }}>
-                {patient.ai_reasoning_post}
-              </Typography>
-            )}
-          </Grid>
-        </Grid>
       </CardContent>
     </Card>
   );
@@ -428,27 +368,43 @@ function ManualUpload({
       </Button>
       <Dialog open={open} onClose={() => setOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle>Dateien hochladen ({phase === 'PRE_OP' ? 'Prä-OP' : 'Post-OP'})</DialogTitle>
-        <DialogContent>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Laden Sie für jede Übung eine Audiodatei hoch.
-          </Typography>
-          {exercises.map((ex) => (
-            <Box key={ex.exercise_id} sx={{ mb: 2 }}>
-              <Typography variant="subtitle2">{ex.title}</Typography>
-              <input
-                type="file"
-                accept="audio/*"
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (f) setFiles((prev) => ({ ...prev, [ex.exercise_id]: f }));
-                }}
-              />
-              <Typography variant="caption" color="text.secondary">
-                {ex.description}
-              </Typography>
-            </Box>
-          ))}
-          {error && <Alert severity="error" sx={{ mt: 1 }}>{error}</Alert>}
+        <DialogContent sx={{ p: 0 }}>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Übung</TableCell>
+                <TableCell align="right">Datei</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {exercises.map((ex) => (
+                <TableRow key={ex.exercise_id}>
+                  <TableCell>{ex.title}</TableCell>
+                  <TableCell align="right">
+                    <Button
+                      component="label"
+                      size="small"
+                      variant={files[ex.exercise_id] ? 'contained' : 'outlined'}
+                      color={files[ex.exercise_id] ? 'success' : 'primary'}
+                      startIcon={<UploadFileIcon />}
+                    >
+                      {files[ex.exercise_id] ? files[ex.exercise_id].name : 'Auswählen'}
+                      <input
+                        type="file"
+                        accept="audio/*"
+                        hidden
+                        onChange={(e) => {
+                          const f = e.target.files?.[0];
+                          if (f) setFiles((prev) => ({ ...prev, [ex.exercise_id]: f }));
+                        }}
+                      />
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+          {error && <Alert severity="error" sx={{ m: 2 }}>{error}</Alert>}
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setOpen(false)} disabled={uploading}>Abbrechen</Button>
