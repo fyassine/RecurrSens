@@ -185,6 +185,14 @@ export async function getExercises(): Promise<Exercise[]> {
 // Export
 // ---------------------------------------------------------------------------
 
-export function getExportUrl(): string {
-  return `/api/export/`;
+export async function exportPatients(ids?: string[]): Promise<void> {
+  const today = new Date().toISOString().slice(0, 10);
+  const params = ids && ids.length > 0 ? { ids: ids.join(',') } : {};
+  const { data } = await api.get('/export/', { responseType: 'blob', params });
+  const url = URL.createObjectURL(data);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `patienten_export_${today}.zip`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }

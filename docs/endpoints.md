@@ -1,84 +1,34 @@
-# Service Endpoints
+# Endpoint Access Map
 
-Quick reference for every service in the stack — browser URLs in dev and prod, plus internal-only services that have no public UI.
+This document shows where each service can be accessed in development and production.
 
-**Sources:** `docker-compose.yml`, `docker-compose.dev.yml`, `docker-compose.prod.yml`, `nginx/default.conf`, `backend/config/urls.py`, `backend/patients/urls.py`
+## Source of Truth
 
----
+- [docker-compose.yml](../docker-compose.yml)
+- [docker-compose.dev.yml](../docker-compose.dev.yml)
+- [docker-compose.prod.yml](../docker-compose.prod.yml)
+- [nginx/default.conf](../nginx/default.conf)
+- [backend/config/urls.py](../backend/config/urls.py)
+- [backend/patients/urls.py](../backend/patients/urls.py)
+- [docs/architecture.md](architecture.md)
+- [docs/server.md](server.md)
 
-## Browser-Accessible Services
+## Service Access in Browser
 
 | Service | Dev URL | Prod URL | Notes |
 |---|---|---|---|
-| Frontend (React SPA) | http://localhost:5173 | https://recurrsens.eu/ | Vite dev server in dev; nginx serves the built SPA in prod (`/usr/share/nginx/html`). |
-| Backend API (Django/DRF) | http://localhost:8000/api/ | https://recurrsens.eu/api/ | Direct port in dev; nginx proxies `/api/` → `backend:8000` in prod. |
-| Django Admin | http://localhost:8000/admin/ | https://recurrsens.eu/admin/ | Direct port in dev; nginx proxies `/admin/` → `backend:8000` in prod. |
-| Dozzle (container logs) | Not enabled in dev | https://recurrsens.eu/logs/ | Only in `docker-compose.prod.yml`; nginx proxies `/logs/` → `dozzle:8080`. |
-| MinIO Console (UI) | http://localhost:9001 | SSH tunnel → http://localhost:9001 | Prod: bound to `127.0.0.1:9001` only in `docker-compose.prod.yml`. Access via SSH tunnel: `ssh -L 9001:localhost:9001 -i ~/.ssh/id_ed25519 flakhal@212.227.176.203`, then open http://localhost:9001. |
-| MinIO S3 API | http://localhost:9000 | SSH tunnel → http://localhost:9000 | Prod: bound to `127.0.0.1:9000` only in `docker-compose.prod.yml`. Same SSH tunnel: add `-L 9000:localhost:9000` to the command above. |
+| Frontend (React) | http://localhost:5173 | https://recurrsens.eu/ | Vite dev server in dev, nginx-served SPA in prod. See [frontend/vite.config.ts](../frontend/vite.config.ts) and [nginx/default.conf](../nginx/default.conf). |
+| Backend API (Django/DRF) | http://localhost:8000/api/ and via frontend /api proxy | https://recurrsens.eu/api/ | Proxy rules in [nginx/default.conf](../nginx/default.conf). Dev port mapping in [docker-compose.dev.yml](../docker-compose.dev.yml). |
+| Django Admin | http://localhost:8000/admin/ | https://recurrsens.eu/admin/ | Route in [backend/config/urls.py](../backend/config/urls.py), proxy in [nginx/default.conf](../nginx/default.conf). |
+| Dozzle (container logs) | Not enabled in dev override | https://recurrsens.eu/logs/ | Service in [docker-compose.prod.yml](../docker-compose.prod.yml), routed in [nginx/default.conf](../nginx/default.conf). |
+| MinIO Console | http://localhost:9001 | Not exposed externally in prod | Base ports in [docker-compose.yml](../docker-compose.yml), removed in prod by [docker-compose.prod.yml](../docker-compose.prod.yml). |
+| MinIO S3 API | http://localhost:9000 | Not exposed externally in prod | API endpoint, not a typical UI. Same port rules as above. |
+| PostgreSQL | No browser UI | No browser UI | TCP only. Base mapping in [docker-compose.yml](../docker-compose.yml), removed in prod by [docker-compose.prod.yml](../docker-compose.prod.yml). |
+| Redis | No browser UI | No browser UI | TCP only. Base mapping in [docker-compose.yml](../docker-compose.yml), removed in prod by [docker-compose.prod.yml](../docker-compose.prod.yml). |
+| Celery worker | No HTTP endpoint | No HTTP endpoint | Background worker only. See [docker-compose.yml](../docker-compose.yml). |
+| Celery beat | No HTTP endpoint | No HTTP endpoint | Scheduler only. See [docker-compose.yml](../docker-compose.yml). |
 
----
+## Notes
 
-## Internal-Only Services (no browser UI)
-
-| Service | Internal address | Notes |
-|---|---|---|
-| PostgreSQL | `db:5432` | TCP only. Port exposed to host in dev; removed in prod override. |
-| Redis | `redis:6379` | TCP only. Port exposed to host in dev; removed in prod override. |
-| Celery worker | — | Background task worker; no HTTP interface. |
-| Celery beat | — | Scheduler; no HTTP interface. |
-
----
-
-## API Endpoint Reference
-
-All routes are relative to the API base (`/api/`).
-
-### Authentication
-
-| Method | Path | Auth | Description |
-|---|---|---|---|
-| `POST` | `/api/auth/token/` | None | Obtain JWT access + refresh tokens |
-| `POST` | `/api/auth/token/refresh/` | None | Refresh JWT access token |
-
-### Admin (JWT required)
-
-| Method | Path | Auth | Description |
-|---|---|---|---|
-| `GET` | `/api/patients/` | JWT | List all patients |
-| `POST` | `/api/patients/` | JWT | Create patient |
-| `GET` | `/api/patients/{id}/` | JWT | Retrieve patient |
-| `PUT/PATCH` | `/api/patients/{id}/` | JWT | Update patient |
-| `DELETE` | `/api/patients/{id}/` | JWT | Delete patient |
-| `GET` | `/api/export/` | JWT | Export data |
-
-### Patient-Facing (UUID token)
-
-| Method | Path | Auth | Description |
-|---|---|---|---|
-| `GET` | `/api/p/{token}/` | UUID token | Patient public view |
-| `POST` | `/api/p/{token}/advance/` | UUID token | Advance patient session step |
-| `POST` | `/api/p/{token}/audio/upload/` | UUID token | Direct audio upload |
-| `POST` | `/api/p/{token}/audio/presign/` | UUID token | Get presigned upload URL (MinIO) |
-| `POST` | `/api/p/{token}/audio/confirm/` | UUID token | Confirm presigned upload complete |
-
-### Public
-
-| Method | Path | Auth | Description |
-|---|---|---|---|
-| `GET` | `/api/exercises/` | None | List available exercises |
-| `GET` | `/api/audio/{file_id}/` | None | Stream audio file |
-| `GET` | `/api/audio/{file_id}/url/` | None | Get audio download URL |
-
----
-
-## Nginx Routing Summary (prod)
-
-```
-https://recurrsens.eu/          → nginx serves React SPA (static files)
-https://recurrsens.eu/api/      → proxy → backend:8000
-https://recurrsens.eu/admin/    → proxy → backend:8000
-https://recurrsens.eu/static/   → alias /app/staticfiles/ (Django admin assets)
-https://recurrsens.eu/logs/     → proxy → dozzle:8080/logs/
-http://recurrsens.eu/           → 301 redirect → https://recurrsens.eu/
-```
+- In production, PostgreSQL, Redis, and MinIO are internal-only services by design. See [docs/server.md](server.md).
+- If you add Swagger/ReDoc later, include those URLs in this table as additional rows.

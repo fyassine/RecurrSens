@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Box,
   Button,
+  Checkbox,
   IconButton,
   MenuItem,
   Paper,
@@ -36,10 +37,14 @@ export default function PatientList({
   patients,
   loading,
   onRefresh,
+  selectedIds,
+  onSelectionChange,
 }: {
   patients: Patient[];
   loading: boolean;
   onRefresh: () => void;
+  selectedIds: Set<string>;
+  onSelectionChange: (ids: Set<string>) => void;
 }) {
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
@@ -84,6 +89,29 @@ export default function PatientList({
       setOrderBy(key);
       setOrder('asc');
     }
+  };
+
+  const visibleIds = sorted.map((p) => p.id);
+  const allVisibleSelected =
+    visibleIds.length > 0 && visibleIds.every((id) => selectedIds.has(id));
+  const someVisibleSelected =
+    !allVisibleSelected && visibleIds.some((id) => selectedIds.has(id));
+
+  const handleToggleAll = () => {
+    const next = new Set(selectedIds);
+    if (allVisibleSelected) {
+      visibleIds.forEach((id) => next.delete(id));
+    } else {
+      visibleIds.forEach((id) => next.add(id));
+    }
+    onSelectionChange(next);
+  };
+
+  const handleToggleRow = (id: string) => {
+    const next = new Set(selectedIds);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    onSelectionChange(next);
   };
 
   const handleDelete = async () => {
@@ -166,6 +194,15 @@ export default function PatientList({
         <Table size="small">
           <TableHead>
             <TableRow>
+              <TableCell padding="checkbox">
+                <Checkbox
+                  size="small"
+                  checked={allVisibleSelected}
+                  indeterminate={someVisibleSelected}
+                  onChange={handleToggleAll}
+                  inputProps={{ 'aria-label': 'Alle sichtbaren Patienten auswählen' }}
+                />
+              </TableCell>
               <SortCell label="Patienten-ID" field="patient_id" orderBy={orderBy} order={order} onSort={handleSort} />
               <SortCell label="Erstellt am" field="created_at" orderBy={orderBy} order={order} onSort={handleSort} />
               <SortCell label="Status" field="status" orderBy={orderBy} order={order} onSort={handleSort} />
@@ -175,7 +212,15 @@ export default function PatientList({
           </TableHead>
           <TableBody>
             {sorted.map((p) => (
-              <TableRow key={p.id} hover>
+              <TableRow key={p.id} hover selected={selectedIds.has(p.id)}>
+                <TableCell padding="checkbox">
+                  <Checkbox
+                    size="small"
+                    checked={selectedIds.has(p.id)}
+                    onChange={() => handleToggleRow(p.id)}
+                    inputProps={{ 'aria-label': `Patient ${p.patient_id} auswählen` }}
+                  />
+                </TableCell>
                 <TableCell sx={{ fontWeight: 500 }}>{p.patient_id}</TableCell>
                 <TableCell>
                   {new Date(p.created_at).toLocaleDateString('de-DE')}
