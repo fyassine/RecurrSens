@@ -23,8 +23,8 @@ import SearchIcon from '@mui/icons-material/Search';
 import DeleteIcon from '@mui/icons-material/Delete';
 import LockOpenIcon from '@mui/icons-material/LockOpen';
 import VisibilityIcon from '@mui/icons-material/Visibility';
-import type { Patient, PatientStatus, PredictionStatus } from '../types';
-import { StatusBadge, PredictionBadge } from './Badges';
+import type { Patient, PatientStatus } from '../types';
+import { StatusBadge } from './Badges';
 import { deletePatient, advancePatient } from '../api/client';
 import PatientAccessDialog from './PatientAccessDialog';
 import ConfirmDialog from './ConfirmDialog';
@@ -140,7 +140,7 @@ export default function PatientList({
           <MenuItem value="POST_OP_STARTED">Post-OP gestartet</MenuItem>
           <MenuItem value="POST_OP_DONE">Post-OP fertig</MenuItem>
           <MenuItem value="COMPLETED">Abgeschlossen</MenuItem>
-          <MenuItem value="EXPIRED">Abgelaufen</MenuItem>
+          <MenuItem value="EXPIRED">Löschung ausstehend</MenuItem>
         </TextField>
         <TextField
           select
@@ -167,18 +167,19 @@ export default function PatientList({
           <TableHead>
             <TableRow>
               <SortCell label="Patienten-ID" field="patient_id" orderBy={orderBy} order={order} onSort={handleSort} />
-              <SortCell label="Status" field="status" orderBy={orderBy} order={order} onSort={handleSort} />
-              <SortCell label="KI (Prä)" field="prediction_pre" orderBy={orderBy} order={order} onSort={handleSort} />
-              <SortCell label="KI (Post)" field="prediction_post" orderBy={orderBy} order={order} onSort={handleSort} />
-              <SortCell label="Ablaufdatum" field="expires_at" orderBy={orderBy} order={order} onSort={handleSort} />
               <SortCell label="Erstellt am" field="created_at" orderBy={orderBy} order={order} onSort={handleSort} />
-              <TableCell align="right">Aktionen</TableCell>
+              <SortCell label="Status" field="status" orderBy={orderBy} order={order} onSort={handleSort} />
+              <SortCell label="Löschdatum" field="expires_at" orderBy={orderBy} order={order} onSort={handleSort} />
+              <TableCell align="center">Verwaltung</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {sorted.map((p) => (
               <TableRow key={p.id} hover>
                 <TableCell sx={{ fontWeight: 500 }}>{p.patient_id}</TableCell>
+                <TableCell>
+                  {new Date(p.created_at).toLocaleDateString('de-DE')}
+                </TableCell>
                 <TableCell>
                   {p.status === 'PRE_OP_DONE' ? (
                     <Button
@@ -197,20 +198,16 @@ export default function PatientList({
                     <StatusBadge status={p.status as PatientStatus} />
                   )}
                 </TableCell>
-                <TableCell>
-                  <PredictionBadge value={p.prediction_pre as PredictionStatus} />
-                </TableCell>
-                <TableCell>
-                  <PredictionBadge value={p.prediction_post as PredictionStatus} />
-                </TableCell>
-                <TableCell sx={{ color: p.status === 'EXPIRED' ? 'error.main' : new Date(p.expires_at) <= new Date(Date.now() + 86400000) ? 'warning.main' : 'text.primary', fontWeight: p.status === 'EXPIRED' ? 600 : 400 }}>
+                <TableCell
+                  sx={{
+                    color: p.status === 'EXPIRED' ? 'error.main' : new Date(p.expires_at) <= new Date(Date.now() + 86400000) ? 'warning.main' : 'text.primary',
+                    fontWeight: p.status === 'EXPIRED' ? 600 : 400,
+                  }}
+                >
                   {new Date(p.expires_at).toLocaleDateString('de-DE')}
                 </TableCell>
-                <TableCell>
-                  {new Date(p.created_at).toLocaleDateString('de-DE')}
-                </TableCell>
-                <TableCell align="right">
-                  <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 0.5 }}>
+                <TableCell align="center">
+                  <Box sx={{ display: 'flex', justifyContent: 'center', gap: 0.5 }}>
                     <Tooltip title="Details anzeigen">
                       <IconButton size="small" onClick={() => navigate(`/details/${p.id}`)}>
                         <VisibilityIcon fontSize="small" />
@@ -234,7 +231,7 @@ export default function PatientList({
             ))}
             {sorted.length === 0 && (
               <TableRow>
-                <TableCell colSpan={7} align="center" sx={{ py: 6, color: 'text.secondary' }}>
+                <TableCell colSpan={5} align="center" sx={{ py: 6, color: 'text.secondary' }}>
                   Keine Patienten gefunden.
                 </TableCell>
               </TableRow>

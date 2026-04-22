@@ -4,6 +4,7 @@ import { calculateRMS } from '../utils';
 import type { Exercise } from '../types';
 
 const THRESHOLDS = { MIN_DBFS: -30, MAX_DBFS: -6 };
+const LOW_QUALITY_MESSAGE = 'Die Aufnahme ist zu leise. Bitte sprechen Sie lauter oder näher am Mikrofon.';
 
 export function useExerciseSession(token: string, onComplete: () => void) {
   const [exercises, setExercises] = useState<Exercise[]>([]);
@@ -21,19 +22,30 @@ export function useExerciseSession(token: string, onComplete: () => void) {
   }, []);
 
   const handleRecordingComplete = async (blob: Blob) => {
+    if (blob.size === 0) {
+      setCurrentBlob(null);
+      setAudioQualityError(LOW_QUALITY_MESSAGE);
+      return;
+    }
+
     setCurrentBlob(blob);
     setAudioQualityError(null);
 
     try {
       const dbfs = await calculateRMS(blob);
       if (dbfs < THRESHOLDS.MIN_DBFS) {
-        setAudioQualityError('Die Aufnahme ist zu leise. Bitte sprechen Sie lauter oder näher am Mikrofon.');
+        setAudioQualityError(LOW_QUALITY_MESSAGE);
       } else if (dbfs > THRESHOLDS.MAX_DBFS) {
         setAudioQualityError('Die Aufnahme ist zu laut und übersteuert. Bitte etwas mehr Abstand zum Mikrofon.');
       }
     } catch {
-      // Analysis failed — allow upload anyway
+      setAudioQualityError(LOW_QUALITY_MESSAGE);
     }
+  };
+
+  const handleRecordingError = (message: string) => {
+    setCurrentBlob(null);
+    setAudioQualityError(message);
   };
 
   const handleRecordingReset = () => {
@@ -69,6 +81,7 @@ export function useExerciseSession(token: string, onComplete: () => void) {
     currentBlob,
     audioQualityError,
     handleRecordingComplete,
+    handleRecordingError,
     handleRecordingReset,
     handleNext,
     isLoading,

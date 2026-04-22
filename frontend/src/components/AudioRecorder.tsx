@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { Box, IconButton, Typography, Button, LinearProgress } from '@mui/material';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import StopIcon from '@mui/icons-material/Stop';
@@ -11,16 +11,19 @@ interface AudioRecorderProps {
   exampleAudioUrl?: string;
   onRecordingComplete: (blob: Blob) => void;
   onRecordingReset?: () => void;
+  onRecordingError?: (message: string) => void;
 }
 
 export default function AudioRecorder({
   exampleAudioUrl,
   onRecordingComplete,
   onRecordingReset,
+  onRecordingError,
 }: AudioRecorderProps) {
   const [isRecording, setIsRecording] = useState(false);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
   const [recordingDuration, setRecordingDuration] = useState(0);
 
   // Playback
@@ -33,6 +36,7 @@ export default function AudioRecorder({
   const mimeTypeRef = useRef<string>('');
   const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const recordingStartTimeRef = useRef<number>(0);
+  const isStartingRef = useRef(false);
   const playbackAudioRef = useRef<HTMLAudioElement | null>(null);
   const playbackAnimRef = useRef<number | null>(null);
 
@@ -40,13 +44,26 @@ export default function AudioRecorder({
   const [examplePlaying, setExamplePlaying] = useState(false);
   const exampleRef = useRef<HTMLAudioElement | null>(null);
 
+  const cleanupRecording = useCallback((mediaStream?: MediaStream | null) => {
+    if (recordingTimerRef.current) {
+      clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = null;
+    }
+    (mediaStream ?? streamRef.current)?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+    mediaRecorderRef.current = null;
+    isStartingRef.current = false;
+    setIsRecording(false);
+    setStream(null);
+  }, []); // no deps — uses refs only
+
   useEffect(() => {
     return () => {
-      if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+      cleanupRecording();
       if (playbackAudioRef.current) playbackAudioRef.current.pause();
       if (playbackAnimRef.current) cancelAnimationFrame(playbackAnimRef.current);
     };
-  }, []);
+  }, []); // stable: cleanupRecording never changes
 
   // ---- Example playback ----
   const playExample = () => {
@@ -62,8 +79,12 @@ export default function AudioRecorder({
 
   // ---- Recording ----
   const startRecording = async () => {
+    if (isRecording || isStartingRef.current) return;
+    isStartingRef.current = true;
+
     try {
       const mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = mediaStream;
       setStream(mediaStream);
 
       let mimeType = '';
@@ -83,19 +104,37 @@ export default function AudioRecorder({
         if (e.data.size > 0) chunksRef.current.push(e.data);
       };
 
+      mediaRecorder.onerror = () => {
+        cleanupRecording(mediaStream);
+        onRecordingError?.('Mikrofonfehler während der Aufnahme. Bitte prüfen Sie das Mikrofon und versuchen Sie es erneut.');
+      };
+
       mediaRecorder.onstop = () => {
-        const type = mimeTypeRef.current || mediaRecorder.mimeType || 'audio/webm';
-        const blob = new Blob(chunksRef.current, { type });
-        setAudioBlob(blob);
-        onRecordingComplete(blob);
         const duration = (Date.now() - recordingStartTimeRef.current) / 1000;
         setRecordingDuration(duration);
-        mediaStream.getTracks().forEach((t) => t.stop());
-        setStream(null);
-        if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+
+        if (chunksRef.current.length === 0) {
+          cleanupRecording(mediaStream);
+          onRecordingError?.('Die Aufnahme ist zu leise. Bitte sprechen Sie lauter oder näher am Mikrofon.');
+          return;
+        }
+
+        const type = mimeTypeRef.current || mediaRecorder.mimeType || 'audio/webm';
+        const blob = new Blob(chunksRef.current, { type });
+
+        if (blob.size === 0) {
+          cleanupRecording(mediaStream);
+          onRecordingError?.('Die Aufnahme ist zu leise. Bitte sprechen Sie lauter oder näher am Mikrofon.');
+          return;
+        }
+
+        setAudioBlob(blob);
+        onRecordingComplete(blob);
+        cleanupRecording(mediaStream);
       };
 
       mediaRecorder.start();
+      isStartingRef.current = false;
       setIsRecording(true);
       setAudioBlob(null);
       setRecordingDuration(0);
@@ -105,25 +144,42 @@ export default function AudioRecorder({
         setRecordingDuration((Date.now() - recordingStartTimeRef.current) / 1000);
       }, 100);
     } catch (err: any) {
+      isStartingRef.current = false;
+      cleanupRecording();
+
+      let message = 'Mikrofon konnte nicht gefunden werden. Bitte stellen Sie sicher, dass ein Mikrofon angeschlossen ist.';
       if (!window.isSecureContext) {
-        alert('Mikrofon erfordert eine sichere Verbindung (HTTPS). '
-            + 'Bitte verwenden Sie https://recurrsens.eu');
+        message = 'Mikrofon erfordert eine sichere Verbindung (HTTPS). Bitte verwenden Sie https://recurrsens.eu';
       } else if (err?.name === 'NotAllowedError') {
-        alert('Zugriff auf das Mikrofon wurde verweigert. '
-            + 'Bitte erlauben Sie den Zugriff in den Browser-Einstellungen.');
-      } else {
-        alert('Mikrofon konnte nicht gefunden werden. '
-            + 'Bitte stellen Sie sicher, dass ein Mikrofon angeschlossen ist.');
+        message = 'Zugriff auf das Mikrofon wurde verweigert. Bitte erlauben Sie den Zugriff in den Browser-Einstellungen.';
       }
+
+      if (onRecordingError) onRecordingError(message);
+      else alert(message);
     }
   };
 
-  const stopRecording = () => {
-    if (mediaRecorderRef.current?.state !== 'inactive') {
-      mediaRecorderRef.current?.stop();
+  const stopRecording = useCallback(() => {
+    const recorder = mediaRecorderRef.current;
+    if (recorder && recorder.state !== 'inactive') {
+      recorder.stop();
       setIsRecording(false);
+      return;
     }
-  };
+
+    if (isStartingRef.current || streamRef.current) {
+      cleanupRecording();
+    }
+  }, [cleanupRecording]);
+
+  // Stop recording if the tab becomes hidden
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.hidden && isRecording) stopRecording();
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, [isRecording, stopRecording]);
 
   // ---- Playback ----
   const updateProgress = () => {
@@ -191,38 +247,29 @@ export default function AudioRecorder({
       {/* Visualizer */}
       {isRecording && stream && <AudioVisualizer stream={stream} />}
 
-      {/* Record button – push-to-talk */}
+      {/* Record button – click to start / click to stop */}
       {!audioBlob && (
         <>
           <IconButton
-            onMouseDown={startRecording}
-            onMouseUp={stopRecording}
-            onMouseLeave={() => { if (isRecording) stopRecording(); }}
-            onTouchStart={(e) => { e.preventDefault(); startRecording(); }}
-            onTouchEnd={(e) => { e.preventDefault(); stopRecording(); }}
-            onContextMenu={(e) => e.preventDefault()}
+            onClick={() => {
+              if (isRecording) stopRecording();
+              else void startRecording();
+            }}
             color={isRecording ? 'error' : 'primary'}
             sx={{
               width: 96,
               height: 96,
               bgcolor: isRecording ? 'error.light' : 'primary.light',
               '&:hover': { bgcolor: isRecording ? 'error.main' : 'primary.main' },
-              userSelect: 'none',
-              WebkitTouchCallout: 'none',
             }}
           >
             {isRecording ? <StopIcon sx={{ fontSize: 40 }} /> : <MicIcon sx={{ fontSize: 40 }} />}
           </IconButton>
           <Typography variant="body2" color="text.secondary" textAlign="center">
             {isRecording
-              ? `Aufnahme läuft… (${formatTime(recordingDuration)})`
-              : 'Gedrückt halten zum Aufnehmen'}
+              ? `Aufnahme läuft… (${formatTime(recordingDuration)}) — Zum Beenden klicken`
+              : 'Klicken zum Aufnehmen'}
           </Typography>
-          {!isRecording && (
-            <Typography variant="caption" color="text.secondary" textAlign="center" sx={{ maxWidth: 300 }}>
-              Falls Sie versehentlich losgelassen haben, halten Sie den Button erneut gedrückt.
-            </Typography>
-          )}
         </>
       )}
 

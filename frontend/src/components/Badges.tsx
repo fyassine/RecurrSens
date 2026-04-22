@@ -8,7 +8,7 @@ const STATUS_CONFIG: Record<PatientStatus, { label: string; color: string; bg: s
   POST_OP_STARTED: { label: 'Post-OP', color: '#e65100', bg: '#fff3e0' },
   POST_OP_DONE: { label: 'Aufnahmen fertig', color: '#00695c', bg: '#e0f2f1' },
   COMPLETED: { label: 'Abgeschlossen', color: '#2e7d32', bg: '#e8f5e9' },
-  EXPIRED: { label: 'Abgelaufen', color: '#b71c1c', bg: '#ffebee' },
+  EXPIRED: { label: 'Löschung ausstehend', color: '#b71c1c', bg: '#ffebee' },
 };
 
 export function StatusBadge({ status }: { status: PatientStatus }) {

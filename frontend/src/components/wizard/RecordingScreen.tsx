@@ -28,6 +28,7 @@ export default function RecordingScreen({
     currentBlob,
     audioQualityError,
     handleRecordingComplete,
+    handleRecordingError,
     handleRecordingReset,
     handleNext,
     isLoading,
@@ -64,10 +65,11 @@ export default function RecordingScreen({
           key={currentExercise.exercise_id}
           exampleAudioUrl={exampleUrl}
           onRecordingComplete={handleRecordingComplete}
+          onRecordingError={handleRecordingError}
           onRecordingReset={handleRecordingReset}
         />
 
-        {currentBlob && audioQualityError && (
+        {audioQualityError && (
           <Alert severity="error">
             <strong>Aufnahmequalität nicht ausreichend</strong>
             <br />
