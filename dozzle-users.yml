@@ -1,7 +1,7 @@
 users:
   admin:
-    password: "<REPLACE-WITH-SHA256-HASH>"
+    password: "$2b$12$w8WN6UdZAXPxaPAQgDeig.IXdZrEzEasL1xuqacmcvY6eLwfUMR8m"
     name: "Admin"
     email: "admin@recurrsens.eu"
-# Generate your password hash with:
-# echo -n "yourpassword" | shasum -a 256 | awk '{print $1}'
+# Generate your password hash with (bcrypt required since dozzle v10.4):
+# python3 -c "import bcrypt; print(bcrypt.hashpw(b'yourpassword', bcrypt.gensalt()).decode())"
