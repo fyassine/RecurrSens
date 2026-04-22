@@ -37,6 +37,7 @@ export default function AudioRecorder({
   const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const recordingStartTimeRef = useRef<number>(0);
   const isStartingRef = useRef(false);
+  const isPressingRef = useRef(false);
   const playbackAudioRef = useRef<HTMLAudioElement | null>(null);
   const playbackAnimRef = useRef<number | null>(null);
 
@@ -81,9 +82,18 @@ export default function AudioRecorder({
   const startRecording = async () => {
     if (isRecording || isStartingRef.current) return;
     isStartingRef.current = true;
+    isPressingRef.current = true;
 
     try {
       const mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+      // User released before mic was ready — silently abort, not an error
+      if (!isPressingRef.current) {
+        mediaStream.getTracks().forEach((t) => t.stop());
+        isStartingRef.current = false;
+        return;
+      }
+
       streamRef.current = mediaStream;
       setStream(mediaStream);
 
@@ -181,6 +191,16 @@ export default function AudioRecorder({
     return () => document.removeEventListener('visibilitychange', handleVisibility);
   }, [isRecording, stopRecording]);
 
+  const handlePressStart = (e: React.MouseEvent | React.TouchEvent) => {
+    e.preventDefault(); // prevent context menu on long-press (mobile)
+    void startRecording();
+  };
+
+  const handlePressEnd = () => {
+    isPressingRef.current = false;
+    stopRecording();
+  };
+
   // ---- Playback ----
   const updateProgress = () => {
     if (!playbackAudioRef.current) return;
@@ -244,31 +264,40 @@ export default function AudioRecorder({
         </Box>
       )}
 
-      {/* Visualizer */}
-      {isRecording && stream && <AudioVisualizer stream={stream} />}
+      {/* Visualizer — fixed-height slot so button never shifts */}
+      {!audioBlob && (
+        <Box sx={{ height: 76, width: '100%', maxWidth: 320, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          {stream && <AudioVisualizer stream={stream} />}
+        </Box>
+      )}
 
-      {/* Record button – click to start / click to stop */}
+      {/* Record button – press and hold to record */}
       {!audioBlob && (
         <>
           <IconButton
-            onClick={() => {
-              if (isRecording) stopRecording();
-              else void startRecording();
-            }}
+            onMouseDown={handlePressStart}
+            onMouseUp={handlePressEnd}
+            onMouseLeave={handlePressEnd}
+            onTouchStart={handlePressStart}
+            onTouchEnd={handlePressEnd}
+            onTouchCancel={handlePressEnd}
+            onContextMenu={(e) => e.preventDefault()}
             color={isRecording ? 'error' : 'primary'}
             sx={{
               width: 96,
               height: 96,
               bgcolor: isRecording ? 'error.light' : 'primary.light',
               '&:hover': { bgcolor: isRecording ? 'error.main' : 'primary.main' },
+              userSelect: 'none',
+              WebkitUserSelect: 'none',
             }}
           >
             {isRecording ? <StopIcon sx={{ fontSize: 40 }} /> : <MicIcon sx={{ fontSize: 40 }} />}
           </IconButton>
           <Typography variant="body2" color="text.secondary" textAlign="center">
             {isRecording
-              ? `Aufnahme läuft… (${formatTime(recordingDuration)}) — Zum Beenden klicken`
-              : 'Klicken zum Aufnehmen'}
+              ? `Aufnahme läuft… (${formatTime(recordingDuration)})`
+              : 'Gedrückt halten zum Aufnehmen'}
           </Typography>
         </>
       )}
