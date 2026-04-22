@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - main
   workflow_dispatch:
 
 concurrency:
@@ -64,13 +63,11 @@ jobs:
         run: python manage.py test --verbosity=2
 
   # ── 2. Deploy ───────────────────────────────────────────────────────────────
-  # ── 2. Deploy ───────────────────────────────────────────────────────────────
   deploy:
     name: Deploy to VPS
     needs: test
     if: ${{ github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
-    environment: production
     environment: production
 
     steps:
