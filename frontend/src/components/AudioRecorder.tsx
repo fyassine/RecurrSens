@@ -39,7 +39,6 @@ export default function AudioRecorder({
   const isStartingRef = useRef(false);
   const isPressingRef = useRef(false);
   const playbackAudioRef = useRef<HTMLAudioElement | null>(null);
-  const playbackAnimRef = useRef<number | null>(null);
 
   // Example playback
   const [examplePlaying, setExamplePlaying] = useState(false);
@@ -62,7 +61,6 @@ export default function AudioRecorder({
     return () => {
       cleanupRecording();
       if (playbackAudioRef.current) playbackAudioRef.current.pause();
-      if (playbackAnimRef.current) cancelAnimationFrame(playbackAnimRef.current);
     };
   }, []); // stable: cleanupRecording never changes
 
@@ -194,43 +192,52 @@ export default function AudioRecorder({
   const handlePressStart = (e: React.MouseEvent | React.TouchEvent) => {
     e.preventDefault(); // prevent context menu on long-press (mobile)
     void startRecording();
-  };
 
-  const handlePressEnd = () => {
-    isPressingRef.current = false;
-    stopRecording();
+    // Native document listeners survive React re-renders that recreate the button
+    // element mid-touch, which would swallow synthetic onTouchEnd on iOS/Android.
+    const onRelease = () => {
+      isPressingRef.current = false;
+      stopRecording();
+      document.removeEventListener('mouseup', onRelease);
+      document.removeEventListener('touchend', onRelease);
+      document.removeEventListener('touchcancel', onRelease);
+    };
+    document.addEventListener('mouseup', onRelease);
+    document.addEventListener('touchend', onRelease, { passive: true });
+    document.addEventListener('touchcancel', onRelease, { passive: true });
   };
 
   // ---- Playback ----
-  const updateProgress = () => {
-    if (!playbackAudioRef.current) return;
-    const current = playbackAudioRef.current.currentTime;
-    const dur = Number.isFinite(playbackAudioRef.current.duration)
-      ? playbackAudioRef.current.duration
-      : recordingDuration;
-    if (dur > 0) {
-      setPlaybackTime(current);
-      setPlaybackProgress((current / dur) * 100);
-    }
-    playbackAnimRef.current = requestAnimationFrame(updateProgress);
-  };
-
   const playRecording = () => {
     if (!audioBlob) return;
+    if (playbackAudioRef.current) {
+      playbackAudioRef.current.pause();
+      playbackAudioRef.current = null;
+    }
     const url = URL.createObjectURL(audioBlob);
     const audio = new Audio(url);
     playbackAudioRef.current = audio;
     setIsPlaying(true);
-    audio.play().catch(() => setIsPlaying(false));
-    playbackAnimRef.current = requestAnimationFrame(updateProgress);
+    // ontimeupdate fires ~4x/sec — smooth for a progress bar without the
+    // 60fps re-render storm that requestAnimationFrame caused.
+    audio.ontimeupdate = () => {
+      const dur = Number.isFinite(audio.duration) ? audio.duration : recordingDuration;
+      if (dur > 0) {
+        setPlaybackTime(audio.currentTime);
+        setPlaybackProgress((audio.currentTime / dur) * 100);
+      }
+    };
     audio.onended = () => {
       setIsPlaying(false);
       playbackAudioRef.current = null;
-      if (playbackAnimRef.current) cancelAnimationFrame(playbackAnimRef.current);
       setPlaybackProgress(0);
       setPlaybackTime(0);
       URL.revokeObjectURL(url);
     };
+    audio.play().catch(() => {
+      setIsPlaying(false);
+      URL.revokeObjectURL(url);
+    });
   };
 
   const resetRecording = () => {
@@ -276,11 +283,7 @@ export default function AudioRecorder({
         <>
           <IconButton
             onMouseDown={handlePressStart}
-            onMouseUp={handlePressEnd}
-            onMouseLeave={handlePressEnd}
             onTouchStart={handlePressStart}
-            onTouchEnd={handlePressEnd}
-            onTouchCancel={handlePressEnd}
             onContextMenu={(e) => e.preventDefault()}
             color={isRecording ? 'error' : 'primary'}
             sx={{
