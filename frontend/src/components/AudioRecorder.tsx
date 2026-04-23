@@ -39,6 +39,9 @@ export default function AudioRecorder({
   const isStartingRef = useRef(false);
   const isPressingRef = useRef(false);
   const playbackAudioRef = useRef<HTMLAudioElement | null>(null);
+  // Prevents the synthesized mousedown from firing after a real touchstart
+  const recentTouchRef = useRef(false);
+  const releaseCleanupRef = useRef<(() => void) | null>(null);
 
   // Example playback
   const [examplePlaying, setExamplePlaying] = useState(false);
@@ -60,6 +63,7 @@ export default function AudioRecorder({
   useEffect(() => {
     return () => {
       cleanupRecording();
+      releaseCleanupRef.current?.();
       if (playbackAudioRef.current) playbackAudioRef.current.pause();
     };
   }, []); // stable: cleanupRecording never changes
@@ -189,22 +193,59 @@ export default function AudioRecorder({
     return () => document.removeEventListener('visibilitychange', handleVisibility);
   }, [isRecording, stopRecording]);
 
-  const handlePressStart = (e: React.MouseEvent | React.TouchEvent) => {
-    e.preventDefault(); // prevent context menu on long-press (mobile)
-    void startRecording();
-
-    // Native document listeners survive React re-renders that recreate the button
-    // element mid-touch, which would swallow synthetic onTouchEnd on iOS/Android.
+  /**
+   * Attach document-level release listeners.
+   * Called once per press-start. Returns a cleanup function.
+   * Uses { passive: false } so the handler fires synchronously on iOS Safari.
+   */
+  const attachReleaseListeners = useCallback(() => {
     const onRelease = () => {
       isPressingRef.current = false;
       stopRecording();
+      cleanup();
+    };
+
+    const cleanup = () => {
       document.removeEventListener('mouseup', onRelease);
       document.removeEventListener('touchend', onRelease);
       document.removeEventListener('touchcancel', onRelease);
+      // Fallback: if the page loses focus mid-press (e.g. iOS app switcher)
+      window.removeEventListener('blur', onRelease);
+      releaseCleanupRef.current = null;
     };
+
     document.addEventListener('mouseup', onRelease);
-    document.addEventListener('touchend', onRelease, { passive: true });
-    document.addEventListener('touchcancel', onRelease, { passive: true });
+    // { passive: false } is critical on iOS — passive listeners can be
+    // deferred by the compositor, causing the recording to keep running.
+    document.addEventListener('touchend', onRelease, { passive: false });
+    document.addEventListener('touchcancel', onRelease, { passive: false });
+    window.addEventListener('blur', onRelease);
+
+    releaseCleanupRef.current = cleanup;
+    return cleanup;
+  }, [stopRecording]);
+
+  // ---- Touch handler (mobile) ----
+  const handleTouchStart = (_e: React.TouchEvent) => {
+    // Do NOT call e.preventDefault() here!
+    // Calling preventDefault on touchstart blocks the iOS permission dialog
+    // for getUserMedia and also breaks scrolling.
+    recentTouchRef.current = true;
+    // Reset the flag after the browser's ~300ms touch→mouse delay window
+    setTimeout(() => { recentTouchRef.current = false; }, 400);
+
+    attachReleaseListeners();
+    void startRecording();
+  };
+
+  // ---- Mouse handler (desktop) ----
+  const handleMouseDown = (e: React.MouseEvent) => {
+    // After a real touch, the browser synthesizes mousedown — skip it.
+    if (recentTouchRef.current) return;
+    e.preventDefault();
+
+    attachReleaseListeners();
+    void startRecording();
   };
 
   // ---- Playback ----
@@ -282,8 +323,8 @@ export default function AudioRecorder({
       {!audioBlob && (
         <>
           <IconButton
-            onMouseDown={handlePressStart}
-            onTouchStart={handlePressStart}
+            onMouseDown={handleMouseDown}
+            onTouchStart={handleTouchStart}
             onContextMenu={(e) => e.preventDefault()}
             color={isRecording ? 'error' : 'primary'}
             sx={{
@@ -293,6 +334,10 @@ export default function AudioRecorder({
               '&:hover': { bgcolor: isRecording ? 'error.main' : 'primary.main' },
               userSelect: 'none',
               WebkitUserSelect: 'none',
+              // Prevent iOS long-press callout & magnifying glass
+              WebkitTouchCallout: 'none',
+              // Prevent browser from hijacking the touch for scroll/zoom
+              touchAction: 'none',
             }}
           >
             {isRecording ? <StopIcon sx={{ fontSize: 40 }} /> : <MicIcon sx={{ fontSize: 40 }} />}
