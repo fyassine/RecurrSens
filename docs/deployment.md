@@ -56,13 +56,107 @@ Internal only (not exposed):
 | Nginx | 48MB | ~2MB |
 | **Total** | **1024MB** | **~313MB** |
 
+## Staging Environment
+
+### Architecture
+
+Staging runs alongside production on the same VPS by **sharing stateless infrastructure** (PostgreSQL, Redis, MinIO) and only duplicating application-specific containers:
+
+| Container | Production | Staging | Notes |
+|---|:---:|:---:|---|
+| `db` (PostgreSQL) | ✅ | **shared** | Staging uses a separate database (`stimmbandlaesion_staging`) |
+| `redis` | ✅ | **shared** | Staging uses Redis DB 1 (production uses DB 0) |
+| `minio` | ✅ | **shared** | Staging uses a separate bucket (`stimmbandlaesion-staging`) |
+| `backend` | ✅ | ✅ | Separate container, tagged `:staging` |
+| `celery` | ✅ | ✅ | Separate container, tagged `:staging` |
+| `celery-beat` | ✅ | ❌ | Not needed in staging |
+| `nginx` | ✅ | ✅ | Production nginx terminates SSL; staging nginx serves SPA |
+| `dozzle` | ✅ | **shared** | Already sees all containers |
+
+**Estimated additional RAM for staging**: ~110 MB (backend ~60 MB + celery ~50 MB)
+
+### Networking
+
+```
+Internet → :443 → Production Nginx ─┬→ recurrsens.eu       → Production backend (:8000)
+                                     └→ staging.recurrsens.eu → Staging Nginx (:8080)
+                                                                   └→ Staging backend (:8000)
+
+Production Nginx (recurrsens-nginx-1) acts as the SSL terminator for both environments.
+Staging containers join the `recurrsens_default` network to access shared infra.
+```
+
+### Deploy Workflow
+
+Staging deployments use **`workflow_dispatch`** — a manual trigger from the GitHub Actions UI:
+
+1. Go to GitHub → **Actions** tab → **"Deploy to Staging"**
+2. Click **"Run workflow"**
+3. Select the **branch** to deploy (any `dev/*` branch, `staging`, or `main`)
+4. Optionally add a **reason** note
+5. Click **Run** — CI tests run, images build, and deploy to staging
+
+Staging also auto-deploys when code is pushed to the `staging` branch.
+
+### Docker Compose Projects
+
+| Project | Directory | Compose files |
+|---|---|---|
+| `recurrsens` (production) | `~/recurrsens/` | `docker-compose.yml` + `docker-compose.prod.yml` |
+| `recurrsens-staging` (staging) | `~/recurrsens-staging/` | `docker-compose.yml` + `docker-compose.staging.yml` |
+
+### Staging Setup (one-time)
+
+```bash
+# 1. Create staging database on the shared PostgreSQL instance
+docker exec -it recurrsens-db-1 psql -U postgres -c "CREATE DATABASE stimmbandlaesion_staging;"
+
+# 2. Add DNS A record for staging.recurrsens.eu → 212.227.176.203
+
+# 3. Obtain SSL certificate for staging subdomain
+sudo certbot certonly --webroot -w /var/www/certbot -d staging.recurrsens.eu
+
+# 4. Create GitHub "staging" environment with staging-specific vars:
+#    ALLOWED_HOSTS=staging.recurrsens.eu
+#    APP_URL=https://staging.recurrsens.eu
+#    CORS_ALLOWED_ORIGINS=https://staging.recurrsens.eu
+#    DB_NAME=stimmbandlaesion_staging
+#    S3_BUCKET=stimmbandlaesion-staging
+```
+
+### Staging Commands
+
+```bash
+# Container status
+ssh flakhal@212.227.176.203 "docker compose -p recurrsens-staging -f ~/recurrsens-staging/docker-compose.yml -f ~/recurrsens-staging/docker-compose.staging.yml ps"
+
+# Logs
+ssh flakhal@212.227.176.203 "docker compose -p recurrsens-staging -f ~/recurrsens-staging/docker-compose.yml -f ~/recurrsens-staging/docker-compose.staging.yml logs backend --tail=50"
+
+# Restart
+ssh flakhal@212.227.176.203 "docker compose -p recurrsens-staging -f ~/recurrsens-staging/docker-compose.yml -f ~/recurrsens-staging/docker-compose.staging.yml restart"
+
+# Stop staging (to free resources)
+ssh flakhal@212.227.176.203 "docker compose -p recurrsens-staging -f ~/recurrsens-staging/docker-compose.yml -f ~/recurrsens-staging/docker-compose.staging.yml down"
+
+# Django management commands
+ssh flakhal@212.227.176.203 "docker compose -p recurrsens-staging -f ~/recurrsens-staging/docker-compose.yml -f ~/recurrsens-staging/docker-compose.staging.yml exec backend python manage.py <command>"
+```
+
 ## File Layout on Server
 
 ```
-/home/flakhal/stimmbandlaesion/
-├── docker-compose.yml          # Base compose config
-├── docker-compose.prod.yml     # Production overrides (image refs, memory limits, ports)
-└── .env                        # Production secrets (chmod 600)
+/home/flakhal/
+├── recurrsens/                     # Production
+│   ├── docker-compose.yml          # Base compose config
+│   ├── docker-compose.prod.yml     # Production overrides
+│   ├── dozzle-users.yml            # Dozzle auth config
+│   └── .env                        # Production secrets (chmod 600)
+│
+└── recurrsens-staging/             # Staging
+    ├── docker-compose.yml          # Base compose config (same file)
+    ├── docker-compose.staging.yml  # Staging overrides
+    └── .env                        # Staging secrets (chmod 600)
 ```
 
 ## Deployment Commands
