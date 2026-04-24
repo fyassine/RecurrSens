@@ -1,0 +1,223 @@
+name: Deploy to Staging
+
+on:
+  push:
+    branches:
+      - staging
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "Branch to deploy to staging"
+        required: true
+        default: "staging"
+      reason:
+        description: "Deploy reason (optional note)"
+        required: false
+
+concurrency:
+  group: staging
+  cancel-in-progress: true
+
+jobs:
+  # ── 1. CI gate ──────────────────────────────────────────────────────────────
+  test:
+    name: Run backend tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: test_db
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.branch || github.ref }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r backend/requirements.txt
+
+      - name: Run tests
+        working-directory: backend
+        env:
+          DJANGO_SETTINGS_MODULE: config.settings.development
+          DJANGO_SECRET_KEY: ci-secret-key
+          DB_NAME: test_db
+          DB_USER: postgres
+          DB_PASSWORD: postgres
+          DB_HOST: localhost
+          DB_PORT: 5432
+          S3_ENDPOINT: http://localhost:9000
+          S3_ACCESS_KEY: minioadmin
+          S3_SECRET_KEY: minioadmin
+          S3_BUCKET: test
+          S3_REGION: us-east-1
+          CELERY_BROKER_URL: memory://
+          APP_URL: http://localhost
+        run: python manage.py test --verbosity=2
+
+  # ── 2. Build & push :staging images ─────────────────────────────────────────
+  build:
+    name: Build & push staging images
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.branch || github.ref }}
+
+      - name: Log in to ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build & push backend (:staging)
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: true
+          platforms: linux/amd64
+          tags: ghcr.io/${{ github.repository_owner }}/recurrsens-backend:staging
+          cache-from: type=gha,scope=staging-backend
+          cache-to: type=gha,mode=max,scope=staging-backend
+
+      - name: Build & push nginx (:staging)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./nginx/Dockerfile.staging
+          push: true
+          platforms: linux/amd64
+          tags: ghcr.io/${{ github.repository_owner }}/recurrsens-nginx:staging
+          cache-from: type=gha,scope=staging-nginx
+          cache-to: type=gha,mode=max,scope=staging-nginx
+
+  # ── 3. Deploy to staging ────────────────────────────────────────────────────
+  deploy:
+    name: Deploy staging to VPS
+    needs: build
+    runs-on: ubuntu-latest
+    environment: staging
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.branch || github.ref }}
+
+      - name: Copy staging compose files to VPS
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: "docker-compose.yml,docker-compose.staging.yml"
+          target: ~/recurrsens-staging
+
+      - name: Write .env.staging on VPS
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cat > ~/recurrsens-staging/.env <<EOF
+            # Django
+            DJANGO_SECRET_KEY=${{ secrets.DJANGO_SECRET_KEY }}
+            DJANGO_SETTINGS_MODULE=config.settings.production
+            ALLOWED_HOSTS=${{ vars.ALLOWED_HOSTS }}
+            DJANGO_SUPERUSER_USERNAME=${{ vars.DJANGO_SUPERUSER_USERNAME }}
+            DJANGO_SUPERUSER_PASSWORD=${{ secrets.DJANGO_SUPERUSER_PASSWORD }}
+
+            # Database — separate staging DB on shared Postgres
+            DB_NAME=${{ vars.DB_NAME }}
+            DB_USER=${{ vars.DB_USER }}
+            DB_PASSWORD=${{ secrets.DB_PASSWORD }}
+            DB_HOST=recurrsens-db-1
+            DB_PORT=5432
+
+            # S3 / MinIO — separate staging bucket on shared MinIO
+            S3_REGION=${{ vars.S3_REGION }}
+            S3_ACCESS_KEY=${{ vars.S3_ACCESS_KEY }}
+            S3_SECRET_KEY=${{ secrets.S3_SECRET_KEY }}
+            S3_ENDPOINT=http://recurrsens-minio-1:9000
+            S3_BUCKET=${{ vars.S3_BUCKET }}
+
+            # Celery / Redis — DB 1 (production uses DB 0)
+            CELERY_BROKER_URL=redis://recurrsens-redis-1:6379/1
+
+            # Inference Service
+            INFERENCE_SERVICE_URL=${{ vars.INFERENCE_SERVICE_URL }}
+
+            # App URL
+            APP_URL=${{ vars.APP_URL }}
+
+            # CORS
+            CORS_ALLOWED_ORIGINS=${{ vars.CORS_ALLOWED_ORIGINS }}
+
+            # Data retention
+            DATA_RETENTION_DAYS=${{ vars.DATA_RETENTION_DAYS }}
+            EOF
+
+      - name: Deploy staging via SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            set -e
+            cd ~/recurrsens-staging
+
+            echo "=== Pulling staging images ==="
+            echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.repository_owner }} --password-stdin
+            docker compose -p recurrsens-staging -f docker-compose.yml -f docker-compose.staging.yml pull
+
+            echo "=== Starting staging containers ==="
+            docker compose -p recurrsens-staging -f docker-compose.yml -f docker-compose.staging.yml up -d
+
+            echo "=== Running migrations on staging DB ==="
+            docker compose -p recurrsens-staging -f docker-compose.yml -f docker-compose.staging.yml exec -T backend python manage.py migrate --noinput
+
+            echo "=== Collecting static files ==="
+            docker compose -p recurrsens-staging -f docker-compose.yml -f docker-compose.staging.yml exec -T backend python manage.py collectstatic --noinput
+
+            echo "=== Pruning old images ==="
+            docker image prune -f
+
+            echo "=== Reloading production nginx to pick up staging upstream ==="
+            docker compose -p recurrsens -f ~/recurrsens/docker-compose.yml -f ~/recurrsens/docker-compose.prod.yml exec -T nginx nginx -s reload 2>/dev/null || true
+
+            echo "=== Staging health check ==="
+            sleep 10
+            docker compose -p recurrsens-staging -f docker-compose.yml -f docker-compose.staging.yml ps --format "table {{.Name}}\t{{.Status}}"
+
+            echo "=== Deploy info ==="
+            echo "Branch: ${{ github.event.inputs.branch || github.ref_name }}"
+            echo "Reason: ${{ github.event.inputs.reason || 'auto (push to staging branch)' }}"
+            echo "Deployed at: $(date -u)"
