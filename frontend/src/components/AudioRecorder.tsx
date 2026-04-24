@@ -9,6 +9,8 @@ import { formatTime } from '../utils';
 
 interface AudioRecorderProps {
   exampleAudioUrl?: string;
+  /** Pre-warmed mic stream — if provided, getUserMedia is skipped on press. */
+  micStream?: MediaStream | null;
   onRecordingComplete: (blob: Blob) => void;
   onRecordingReset?: () => void;
   onRecordingError?: (message: string) => void;
@@ -16,13 +18,14 @@ interface AudioRecorderProps {
 
 export default function AudioRecorder({
   exampleAudioUrl,
+  micStream: externalStream,
   onRecordingComplete,
   onRecordingReset,
   onRecordingError,
 }: AudioRecorderProps) {
   const [isRecording, setIsRecording] = useState(false);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
-  const [stream, setStream] = useState<MediaStream | null>(null);
+  const [visualizerStream, setVisualizerStream] = useState<MediaStream | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const [recordingDuration, setRecordingDuration] = useState(0);
 
@@ -39,34 +42,42 @@ export default function AudioRecorder({
   const isStartingRef = useRef(false);
   const isPressingRef = useRef(false);
   const playbackAudioRef = useRef<HTMLAudioElement | null>(null);
-  // Prevents the synthesized mousedown from firing after a real touchstart
-  const recentTouchRef = useRef(false);
-  const releaseCleanupRef = useRef<(() => void) | null>(null);
+
+  // Ref to the button DOM element for setPointerCapture
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
+  // Track the captured pointerId so we can release it
+  const capturedPointerIdRef = useRef<number | null>(null);
 
   // Example playback
   const [examplePlaying, setExamplePlaying] = useState(false);
   const exampleRef = useRef<HTMLAudioElement | null>(null);
 
-  const cleanupRecording = useCallback((mediaStream?: MediaStream | null) => {
+  /** Clean up MediaRecorder and optionally the stream (only if we own it). */
+  const cleanupRecording = useCallback((ownedStream?: MediaStream | null) => {
     if (recordingTimerRef.current) {
       clearInterval(recordingTimerRef.current);
       recordingTimerRef.current = null;
     }
-    (mediaStream ?? streamRef.current)?.getTracks().forEach((t) => t.stop());
+    // Only stop tracks if we created the stream ourselves (no external stream).
+    // If an external stream was provided, the parent owns its lifecycle.
+    if (ownedStream) {
+      ownedStream.getTracks().forEach((t) => t.stop());
+    } else if (!externalStream && streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => t.stop());
+    }
     streamRef.current = null;
     mediaRecorderRef.current = null;
     isStartingRef.current = false;
     setIsRecording(false);
-    setStream(null);
-  }, []); // no deps — uses refs only
+    setVisualizerStream(null);
+  }, [externalStream]);
 
   useEffect(() => {
     return () => {
       cleanupRecording();
-      releaseCleanupRef.current?.();
       if (playbackAudioRef.current) playbackAudioRef.current.pause();
     };
-  }, []); // stable: cleanupRecording never changes
+  }, []); // stable: cleanupRecording identity doesn't matter for unmount
 
   // ---- Example playback ----
   const playExample = () => {
@@ -87,17 +98,19 @@ export default function AudioRecorder({
     isPressingRef.current = true;
 
     try {
-      const mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // Use the pre-warmed external stream if available; otherwise acquire one.
+      const mediaStream = externalStream ?? await navigator.mediaDevices.getUserMedia({ audio: true });
 
       // User released before mic was ready — silently abort, not an error
       if (!isPressingRef.current) {
-        mediaStream.getTracks().forEach((t) => t.stop());
+        // Only stop tracks if we created them ourselves
+        if (!externalStream) mediaStream.getTracks().forEach((t) => t.stop());
         isStartingRef.current = false;
         return;
       }
 
       streamRef.current = mediaStream;
-      setStream(mediaStream);
+      setVisualizerStream(mediaStream);
 
       let mimeType = '';
       if (typeof MediaRecorder.isTypeSupported === 'function') {
@@ -117,7 +130,7 @@ export default function AudioRecorder({
       };
 
       mediaRecorder.onerror = () => {
-        cleanupRecording(mediaStream);
+        cleanupRecording(externalStream ? undefined : mediaStream);
         onRecordingError?.('Mikrofonfehler während der Aufnahme. Bitte prüfen Sie das Mikrofon und versuchen Sie es erneut.');
       };
 
@@ -126,7 +139,7 @@ export default function AudioRecorder({
         setRecordingDuration(duration);
 
         if (chunksRef.current.length === 0) {
-          cleanupRecording(mediaStream);
+          cleanupRecording(externalStream ? undefined : mediaStream);
           onRecordingError?.('Die Aufnahme ist zu leise. Bitte sprechen Sie lauter oder näher am Mikrofon.');
           return;
         }
@@ -135,14 +148,14 @@ export default function AudioRecorder({
         const blob = new Blob(chunksRef.current, { type });
 
         if (blob.size === 0) {
-          cleanupRecording(mediaStream);
+          cleanupRecording(externalStream ? undefined : mediaStream);
           onRecordingError?.('Die Aufnahme ist zu leise. Bitte sprechen Sie lauter oder näher am Mikrofon.');
           return;
         }
 
         setAudioBlob(blob);
         onRecordingComplete(blob);
-        cleanupRecording(mediaStream);
+        cleanupRecording(externalStream ? undefined : mediaStream);
       };
 
       mediaRecorder.start();
@@ -172,6 +185,7 @@ export default function AudioRecorder({
   };
 
   const stopRecording = useCallback(() => {
+    isPressingRef.current = false;
     const recorder = mediaRecorderRef.current;
     if (recorder && recorder.state !== 'inactive') {
       recorder.stop();
@@ -193,60 +207,45 @@ export default function AudioRecorder({
     return () => document.removeEventListener('visibilitychange', handleVisibility);
   }, [isRecording, stopRecording]);
 
-  /**
-   * Attach document-level release listeners.
-   * Called once per press-start. Returns a cleanup function.
-   * Uses { passive: false } so the handler fires synchronously on iOS Safari.
-   */
-  const attachReleaseListeners = useCallback(() => {
-    const onRelease = () => {
-      isPressingRef.current = false;
-      stopRecording();
-      cleanup();
-    };
+  // ---- Pointer Event handlers (unified mouse + touch) ----
+  //
+  // Using Pointer Events + setPointerCapture guarantees that `pointerup`
+  // fires on the SAME element even if:
+  //  - the finger/cursor moves off the button
+  //  - the DOM is modified mid-touch (React re-render changing icon/color)
+  //  - iOS would otherwise silently swallow touchend
+  //
+  const handlePointerDown = useCallback((e: React.PointerEvent<HTMLButtonElement>) => {
+    // Capture this pointer so pointerup is guaranteed to fire on this element
+    const btn = buttonRef.current;
+    if (btn) {
+      btn.setPointerCapture(e.pointerId);
+      capturedPointerIdRef.current = e.pointerId;
+    }
 
-    const cleanup = () => {
-      document.removeEventListener('mouseup', onRelease);
-      document.removeEventListener('touchend', onRelease);
-      document.removeEventListener('touchcancel', onRelease);
-      // Fallback: if the page loses focus mid-press (e.g. iOS app switcher)
-      window.removeEventListener('blur', onRelease);
-      releaseCleanupRef.current = null;
-    };
+    void startRecording();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isRecording, externalStream]);
 
-    document.addEventListener('mouseup', onRelease);
-    // { passive: false } is critical on iOS — passive listeners can be
-    // deferred by the compositor, causing the recording to keep running.
-    document.addEventListener('touchend', onRelease, { passive: false });
-    document.addEventListener('touchcancel', onRelease, { passive: false });
-    window.addEventListener('blur', onRelease);
-
-    releaseCleanupRef.current = cleanup;
-    return cleanup;
+  const handlePointerUp = useCallback((_e: React.PointerEvent<HTMLButtonElement>) => {
+    capturedPointerIdRef.current = null;
+    stopRecording();
   }, [stopRecording]);
 
-  // ---- Touch handler (mobile) ----
-  const handleTouchStart = (_e: React.TouchEvent) => {
-    // Do NOT call e.preventDefault() here!
-    // Calling preventDefault on touchstart blocks the iOS permission dialog
-    // for getUserMedia and also breaks scrolling.
-    recentTouchRef.current = true;
-    // Reset the flag after the browser's ~300ms touch→mouse delay window
-    setTimeout(() => { recentTouchRef.current = false; }, 400);
+  const handlePointerCancel = useCallback((_e: React.PointerEvent<HTMLButtonElement>) => {
+    // Pointer was interrupted (e.g. incoming call, OS gesture, etc.)
+    capturedPointerIdRef.current = null;
+    stopRecording();
+  }, [stopRecording]);
 
-    attachReleaseListeners();
-    void startRecording();
-  };
-
-  // ---- Mouse handler (desktop) ----
-  const handleMouseDown = (e: React.MouseEvent) => {
-    // After a real touch, the browser synthesizes mousedown — skip it.
-    if (recentTouchRef.current) return;
-    e.preventDefault();
-
-    attachReleaseListeners();
-    void startRecording();
-  };
+  // Safety: also stop on window blur (e.g. iOS app switcher)
+  useEffect(() => {
+    const onBlur = () => {
+      if (isRecording) stopRecording();
+    };
+    window.addEventListener('blur', onBlur);
+    return () => window.removeEventListener('blur', onBlur);
+  }, [isRecording, stopRecording]);
 
   // ---- Playback ----
   const playRecording = () => {
@@ -315,7 +314,7 @@ export default function AudioRecorder({
       {/* Visualizer — fixed-height slot so button never shifts */}
       {!audioBlob && (
         <Box sx={{ height: 76, width: '100%', maxWidth: 320, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          {stream && <AudioVisualizer stream={stream} />}
+          {visualizerStream && <AudioVisualizer stream={visualizerStream} />}
         </Box>
       )}
 
@@ -323,8 +322,10 @@ export default function AudioRecorder({
       {!audioBlob && (
         <>
           <IconButton
-            onMouseDown={handleMouseDown}
-            onTouchStart={handleTouchStart}
+            ref={buttonRef}
+            onPointerDown={handlePointerDown}
+            onPointerUp={handlePointerUp}
+            onPointerCancel={handlePointerCancel}
             onContextMenu={(e) => e.preventDefault()}
             color={isRecording ? 'error' : 'primary'}
             sx={{
@@ -336,7 +337,8 @@ export default function AudioRecorder({
               WebkitUserSelect: 'none',
               // Prevent iOS long-press callout & magnifying glass
               WebkitTouchCallout: 'none',
-              // Prevent browser from hijacking the touch for scroll/zoom
+              // Prevent browser from hijacking the touch for scroll/zoom.
+              // Critical for setPointerCapture to work correctly on mobile.
               touchAction: 'none',
             }}
           >

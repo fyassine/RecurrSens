@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { Box, CircularProgress, Typography } from '@mui/material';
 import { getPublicPatient } from '../api/client';
@@ -14,6 +14,11 @@ export default function PatientWizardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
+  // Pre-warmed mic stream, acquired on the LandingScreen's "Start" click.
+  // Kept alive across exercises so every record-press is instant (no getUserMedia).
+  const [micStream, setMicStream] = useState<MediaStream | null>(null);
+  const micStreamRef = useRef<MediaStream | null>(null);
+
   useEffect(() => {
     if (!token) return;
     getPublicPatient(token)
@@ -23,6 +28,19 @@ export default function PatientWizardPage() {
       .catch(() => setError('Patient nicht gefunden.'))
       .finally(() => setLoading(false));
   }, [token]);
+
+  // Clean up the mic stream when the wizard unmounts (user leaves page, etc.)
+  useEffect(() => {
+    return () => {
+      micStreamRef.current?.getTracks().forEach((t) => t.stop());
+    };
+  }, []);
+
+  const handleLandingStart = (stream: MediaStream) => {
+    micStreamRef.current = stream;
+    setMicStream(stream);
+    setStatus('CONSENT_GIVEN');
+  };
 
   if (loading) {
     return (
@@ -43,13 +61,14 @@ export default function PatientWizardPage() {
   const renderScreen = () => {
     switch (status) {
       case 'NEW':
-        return <LandingScreen token={token} onStart={() => setStatus('CONSENT_GIVEN')} />;
+        return <LandingScreen token={token} onStart={handleLandingStart} />;
 
       case 'CONSENT_GIVEN':
         return (
           <RecordingScreen
             token={token}
             phase="PRE_OP"
+            micStream={micStream}
             onComplete={() => setStatus('PRE_OP_DONE')}
           />
         );
@@ -62,6 +81,7 @@ export default function PatientWizardPage() {
           <RecordingScreen
             token={token}
             phase="POST_OP"
+            micStream={micStream}
             onComplete={() => setStatus('POST_OP_DONE')}
           />
         );
