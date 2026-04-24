@@ -15,10 +15,12 @@ import { useExerciseSession } from '../../hooks/useExerciseSession';
 export default function RecordingScreen({
   token,
   phase,
+  micStream,
   onComplete,
 }: {
   token: string;
   phase: 'PRE_OP' | 'POST_OP';
+  micStream?: MediaStream | null;
   onComplete: () => void;
 }) {
   const {
@@ -64,6 +66,7 @@ export default function RecordingScreen({
         <AudioRecorder
           key={currentExercise.exercise_id}
           exampleAudioUrl={exampleUrl}
+          micStream={micStream}
           onRecordingComplete={handleRecordingComplete}
           onRecordingError={handleRecordingError}
           onRecordingReset={handleRecordingReset}
