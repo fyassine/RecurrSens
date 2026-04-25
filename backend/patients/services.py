@@ -414,8 +414,6 @@ def export_patients_zip(patient_ids: list | None = None) -> bytes:
         writer = csv.writer(csv_buffer)
         writer.writerow([
             'PatientenID', 'Status', 'PraeOP_Datum', 'PostOP_Datum',
-            'KI_PraeOP', 'KI_PraeOP_Prozent',
-            'KI_PostOP', 'KI_PostOP_Prozent',
             'Anzahl_PraeOP_Aufnahmen', 'Anzahl_PostOP_Aufnahmen',
             'Erstellt_am',
         ])
@@ -430,10 +428,6 @@ def export_patients_zip(patient_ids: list | None = None) -> bytes:
                 patient.get_status_display(),
                 _format_date(patient.pre_op_date),
                 _format_date(patient.post_op_date),
-                patient.prediction_pre,
-                patient.ai_percentage_rp_pre,
-                patient.prediction_post,
-                patient.ai_percentage_rp_post,
                 pre_count,
                 post_count,
                 _format_date(patient.created_at),
