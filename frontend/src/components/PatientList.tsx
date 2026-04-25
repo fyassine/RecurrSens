@@ -185,7 +185,7 @@ export default function PatientList({
       </Stack>
 
       {/* Table */}
-      <TableContainer component={Paper} elevation={1}>
+      <TableContainer component={Paper} elevation={1} sx={{ overflowX: 'auto' }}>
         <Box sx={{ px: 3, py: 2, borderBottom: '1px solid', borderColor: 'divider' }}>
           <Typography variant="subtitle1" fontWeight={600}>
             Aktive Patienten ({sorted.length})

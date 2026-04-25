@@ -529,10 +529,19 @@ class ExportView(APIView):
         try:
             zip_bytes = services.export_patients_zip(patient_ids=patient_ids)
             today = datetime.now().strftime('%Y-%m-%d')
+
+            if patient_ids and len(patient_ids) == 1:
+                try:
+                    pid = Patient.objects.get(id=patient_ids[0]).patient_id
+                    filename = f'{pid}_export_{today}.zip'
+                except Patient.DoesNotExist:
+                    filename = f'patienten_export_{today}.zip'
+            else:
+                filename = f'patienten_export_{today}.zip'
+
             response = HttpResponse(zip_bytes, content_type='application/zip')
-            response['Content-Disposition'] = (
-                f'attachment; filename="patienten_export_{today}.zip"'
-            )
+            response['Content-Disposition'] = f'attachment; filename="{filename}"'
+            response['X-Export-Filename'] = filename
             return response
         except Exception as e:
             logger.error(f'Export failed: {e}')

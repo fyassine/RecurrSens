@@ -57,7 +57,12 @@ export default function DashboardPage() {
       <AppBar position="static" elevation={1}>
         <Toolbar>
           <Typography variant="h6" sx={{ flexGrow: 1 }}>
-            RecurrSens — Dashboard
+            <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
+              RecurrSens — Dashboard
+            </Box>
+            <Box component="span" sx={{ display: { xs: 'inline', sm: 'none' } }}>
+              RecurrSens
+            </Box>
           </Typography>
           <Button color="inherit" startIcon={<LogoutIcon />} onClick={handleLogout}>
             Abmelden
@@ -66,11 +71,11 @@ export default function DashboardPage() {
       </AppBar>
 
       <Box sx={{ px: { xs: 2, md: 3 }, py: 3 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: { xs: 'flex-start', sm: 'center' }, flexWrap: 'wrap', gap: 2, mb: 3 }}>
           <Typography variant="h5" fontWeight={600}>
             Patienten
           </Typography>
-          <Box sx={{ display: 'flex', gap: 2 }}>
+          <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 2 }}>
             <Button
               variant="outlined"
               startIcon={<DownloadIcon />}
