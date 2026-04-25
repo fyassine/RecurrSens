@@ -20,6 +20,7 @@ import {
   Typography,
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import DownloadIcon from '@mui/icons-material/Download';
 import EditIcon from '@mui/icons-material/Edit';
 import PersonIcon from '@mui/icons-material/Person';
 import AudioFileIcon from '@mui/icons-material/AudioFile';
@@ -34,6 +35,7 @@ import {
   uploadAudio,
   getExercises,
   advancePublicPatient,
+  exportPatients,
 } from '../api/client';
 import { StatusBadge } from '../components/Badges';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -130,8 +132,18 @@ function PatientInfoCard({
 }) {
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   const [pid, setPid] = useState(patient.patient_id);
   const [completeOpen, setCompleteOpen] = useState(false);
+
+  const handleDownload = async () => {
+    setDownloading(true);
+    try {
+      await exportPatients([patient.id]);
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   const handleSave = async () => {
     setSaving(true);
@@ -158,9 +170,14 @@ function PatientInfoCard({
         avatar={<PersonIcon color="primary" />}
         title="Patienten Details"
         action={
-          <IconButton onClick={() => setEditing(!editing)}>
-            <EditIcon />
-          </IconButton>
+          <Box sx={{ display: 'flex' }}>
+            <IconButton onClick={handleDownload} disabled={downloading} title="ZIP herunterladen">
+              {downloading ? <CircularProgress size={20} /> : <DownloadIcon />}
+            </IconButton>
+            <IconButton onClick={() => setEditing(!editing)}>
+              <EditIcon />
+            </IconButton>
+          </Box>
         }
       />
       <CardContent>

@@ -143,6 +143,7 @@ CORS_ALLOWED_ORIGINS = config(
     cast=Csv(),
 )
 CORS_ALLOW_CREDENTIALS = True
+CORS_EXPOSE_HEADERS = ['X-Export-Filename']
 
 # ==============================================================================
 # CSRF

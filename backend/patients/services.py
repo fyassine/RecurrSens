@@ -10,6 +10,7 @@ Ported from the deprecated Next.js app (lib/api.ts):
 import io
 import csv
 import logging
+import os
 import zipfile
 from datetime import date, datetime
 from typing import Optional
@@ -384,68 +385,83 @@ def _format_date(dt) -> str:
 def export_patients_zip(patient_ids: list | None = None) -> bytes:
     """
     Export patients as a ZIP containing:
-    - export.csv: Tabular data (one row per recording session)
-    - data/: Audio files organized by patient token, phase, and session
+    - metadata.csv: One row per patient with patient-level metadata
+    - {patient_id}/prae_op/: Pre-op audio files
+    - {patient_id}/post_op_{n}/: Post-op audio files per session
 
     Args:
         patient_ids: Optional list of UUID strings. When provided, exports those
                      specific patients (any status, non-deleted). When None,
-                     exports all completed non-deleted patients.
+                     exports all non-deleted patients regardless of status.
 
     Returns ZIP file as bytes.
     """
     zip_buffer = io.BytesIO()
 
     with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
-        # Build CSV
+        if patient_ids is not None:
+            patients = Patient.objects.filter(
+                id__in=patient_ids,
+                deleted_at__isnull=True,
+            ).prefetch_related('audio_files__session', 'sessions')
+        else:
+            patients = Patient.objects.filter(
+                deleted_at__isnull=True,
+            ).prefetch_related('audio_files__session', 'sessions')
+
+        # Build metadata CSV (one row per patient)
         csv_buffer = io.StringIO()
         writer = csv.writer(csv_buffer)
         writer.writerow([
-            'AufnahmeID', 'AufnahmeTyp', 'SessionNr', 'AufnahmeDatum',
-            'SprecherID',
+            'PatientenID', 'Status', 'PraeOP_Datum', 'PostOP_Datum',
+            'KI_PraeOP', 'KI_PraeOP_Prozent',
+            'KI_PostOP', 'KI_PostOP_Prozent',
+            'Anzahl_PraeOP_Aufnahmen', 'Anzahl_PostOP_Aufnahmen',
+            'Erstellt_am',
         ])
 
-        if patient_ids is not None:
-            completed = Patient.objects.filter(
-                id__in=patient_ids,
-                deleted_at__isnull=True,
-            ).prefetch_related('audio_files', 'sessions')
-        else:
-            completed = Patient.objects.filter(
-                status=Patient.Status.COMPLETED,
-                deleted_at__isnull=True,
-            ).prefetch_related('audio_files', 'sessions')
-
-        for patient in completed:
-            for session in patient.sessions.all():
-                phase_label = 'pre' if session.phase == 'PRE_OP' else 'post'
-                op_date = patient.pre_op_date if session.phase == 'PRE_OP' else patient.post_op_date
-                writer.writerow([
-                    f'{patient.id}/{phase_label}_{session.session_number}',
-                    'h',
-                    session.session_number,
-                    _format_date(op_date),
-                    patient.patient_id,
-                ])
-
-        zf.writestr('export.csv', csv_buffer.getvalue())
-
-        # Add audio files
         s3 = get_s3_client()
-        for patient in completed:
-            for audio_file in patient.audio_files.all():
+        for patient in patients:
+            audio_files = list(patient.audio_files.all())
+            pre_count = sum(1 for f in audio_files if f.phase == 'PRE_OP')
+            post_count = sum(1 for f in audio_files if f.phase == 'POST_OP')
+            writer.writerow([
+                patient.patient_id,
+                patient.get_status_display(),
+                _format_date(patient.pre_op_date),
+                _format_date(patient.post_op_date),
+                patient.prediction_pre,
+                patient.ai_percentage_rp_pre,
+                patient.prediction_post,
+                patient.ai_percentage_rp_post,
+                pre_count,
+                post_count,
+                _format_date(patient.created_at),
+            ])
+
+            # Add audio files under per-patient directories
+            for audio_file in audio_files:
+                _, ext = os.path.splitext(audio_file.storage_key)
+                if audio_file.phase == 'PRE_OP':
+                    subdir = 'prae_op'
+                elif audio_file.session_id is not None:
+                    subdir = f'post_op_{audio_file.session.session_number}'
+                else:
+                    subdir = 'post_op'
+                zip_path = f'{patient.patient_id}/{subdir}/{audio_file.exercise_id}{ext}'
                 try:
                     response = s3.get_object(
                         Bucket=settings.S3_BUCKET,
                         Key=audio_file.storage_key,
                     )
-                    data = response['Body'].read()
-                    zf.writestr(f'data/{audio_file.storage_key}', data)
+                    zf.writestr(zip_path, response['Body'].read())
                 except Exception as e:
                     logger.error(
                         f'Failed to fetch audio {audio_file.storage_key} '
                         f'for patient {patient.patient_id}: {e}'
                     )
+
+        zf.writestr('metadata.csv', csv_buffer.getvalue())
 
     zip_buffer.seek(0)
     return zip_buffer.read()
