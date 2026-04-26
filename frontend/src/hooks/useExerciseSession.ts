@@ -6,7 +6,11 @@ import type { Exercise } from '../types';
 const THRESHOLDS = { MIN_DBFS: -30, MAX_DBFS: -6 };
 const LOW_QUALITY_MESSAGE = 'Die Aufnahme ist zu leise. Bitte sprechen Sie lauter oder näher am Mikrofon.';
 
-export function useExerciseSession(token: string, onComplete: () => void) {
+export function useExerciseSession(
+  token: string,
+  onComplete: () => void,
+  completedExerciseIds: string[] = [],
+) {
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [currentBlob, setCurrentBlob] = useState<Blob | null>(null);
@@ -17,8 +21,14 @@ export function useExerciseSession(token: string, onComplete: () => void) {
   useEffect(() => {
     getExercises().then((data) => {
       setExercises(data);
+      const firstIncomplete = data.findIndex(
+        (ex) => !completedExerciseIds.includes(ex.exercise_id)
+      );
+      setCurrentIndex(firstIncomplete >= 0 ? firstIncomplete : 0);
       setIsLoading(false);
     });
+  // completedExerciseIds is stable (set once from the API response on page load)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleRecordingComplete = async (blob: Blob) => {
