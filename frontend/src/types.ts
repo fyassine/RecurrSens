@@ -32,8 +32,8 @@ export interface PatientDetail extends Patient {
 export interface PatientPublic {
   status: PatientStatus;
   patient_id: string;
-  audio_file_ids_pre: string[];
-  audio_file_ids_post: string[];
+  completed_exercise_ids_pre: string[];
+  completed_exercise_ids_post: string[];
   created_at: string;
 }
 

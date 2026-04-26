@@ -135,28 +135,28 @@ class PatientPublicSerializer(serializers.ModelSerializer):
     Patient-facing serializer. Omits sensitive AI internals and admin-only fields.
     Used by the patient wizard (accessed via UUID token in URL).
     """
-    audio_file_ids_pre = serializers.SerializerMethodField()
-    audio_file_ids_post = serializers.SerializerMethodField()
+    completed_exercise_ids_pre = serializers.SerializerMethodField()
+    completed_exercise_ids_post = serializers.SerializerMethodField()
 
     class Meta:
         model = Patient
         fields = [
             'status', 'patient_id',
-            'audio_file_ids_pre', 'audio_file_ids_post',
+            'completed_exercise_ids_pre', 'completed_exercise_ids_post',
             'created_at',
         ]
         read_only_fields = fields
 
-    def get_audio_file_ids_pre(self, obj):
+    def get_completed_exercise_ids_pre(self, obj):
         return list(
             obj.audio_files.filter(phase='PRE_OP')
-            .values_list('id', flat=True)
+            .values_list('exercise_id', flat=True)
         )
 
-    def get_audio_file_ids_post(self, obj):
+    def get_completed_exercise_ids_post(self, obj):
         return list(
             obj.audio_files.filter(phase='POST_OP')
-            .values_list('id', flat=True)
+            .values_list('exercise_id', flat=True)
         )
 
 

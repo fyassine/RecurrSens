@@ -13,6 +13,7 @@ export default function PatientWizardPage() {
   const [status, setStatus] = useState<PatientStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [completedExerciseIds, setCompletedExerciseIds] = useState<string[]>([]);
 
   // Pre-warmed mic stream, acquired on the LandingScreen's "Start" click.
   // Kept alive across exercises so every record-press is instant (no getUserMedia).
@@ -24,6 +25,11 @@ export default function PatientWizardPage() {
     getPublicPatient(token)
       .then((data) => {
         setStatus(data.status);
+        if (data.status === 'CONSENT_GIVEN') {
+          setCompletedExerciseIds(data.completed_exercise_ids_pre);
+        } else if (data.status === 'POST_OP_STARTED') {
+          setCompletedExerciseIds(data.completed_exercise_ids_post);
+        }
       })
       .catch(() => setError('Patient nicht gefunden.'))
       .finally(() => setLoading(false));
@@ -69,6 +75,7 @@ export default function PatientWizardPage() {
             token={token}
             phase="PRE_OP"
             micStream={micStream}
+            completedExerciseIds={completedExerciseIds}
             onComplete={() => setStatus('PRE_OP_DONE')}
           />
         );
@@ -82,6 +89,7 @@ export default function PatientWizardPage() {
             token={token}
             phase="POST_OP"
             micStream={micStream}
+            completedExerciseIds={completedExerciseIds}
             onComplete={() => setStatus('POST_OP_DONE')}
           />
         );

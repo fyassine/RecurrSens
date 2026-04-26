@@ -16,11 +16,13 @@ export default function RecordingScreen({
   token,
   phase,
   micStream,
+  completedExerciseIds = [],
   onComplete,
 }: {
   token: string;
   phase: 'PRE_OP' | 'POST_OP';
   micStream?: MediaStream | null;
+  completedExerciseIds?: string[];
   onComplete: () => void;
 }) {
   const {
@@ -35,7 +37,7 @@ export default function RecordingScreen({
     handleNext,
     isLoading,
     isUploading,
-  } = useExerciseSession(token, onComplete);
+  } = useExerciseSession(token, onComplete, completedExerciseIds);
 
   if (isLoading) {
     return (
