@@ -58,7 +58,7 @@ services:
       INFERENCE_SERVICE_URL: ${INFERENCE_SERVICE_URL:-http://inference:8001}
       APP_URL: ${APP_URL:-https://staging.recurrsens.eu}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://staging.recurrsens.eu}
-    depends_on: []             # No local dependencies; infra is external
+    depends_on: !reset {}      # Clear inherited depends_on (db/minio/redis)
     networks:
       - default
       - recurrsens_default     # Join production's network for db/redis/minio access
@@ -86,7 +86,7 @@ services:
       S3_BUCKET: ${S3_BUCKET:-stimmbandlaesion-staging}
       CELERY_BROKER_URL: redis://recurrsens-redis-1:6379/1
       INFERENCE_SERVICE_URL: ${INFERENCE_SERVICE_URL:-http://inference:8001}
-    depends_on: []
+    depends_on: !reset {}      # Clear inherited depends_on (db/redis)
     networks:
       - default
       - recurrsens_default
