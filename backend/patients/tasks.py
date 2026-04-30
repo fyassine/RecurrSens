@@ -185,6 +185,17 @@ def check_data_expiry():
     if count:
         logger.info(f'Marked {count} patient(s) as EXPIRED')
 
+    # --- Pass 3: auto-delete expired patients that have been downloaded ---
+    from .services import delete_patient_with_files
+    to_delete = Patient.objects.filter(
+        expires_at__lte=now,
+        last_exported_at__isnull=False,
+        deleted_at__isnull=True,
+    )
+    for patient in to_delete:
+        delete_patient_with_files(patient)
+        logger.info(f'Auto-deleted patient {patient.patient_id} (expired + downloaded)')
+
 
 @shared_task
 def send_session_email(patient_id: str, session_id: str):

@@ -419,6 +419,7 @@ def export_patients_zip(patient_ids: list | None = None) -> bytes:
         ])
 
         s3 = get_s3_client()
+        export_time = timezone.now()
         for patient in patients:
             audio_files = list(patient.audio_files.all())
             pre_count = sum(1 for f in audio_files if f.phase == 'PRE_OP')
@@ -454,6 +455,9 @@ def export_patients_zip(patient_ids: list | None = None) -> bytes:
                         f'Failed to fetch audio {audio_file.storage_key} '
                         f'for patient {patient.patient_id}: {e}'
                     )
+
+            patient.last_exported_at = export_time
+            patient.save(update_fields=['last_exported_at'])
 
         zf.writestr('metadata.csv', csv_buffer.getvalue())
 

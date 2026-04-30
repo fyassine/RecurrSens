@@ -159,6 +159,13 @@ class Patient(models.Model):
         help_text='Zeitpunkt der Soft-Löschung (Audiodaten entfernt, Metadaten bleiben)'
     )
 
+    # Download tracking (used as deletion gate)
+    last_exported_at = models.DateTimeField(
+        null=True, blank=True,
+        verbose_name='Zuletzt exportiert am',
+        help_text='Zeitpunkt des letzten ZIP-Exports; Pflichtbedingung für automatische Löschung'
+    )
+
     class Meta:
         ordering = ['-created_at']
         verbose_name = 'Patient'
@@ -182,6 +189,11 @@ class Patient(models.Model):
     def is_deleted(self) -> bool:
         """True if this patient has been soft-deleted."""
         return self.deleted_at is not None
+
+    @property
+    def has_been_downloaded(self) -> bool:
+        """True if audio data was exported at least once."""
+        return self.last_exported_at is not None
 
 
 class RecordingSession(models.Model):
