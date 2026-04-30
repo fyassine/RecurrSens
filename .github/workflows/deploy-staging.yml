@@ -136,7 +136,7 @@ jobs:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          source: "docker-compose.yml,docker-compose.staging.yml"
+          source: "docker-compose.staging.yml"
           target: ~/recurrsens-staging
 
       - name: Write .env.staging on VPS
@@ -196,16 +196,16 @@ jobs:
 
             echo "=== Pulling staging images ==="
             echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.repository_owner }} --password-stdin
-            docker compose -p recurrsens-staging -f docker-compose.yml -f docker-compose.staging.yml pull
+            docker compose -p recurrsens-staging -f docker-compose.staging.yml pull
 
             echo "=== Starting staging containers ==="
-            docker compose -p recurrsens-staging -f docker-compose.yml -f docker-compose.staging.yml up -d
+            docker compose -p recurrsens-staging -f docker-compose.staging.yml up -d
 
             echo "=== Running migrations on staging DB ==="
-            docker compose -p recurrsens-staging -f docker-compose.yml -f docker-compose.staging.yml exec -T backend python manage.py migrate --noinput
+            docker compose -p recurrsens-staging -f docker-compose.staging.yml exec -T backend python manage.py migrate --noinput
 
             echo "=== Collecting static files ==="
-            docker compose -p recurrsens-staging -f docker-compose.yml -f docker-compose.staging.yml exec -T backend python manage.py collectstatic --noinput
+            docker compose -p recurrsens-staging -f docker-compose.staging.yml exec -T backend python manage.py collectstatic --noinput
 
             echo "=== Pruning old images ==="
             docker image prune -f
@@ -215,7 +215,7 @@ jobs:
 
             echo "=== Staging health check ==="
             sleep 10
-            docker compose -p recurrsens-staging -f docker-compose.yml -f docker-compose.staging.yml ps --format "table {{.Name}}\t{{.Status}}"
+            docker compose -p recurrsens-staging -f docker-compose.staging.yml ps --format "table {{.Name}}\t{{.Status}}"
 
             echo "=== Deploy info ==="
             echo "Branch: ${{ github.event.inputs.branch || github.ref_name }}"
