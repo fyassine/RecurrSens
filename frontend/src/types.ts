@@ -34,6 +34,10 @@ export interface PatientPublic {
   patient_id: string;
   completed_exercise_ids_pre: string[];
   completed_exercise_ids_post: string[];
+  skipped_exercise_ids_pre: string[];
+  skipped_exercise_ids_post: string[];
+  feedback_submitted_pre: boolean;
+  feedback_submitted_post: boolean;
   created_at: string;
 }
 

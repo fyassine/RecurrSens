@@ -164,6 +164,32 @@ export async function uploadAudio(
   await publicApi.post(`/p/${token}/audio/upload/`, formData);
 }
 
+export type FeedbackPayload = {
+  phase: 'PRE_OP' | 'POST_OP';
+  rating?: number | null;
+  comment?: string;
+  skipped?: boolean;
+};
+
+export async function submitFeedback(
+  token: string,
+  payload: FeedbackPayload,
+): Promise<void> {
+  await publicApi.post(`/p/${token}/feedback/`, payload);
+}
+
+export type ExerciseSkipPayload = {
+  phase: 'PRE_OP' | 'POST_OP';
+  exercise_id: string;
+};
+
+export async function skipExercise(
+  token: string,
+  payload: ExerciseSkipPayload,
+): Promise<void> {
+  await publicApi.post(`/p/${token}/skips/`, payload);
+}
+
 // ---------------------------------------------------------------------------
 // Audio
 // ---------------------------------------------------------------------------

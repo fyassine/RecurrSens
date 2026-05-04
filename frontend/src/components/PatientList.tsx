@@ -52,6 +52,7 @@ export default function PatientList({
   const [predictionFilter, setPredictionFilter] = useState<string>('ALL');
   const [orderBy, setOrderBy] = useState<SortKey>('created_at');
   const [order, setOrder] = useState<Order>('desc');
+  const warningThresholdMs = useMemo(() => Date.now() + 86400000, []);
 
   // Dialogs
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -245,7 +246,11 @@ export default function PatientList({
                 </TableCell>
                 <TableCell
                   sx={{
-                    color: p.status === 'EXPIRED' ? 'error.main' : new Date(p.expires_at) <= new Date(Date.now() + 86400000) ? 'warning.main' : 'text.primary',
+                    color: p.status === 'EXPIRED'
+                      ? 'error.main'
+                      : new Date(p.expires_at).getTime() <= warningThresholdMs
+                        ? 'warning.main'
+                        : 'text.primary',
                     fontWeight: p.status === 'EXPIRED' ? 600 : 400,
                   }}
                 >

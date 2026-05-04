@@ -7,13 +7,21 @@ import LandingScreen from '../components/wizard/LandingScreen';
 import RecordingScreen from '../components/wizard/RecordingScreen';
 import WaitingScreen from '../components/wizard/WaitingScreen';
 import CompletedScreen from '../components/wizard/CompletedScreen';
+import FeedbackScreen from '../components/wizard/FeedbackScreen';
+
+type LocalStatus = PatientStatus | 'PRE_OP_FEEDBACK' | 'POST_OP_FEEDBACK';
 
 export default function PatientWizardPage() {
   const { token } = useParams<{ token: string }>();
-  const [status, setStatus] = useState<PatientStatus | null>(null);
+  const [status, setStatus] = useState<LocalStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [completedExerciseIds, setCompletedExerciseIds] = useState<string[]>([]);
+  const [completedExerciseIdsPre, setCompletedExerciseIdsPre] = useState<string[]>([]);
+  const [completedExerciseIdsPost, setCompletedExerciseIdsPost] = useState<string[]>([]);
+  const [skippedExerciseIdsPre, setSkippedExerciseIdsPre] = useState<string[]>([]);
+  const [skippedExerciseIdsPost, setSkippedExerciseIdsPost] = useState<string[]>([]);
+  const [feedbackSubmittedPre, setFeedbackSubmittedPre] = useState(false);
+  const [feedbackSubmittedPost, setFeedbackSubmittedPost] = useState(false);
 
   // Pre-warmed mic stream, acquired on the LandingScreen's "Start" click.
   // Kept alive across exercises so every record-press is instant (no getUserMedia).
@@ -24,11 +32,22 @@ export default function PatientWizardPage() {
     if (!token) return;
     getPublicPatient(token)
       .then((data) => {
-        setStatus(data.status);
-        if (data.status === 'CONSENT_GIVEN') {
-          setCompletedExerciseIds(data.completed_exercise_ids_pre);
-        } else if (data.status === 'POST_OP_STARTED') {
-          setCompletedExerciseIds(data.completed_exercise_ids_post);
+        setCompletedExerciseIdsPre(data.completed_exercise_ids_pre);
+        setCompletedExerciseIdsPost(data.completed_exercise_ids_post);
+        setSkippedExerciseIdsPre(data.skipped_exercise_ids_pre);
+        setSkippedExerciseIdsPost(data.skipped_exercise_ids_post);
+        setFeedbackSubmittedPre(data.feedback_submitted_pre);
+        setFeedbackSubmittedPost(data.feedback_submitted_post);
+
+        if (data.status === 'PRE_OP_DONE' && !data.feedback_submitted_pre) {
+          setStatus('PRE_OP_FEEDBACK');
+        } else if (
+          (data.status === 'POST_OP_DONE' || data.status === 'COMPLETED')
+          && !data.feedback_submitted_post
+        ) {
+          setStatus('POST_OP_FEEDBACK');
+        } else {
+          setStatus(data.status);
         }
       })
       .catch(() => setError('Patient nicht gefunden.'))
@@ -65,6 +84,9 @@ export default function PatientWizardPage() {
   }
 
   const renderScreen = () => {
+    const preOpCompletedIds = [...completedExerciseIdsPre, ...skippedExerciseIdsPre];
+    const postOpCompletedIds = [...completedExerciseIdsPost, ...skippedExerciseIdsPost];
+
     switch (status) {
       case 'NEW':
         return <LandingScreen token={token} onStart={handleLandingStart} />;
@@ -75,8 +97,22 @@ export default function PatientWizardPage() {
             token={token}
             phase="PRE_OP"
             micStream={micStream}
-            completedExerciseIds={completedExerciseIds}
-            onComplete={() => setStatus('PRE_OP_DONE')}
+            completedExerciseIds={preOpCompletedIds}
+            onComplete={() =>
+              setStatus(feedbackSubmittedPre ? 'PRE_OP_DONE' : 'PRE_OP_FEEDBACK')
+            }
+          />
+        );
+
+      case 'PRE_OP_FEEDBACK':
+        return (
+          <FeedbackScreen
+            token={token}
+            phase="PRE_OP"
+            onComplete={() => {
+              setFeedbackSubmittedPre(true);
+              setStatus('PRE_OP_DONE');
+            }}
           />
         );
 
@@ -89,8 +125,22 @@ export default function PatientWizardPage() {
             token={token}
             phase="POST_OP"
             micStream={micStream}
-            completedExerciseIds={completedExerciseIds}
-            onComplete={() => setStatus('POST_OP_DONE')}
+            completedExerciseIds={postOpCompletedIds}
+            onComplete={() =>
+              setStatus(feedbackSubmittedPost ? 'POST_OP_DONE' : 'POST_OP_FEEDBACK')
+            }
+          />
+        );
+
+      case 'POST_OP_FEEDBACK':
+        return (
+          <FeedbackScreen
+            token={token}
+            phase="POST_OP"
+            onComplete={() => {
+              setFeedbackSubmittedPost(true);
+              setStatus('POST_OP_DONE');
+            }}
           />
         );
 

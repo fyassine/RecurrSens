@@ -38,6 +38,16 @@ urlpatterns = [
         name='patient-public-advance',
     ),
     path(
+        'p/<uuid:token>/feedback/',
+        views.PatientFeedbackView.as_view(),
+        name='patient-feedback',
+    ),
+    path(
+        'p/<uuid:token>/skips/',
+        views.ExerciseSkipView.as_view(),
+        name='exercise-skip',
+    ),
+    path(
         'p/<uuid:token>/audio/upload/',
         views.AudioUploadView.as_view(),
         name='audio-upload',

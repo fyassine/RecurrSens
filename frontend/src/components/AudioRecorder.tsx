@@ -77,7 +77,7 @@ export default function AudioRecorder({
       cleanupRecording();
       if (playbackAudioRef.current) playbackAudioRef.current.pause();
     };
-  }, []); // stable: cleanupRecording identity doesn't matter for unmount
+  }, [cleanupRecording]);
 
   // ---- Example playback ----
   const playExample = () => {
@@ -168,14 +168,20 @@ export default function AudioRecorder({
       recordingTimerRef.current = setInterval(() => {
         setRecordingDuration((Date.now() - recordingStartTimeRef.current) / 1000);
       }, 100);
-    } catch (err: any) {
+    } catch (err: unknown) {
       isStartingRef.current = false;
       cleanupRecording();
 
       let message = 'Mikrofon konnte nicht gefunden werden. Bitte stellen Sie sicher, dass ein Mikrofon angeschlossen ist.';
+      const errName =
+        err instanceof Error
+          ? err.name
+          : typeof err === 'object' && err && 'name' in err
+            ? String((err as { name?: unknown }).name)
+            : undefined;
       if (!window.isSecureContext) {
         message = 'Mikrofon erfordert eine sichere Verbindung (HTTPS). Bitte verwenden Sie https://recurrsens.eu';
-      } else if (err?.name === 'NotAllowedError') {
+      } else if (errName === 'NotAllowedError') {
         message = 'Zugriff auf das Mikrofon wurde verweigert. Bitte erlauben Sie den Zugriff in den Browser-Einstellungen.';
       }
 
@@ -227,12 +233,12 @@ export default function AudioRecorder({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isRecording, externalStream]);
 
-  const handlePointerUp = useCallback((_e: React.PointerEvent<HTMLButtonElement>) => {
+  const handlePointerUp = useCallback(() => {
     capturedPointerIdRef.current = null;
     stopRecording();
   }, [stopRecording]);
 
-  const handlePointerCancel = useCallback((_e: React.PointerEvent<HTMLButtonElement>) => {
+  const handlePointerCancel = useCallback(() => {
     // Pointer was interrupted (e.g. incoming call, OS gesture, etc.)
     capturedPointerIdRef.current = null;
     stopRecording();

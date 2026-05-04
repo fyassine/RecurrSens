@@ -4,7 +4,7 @@ Provides a rich admin interface for managing patients, audio files, exercises, a
 """
 from django.contrib import admin
 from django.utils import timezone
-from .models import Patient, AudioFile, Exercise, RecordingSession
+from .models import Patient, AudioFile, Exercise, RecordingSession, PatientFeedback, ExerciseSkip
 from . import services
 
 
@@ -131,6 +131,28 @@ class ExerciseAdmin(admin.ModelAdmin):
     list_filter = ('is_active',)
     list_editable = ('order', 'is_active')
     ordering = ('order',)
+
+
+@admin.register(PatientFeedback)
+class PatientFeedbackAdmin(admin.ModelAdmin):
+    """Admin configuration for patient feedback entries."""
+    list_display = ('patient', 'phase', 'rating', 'skipped', 'created_at')
+    list_filter = ('phase', 'skipped')
+    search_fields = ('patient__patient_id',)
+    readonly_fields = ('id', 'created_at', 'updated_at')
+    ordering = ('-created_at',)
+    raw_id_fields = ('patient',)
+
+
+@admin.register(ExerciseSkip)
+class ExerciseSkipAdmin(admin.ModelAdmin):
+    """Admin configuration for skipped exercises."""
+    list_display = ('patient', 'phase', 'exercise_id', 'created_at')
+    list_filter = ('phase',)
+    search_fields = ('patient__patient_id', 'exercise_id')
+    readonly_fields = ('id', 'created_at')
+    ordering = ('-created_at',)
+    raw_id_fields = ('patient',)
 
 
 # Customize admin site branding

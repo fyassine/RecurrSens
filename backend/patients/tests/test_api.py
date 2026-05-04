@@ -7,7 +7,7 @@ from django.contrib.auth.models import User
 from rest_framework.test import APIClient
 from rest_framework import status
 
-from patients.models import Patient, AudioFile, Exercise, RecordingSession
+from patients.models import Patient, AudioFile, Exercise, RecordingSession, PatientFeedback, ExerciseSkip
 
 
 class BaseAPITest(TestCase):
@@ -212,6 +212,28 @@ class CompletenessTest(BaseAPITest):
         self.assertTrue(response.data['complete'])
         self.assertEqual(len(response.data['missing']), 0)
 
+    def test_complete_patient_with_skips(self):
+        patient = self.create_test_patient('CMP-003')
+
+        # Create audio files for only one exercise per phase
+        AudioFile.objects.create(
+            patient=patient, exercise_id='a_n',
+            phase='PRE_OP', storage_key=f'{patient.id}/pre/a_n.webm',
+        )
+        AudioFile.objects.create(
+            patient=patient, exercise_id='a_n',
+            phase='POST_OP', storage_key=f'{patient.id}/post/a_n.webm',
+        )
+
+        # Skip the remaining exercise
+        ExerciseSkip.objects.create(patient=patient, phase='PRE_OP', exercise_id='i_n')
+        ExerciseSkip.objects.create(patient=patient, phase='POST_OP', exercise_id='i_n')
+
+        response = self.client.get(f'/api/patients/{patient.id}/completeness/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data['complete'])
+        self.assertEqual(len(response.data['missing']), 0)
+
 
 class PatientPublicTest(BaseAPITest):
     """Tests for patient-facing (UUID token) endpoints."""
@@ -241,6 +263,46 @@ class PatientPublicTest(BaseAPITest):
         response = client.post(f'/api/p/{patient.id}/advance/')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data['status'], 'CONSENT_GIVEN')
+
+    def test_submit_feedback(self):
+        patient = self.create_test_patient('PUB-004')
+        client = APIClient()
+        response = client.post(f'/api/p/{patient.id}/feedback/', {
+            'phase': 'PRE_OP',
+            'rating': 4,
+            'comment': 'Alles klar',
+        })
+        self.assertIn(response.status_code, [status.HTTP_200_OK, status.HTTP_201_CREATED])
+        self.assertEqual(PatientFeedback.objects.filter(patient=patient, phase='PRE_OP').count(), 1)
+
+        # GET should indicate feedback exists
+        response = client.get(f'/api/p/{patient.id}/feedback/?phase=PRE_OP')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data['exists'])
+
+    def test_submit_feedback_skip(self):
+        patient = self.create_test_patient('PUB-005')
+        client = APIClient()
+        response = client.post(f'/api/p/{patient.id}/feedback/', {
+            'phase': 'POST_OP',
+            'skipped': True,
+        })
+        self.assertIn(response.status_code, [status.HTTP_200_OK, status.HTTP_201_CREATED])
+        feedback = PatientFeedback.objects.get(patient=patient, phase='POST_OP')
+        self.assertTrue(feedback.skipped)
+
+    def test_skip_exercise(self):
+        patient = self.create_test_patient('PUB-006')
+        client = APIClient()
+        response = client.post(f'/api/p/{patient.id}/skips/', {
+            'phase': 'PRE_OP',
+            'exercise_id': 'a_n',
+        })
+        self.assertIn(response.status_code, [status.HTTP_200_OK, status.HTTP_201_CREATED])
+        self.assertEqual(
+            ExerciseSkip.objects.filter(patient=patient, phase='PRE_OP', exercise_id='a_n').count(),
+            1,
+        )
 
 
 class ExerciseListTest(BaseAPITest):
