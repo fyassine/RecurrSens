@@ -65,6 +65,7 @@ export function useExerciseSession(
   const handleRecordingReset = () => {
     setCurrentBlob(null);
     setAudioQualityError(null);
+    setSkipError(null);
   };
 
   const getNextIncompleteIndex = (startIndex: number, completedSet: Set<string>) => {
