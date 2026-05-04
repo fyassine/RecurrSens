@@ -144,7 +144,7 @@ export default function FeedbackScreen({
             onChange={(event) => setComment(event.target.value)}
             multiline
             minRows={3}
-            placeholder="Optional"
+            InputLabelProps={{ shrink: true }}
           />
         )}
 
