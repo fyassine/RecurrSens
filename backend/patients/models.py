@@ -10,6 +10,7 @@ Models:
 import uuid
 from datetime import timedelta
 from django.db import models
+from django.core.validators import MinValueValidator, MaxValueValidator
 from django.utils import timezone
 from django.conf import settings
 
@@ -278,3 +279,67 @@ class AudioFile(models.Model):
 
     def __str__(self):
         return f'{self.get_phase_display()} - {self.exercise_id} ({self.patient.patient_id})'
+
+
+class PatientFeedback(models.Model):
+    """Patient feedback per phase (optional rating/comment, skippable)."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    patient = models.ForeignKey(
+        Patient, on_delete=models.CASCADE, related_name='feedback_entries',
+        verbose_name='Patient'
+    )
+    phase = models.CharField(
+        max_length=10, choices=RecordingSession.Phase.choices,
+        verbose_name='Phase'
+    )
+    rating = models.PositiveSmallIntegerField(
+        null=True, blank=True,
+        validators=[MinValueValidator(1), MaxValueValidator(5)],
+        verbose_name='Bewertung (1-5)'
+    )
+    comment = models.TextField(blank=True, default='', verbose_name='Kommentar')
+    skipped = models.BooleanField(default=False, verbose_name='Übersprungen')
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Erstellt am')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='Aktualisiert am')
+
+    class Meta:
+        unique_together = [('patient', 'phase')]
+        ordering = ['-created_at']
+        verbose_name = 'Feedback'
+        verbose_name_plural = 'Feedback'
+
+    def __str__(self):
+        return f'Feedback {self.get_phase_display()} ({self.patient.patient_id})'
+
+
+class ExerciseSkip(models.Model):
+    """Tracks skipped exercises per patient and phase."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    patient = models.ForeignKey(
+        Patient, on_delete=models.CASCADE, related_name='exercise_skips',
+        verbose_name='Patient'
+    )
+    phase = models.CharField(
+        max_length=10, choices=RecordingSession.Phase.choices,
+        verbose_name='Phase'
+    )
+    exercise_id = models.CharField(
+        max_length=50,
+        verbose_name='Übungs-ID',
+        help_text='References Exercise.exercise_id'
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Erstellt am')
+
+    class Meta:
+        unique_together = [('patient', 'phase', 'exercise_id')]
+        ordering = ['-created_at']
+        verbose_name = 'Übung übersprungen'
+        verbose_name_plural = 'Übungen übersprungen'
+
+    def __str__(self):
+        return (
+            f'{self.get_phase_display()} - {self.exercise_id} '
+            f'({self.patient.patient_id})'
+        )

@@ -7,7 +7,7 @@ Provides different serializer variants depending on the consumer:
 - Create/update operations get dedicated serializers with validation
 """
 from rest_framework import serializers
-from .models import Patient, AudioFile, Exercise, RecordingSession
+from .models import Patient, AudioFile, Exercise, RecordingSession, PatientFeedback, ExerciseSkip
 
 
 # =============================================================================
@@ -59,6 +59,58 @@ class AudioFileCompactSerializer(serializers.ModelSerializer):
         model = AudioFile
         fields = ['id', 'exercise_id', 'phase', 'session', 'created_at']
         read_only_fields = fields
+
+
+# =============================================================================
+# Feedback & Skips
+# =============================================================================
+
+class PatientFeedbackSerializer(serializers.ModelSerializer):
+    """Read-only serializer for patient feedback entries."""
+
+    class Meta:
+        model = PatientFeedback
+        fields = ['id', 'phase', 'rating', 'comment', 'skipped', 'created_at', 'updated_at']
+        read_only_fields = fields
+
+
+class PatientFeedbackCreateSerializer(serializers.ModelSerializer):
+    """Serializer for creating/updating patient feedback."""
+
+    class Meta:
+        model = PatientFeedback
+        fields = ['phase', 'rating', 'comment', 'skipped']
+
+    def validate(self, attrs):
+        skipped = attrs.get('skipped', False)
+        rating = attrs.get('rating')
+
+        if not skipped and rating is None:
+            raise serializers.ValidationError('Bewertung ist erforderlich.')
+
+        return attrs
+
+
+class ExerciseSkipSerializer(serializers.ModelSerializer):
+    """Serializer for skipped exercises."""
+
+    class Meta:
+        model = ExerciseSkip
+        fields = ['id', 'phase', 'exercise_id', 'created_at']
+        read_only_fields = fields
+
+
+class ExerciseSkipCreateSerializer(serializers.ModelSerializer):
+    """Serializer for creating skipped exercises."""
+
+    class Meta:
+        model = ExerciseSkip
+        fields = ['phase', 'exercise_id']
+
+    def validate_exercise_id(self, value):
+        if not value or not value.strip():
+            raise serializers.ValidationError('exercise_id ist erforderlich.')
+        return value.strip()
 
 
 # =============================================================================
@@ -137,12 +189,18 @@ class PatientPublicSerializer(serializers.ModelSerializer):
     """
     completed_exercise_ids_pre = serializers.SerializerMethodField()
     completed_exercise_ids_post = serializers.SerializerMethodField()
+    skipped_exercise_ids_pre = serializers.SerializerMethodField()
+    skipped_exercise_ids_post = serializers.SerializerMethodField()
+    feedback_submitted_pre = serializers.SerializerMethodField()
+    feedback_submitted_post = serializers.SerializerMethodField()
 
     class Meta:
         model = Patient
         fields = [
             'status', 'patient_id',
             'completed_exercise_ids_pre', 'completed_exercise_ids_post',
+            'skipped_exercise_ids_pre', 'skipped_exercise_ids_post',
+            'feedback_submitted_pre', 'feedback_submitted_post',
             'created_at',
         ]
         read_only_fields = fields
@@ -158,6 +216,24 @@ class PatientPublicSerializer(serializers.ModelSerializer):
             obj.audio_files.filter(phase='POST_OP')
             .values_list('exercise_id', flat=True)
         )
+
+    def get_skipped_exercise_ids_pre(self, obj):
+        return list(
+            obj.exercise_skips.filter(phase='PRE_OP')
+            .values_list('exercise_id', flat=True)
+        )
+
+    def get_skipped_exercise_ids_post(self, obj):
+        return list(
+            obj.exercise_skips.filter(phase='POST_OP')
+            .values_list('exercise_id', flat=True)
+        )
+
+    def get_feedback_submitted_pre(self, obj):
+        return obj.feedback_entries.filter(phase='PRE_OP').exists()
+
+    def get_feedback_submitted_post(self, obj):
+        return obj.feedback_entries.filter(phase='POST_OP').exists()
 
 
 class PatientCreateSerializer(serializers.ModelSerializer):

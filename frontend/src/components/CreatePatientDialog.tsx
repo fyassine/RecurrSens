@@ -15,6 +15,15 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import { createPatient } from '../api/client';
 import PatientAccessOptions from './PatientAccessOptions';
 
+type ApiError = {
+  response?: {
+    data?: {
+      patient_id?: string[];
+      detail?: string;
+    };
+  };
+};
+
 export default function CreatePatientDialog({ onCreated }: { onCreated: () => void }) {
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState<1 | 2>(1);
@@ -42,8 +51,9 @@ export default function CreatePatientDialog({ onCreated }: { onCreated: () => vo
       setCreated({ id: patient.id, patient_id: patient.patient_id });
       setStep(2);
       onCreated();
-    } catch (err: any) {
-      const detail = err?.response?.data?.patient_id?.[0] || err?.response?.data?.detail || 'Fehler beim Erstellen.';
+    } catch (err: unknown) {
+      const data = (err as ApiError).response?.data;
+      const detail = data?.patient_id?.[0] ?? data?.detail ?? 'Fehler beim Erstellen.';
       setError(detail);
     } finally {
       setLoading(false);

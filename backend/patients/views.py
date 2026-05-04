@@ -36,7 +36,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
-from .models import Patient, AudioFile, Exercise, RecordingSession
+from .models import Patient, AudioFile, Exercise, RecordingSession, PatientFeedback, ExerciseSkip
 from .serializers import (
     PatientListSerializer,
     PatientDetailSerializer,
@@ -47,6 +47,10 @@ from .serializers import (
     AudioFileSerializer,
     CompletenessSerializer,
     RecordingSessionSerializer,
+    PatientFeedbackSerializer,
+    PatientFeedbackCreateSerializer,
+    ExerciseSkipSerializer,
+    ExerciseSkipCreateSerializer,
 )
 from .permissions import IsAdminUser, IsPatientTokenValid, IsAdminOrPatientToken
 from . import services
@@ -166,7 +170,9 @@ class PatientPublicView(APIView):
     def get(self, request, token):
         """Get public patient data."""
         try:
-            patient = Patient.objects.prefetch_related('audio_files').get(id=token)
+            patient = Patient.objects.prefetch_related(
+                'audio_files', 'exercise_skips', 'feedback_entries'
+            ).get(id=token)
         except Patient.DoesNotExist:
             return Response(
                 {'error': 'Patient nicht gefunden.'},
@@ -230,6 +236,81 @@ class PatientPublicAdvanceView(APIView):
                 {'error': str(e)},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+
+class PatientFeedbackView(APIView):
+    """Create or query feedback entries (UUID token auth)."""
+    authentication_classes = []
+    permission_classes = [IsPatientTokenValid]
+
+    def get(self, request, token):
+        phase = request.query_params.get('phase')
+        if phase not in ('PRE_OP', 'POST_OP'):
+            return Response(
+                {'error': 'Phase muss PRE_OP oder POST_OP sein.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        exists = PatientFeedback.objects.filter(patient_id=token, phase=phase).exists()
+        return Response({'exists': exists}, status=status.HTTP_200_OK)
+
+    def post(self, request, token):
+        try:
+            patient = Patient.objects.get(id=token)
+        except Patient.DoesNotExist:
+            return Response(
+                {'error': 'Patient nicht gefunden.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        serializer = PatientFeedbackCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        data = serializer.validated_data
+        feedback, created = PatientFeedback.objects.update_or_create(
+            patient=patient,
+            phase=data['phase'],
+            defaults={
+                'rating': data.get('rating'),
+                'comment': data.get('comment', ''),
+                'skipped': data.get('skipped', False),
+            },
+        )
+
+        return Response(
+            PatientFeedbackSerializer(feedback).data,
+            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+        )
+
+
+class ExerciseSkipView(APIView):
+    """Persist a skipped exercise (UUID token auth)."""
+    authentication_classes = []
+    permission_classes = [IsPatientTokenValid]
+
+    def post(self, request, token):
+        try:
+            patient = Patient.objects.get(id=token)
+        except Patient.DoesNotExist:
+            return Response(
+                {'error': 'Patient nicht gefunden.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        serializer = ExerciseSkipCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        data = serializer.validated_data
+        skip, created = ExerciseSkip.objects.get_or_create(
+            patient=patient,
+            phase=data['phase'],
+            exercise_id=data['exercise_id'],
+        )
+
+        return Response(
+            ExerciseSkipSerializer(skip).data,
+            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+        )
 
 
 # =============================================================================

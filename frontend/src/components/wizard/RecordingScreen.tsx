@@ -9,6 +9,7 @@ import {
   CircularProgress,
   Typography,
 } from '@mui/material';
+import SkipNextIcon from '@mui/icons-material/SkipNext';
 import AudioRecorder from '../AudioRecorder';
 import { useExerciseSession } from '../../hooks/useExerciseSession';
 
@@ -31,13 +32,17 @@ export default function RecordingScreen({
     currentExercise,
     currentBlob,
     audioQualityError,
+    skipError,
     handleRecordingComplete,
     handleRecordingError,
     handleRecordingReset,
     handleNext,
+    handleSkip,
+    hasNextIncomplete,
     isLoading,
     isUploading,
-  } = useExerciseSession(token, onComplete, completedExerciseIds);
+    isSkipping,
+  } = useExerciseSession(token, phase, onComplete, completedExerciseIds);
 
   if (isLoading) {
     return (
@@ -81,21 +86,36 @@ export default function RecordingScreen({
             {audioQualityError}
           </Alert>
         )}
+        {skipError && (
+          <Alert severity="warning">
+            {skipError}
+          </Alert>
+        )}
         {currentBlob && !audioQualityError && (
           <Alert severity="success">Aufnahme in Ordnung</Alert>
         )}
       </CardContent>
-      <CardActions sx={{ px: 2, pb: 2 }}>
+      <CardActions sx={{ px: 2, pb: 2, gap: 2 }}>
         <Button
-          fullWidth
+          variant="text"
+          size="large"
+          onClick={handleSkip}
+          disabled={isUploading || isSkipping}
+          startIcon={isSkipping ? <CircularProgress size={20} /> : <SkipNextIcon />}
+          sx={{ flex: 1 }}
+        >
+          Überspringen
+        </Button>
+        <Button
           variant="contained"
           size="large"
-          disabled={!currentBlob || isUploading || !!audioQualityError}
+          disabled={!currentBlob || isUploading || isSkipping || !!audioQualityError}
           onClick={handleNext}
+          sx={{ flex: 1 }}
         >
           {isUploading ? (
             <CircularProgress size={24} />
-          ) : currentIndex < exercises.length - 1 ? (
+          ) : hasNextIncomplete ? (
             'Nächste Übung'
           ) : (
             'Abschließen'

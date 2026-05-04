@@ -137,10 +137,16 @@ export default function LandingScreen({
 
       await advancePublicPatient(token);
       onStart(micStream);
-    } catch (err: any) {
-      if (err?.name === 'NotAllowedError' || permState === 'denied') {
+    } catch (err: unknown) {
+      const errName =
+        err instanceof Error
+          ? err.name
+          : typeof err === 'object' && err && 'name' in err
+            ? String((err as { name?: unknown }).name)
+            : undefined;
+      if (errName === 'NotAllowedError' || permState === 'denied') {
         setPermState('denied');
-      } else if (err?.name === 'NotFoundError') {
+      } else if (errName === 'NotFoundError') {
         setMicError(
           'Kein Mikrofon gefunden. Bitte stellen Sie sicher, dass ein Mikrofon angeschlossen ist.'
         );

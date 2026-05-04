@@ -279,14 +279,23 @@ def check_completeness(patient: Patient) -> dict:
     pre_files = patient.audio_files.filter(phase='PRE_OP')
     post_files = patient.audio_files.filter(phase='POST_OP')
 
+    skipped_pre = patient.exercise_skips.filter(phase='PRE_OP')
+    skipped_post = patient.exercise_skips.filter(phase='POST_OP')
+
     pre_exercise_ids = set(pre_files.values_list('exercise_id', flat=True))
     post_exercise_ids = set(post_files.values_list('exercise_id', flat=True))
 
-    missing_pre = [eid for eid in exercise_ids if eid not in pre_exercise_ids]
+    skipped_pre_ids = set(skipped_pre.values_list('exercise_id', flat=True))
+    skipped_post_ids = set(skipped_post.values_list('exercise_id', flat=True))
+
+    pre_done_ids = pre_exercise_ids | skipped_pre_ids
+    post_done_ids = post_exercise_ids | skipped_post_ids
+
+    missing_pre = [eid for eid in exercise_ids if eid not in pre_done_ids]
     if missing_pre:
         missing.append(f'preOpAudio:{",".join(missing_pre)}')
 
-    missing_post = [eid for eid in exercise_ids if eid not in post_exercise_ids]
+    missing_post = [eid for eid in exercise_ids if eid not in post_done_ids]
     if missing_post:
         missing.append(f'postOpAudio:{",".join(missing_post)}')
 
