@@ -130,7 +130,6 @@ STATUS_TRANSITIONS = {
     Patient.Status.CONSENT_GIVEN: Patient.Status.PRE_OP_DONE,
     Patient.Status.PRE_OP_DONE: Patient.Status.POST_OP_STARTED,
     Patient.Status.POST_OP_STARTED: Patient.Status.POST_OP_DONE,
-    Patient.Status.POST_OP_DONE: Patient.Status.COMPLETED,
 }
 
 
@@ -183,7 +182,7 @@ def advance_patient_step(patient: Patient) -> Patient:
 
     State machine:
         NEW → CONSENT_GIVEN → PRE_OP_DONE →
-        POST_OP_STARTED → POST_OP_DONE → COMPLETED
+        POST_OP_STARTED → POST_OP_DONE
 
     In the new flow, NEW → CONSENT_GIVEN is triggered by the landing page
     (Start button), and CONSENT_GIVEN → PRE_OP_DONE happens when recordings
@@ -194,10 +193,9 @@ def advance_patient_step(patient: Patient) -> Patient:
         - Sets pre_op_date when advancing to PRE_OP_DONE
         - Sets post_op_date when advancing to POST_OP_DONE
         - Triggers inference tasks on PRE_OP_DONE and POST_OP_DONE
-        - Validates completeness before marking COMPLETED
 
     Returns the updated patient instance.
-    Raises ValueError if the transition is invalid or data is incomplete.
+    Raises ValueError if the transition is invalid.
     """
     current = patient.status
     next_status = STATUS_TRANSITIONS.get(current)
@@ -207,15 +205,6 @@ def advance_patient_step(patient: Patient) -> Patient:
             f'Patient "{patient.patient_id}" kann nicht weiter voranschreiten. '
             f'Aktueller Status: {patient.get_status_display()}'
         )
-
-    # Before completing, check data completeness
-    if next_status == Patient.Status.COMPLETED:
-        completeness = check_completeness(patient)
-        if not completeness['complete']:
-            raise ValueError(
-                f'Fall kann nicht abgeschlossen werden. '
-                f'Fehlende Daten: {", ".join(completeness["missing"])}'
-            )
 
     # Apply transition
     patient.status = next_status

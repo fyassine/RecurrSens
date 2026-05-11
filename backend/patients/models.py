@@ -50,8 +50,8 @@ class Patient(models.Model):
     Only voice samples and a pseudonym (patient_id) are stored — no demographics.
 
     Workflow statuses:
-        NEW → PRE_OP_DONE →
-        POST_OP_STARTED → POST_OP_DONE → COMPLETED → EXPIRED
+        NEW → CONSENT_GIVEN → PRE_OP_DONE →
+        POST_OP_STARTED → POST_OP_DONE
     """
 
     class Status(models.TextChoices):
@@ -60,8 +60,6 @@ class Patient(models.Model):
         PRE_OP_DONE = 'PRE_OP_DONE', 'Prä-OP abgeschlossen'
         POST_OP_STARTED = 'POST_OP_STARTED', 'Post-OP begonnen'
         POST_OP_DONE = 'POST_OP_DONE', 'Post-OP abgeschlossen'
-        COMPLETED = 'COMPLETED', 'Abgeschlossen'
-        EXPIRED = 'EXPIRED', 'Abgelaufen'
 
     class PredictionStatus(models.TextChoices):
         TODO = 'TODO', 'Ausstehend'

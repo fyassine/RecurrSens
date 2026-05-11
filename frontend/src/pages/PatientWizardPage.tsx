@@ -41,10 +41,7 @@ export default function PatientWizardPage() {
 
         if (data.status === 'PRE_OP_DONE' && !data.feedback_submitted_pre) {
           setStatus('PRE_OP_FEEDBACK');
-        } else if (
-          (data.status === 'POST_OP_DONE' || data.status === 'COMPLETED')
-          && !data.feedback_submitted_post
-        ) {
+        } else if (data.status === 'POST_OP_DONE' && !data.feedback_submitted_post) {
           setStatus('POST_OP_FEEDBACK');
         } else {
           setStatus(data.status);
@@ -145,7 +142,6 @@ export default function PatientWizardPage() {
         );
 
       case 'POST_OP_DONE':
-      case 'COMPLETED':
         return <CompletedScreen />;
 
       default:

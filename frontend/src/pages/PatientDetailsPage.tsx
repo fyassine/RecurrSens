@@ -9,12 +9,15 @@ import {
   CardHeader,
   Chip,
   CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Grid,
   IconButton,
   Table,
   TableBody,
   TableCell,
-  TableHead,
   TableRow,
   TextField,
   Typography,
@@ -24,7 +27,6 @@ import DownloadIcon from '@mui/icons-material/Download';
 import EditIcon from '@mui/icons-material/Edit';
 import PersonIcon from '@mui/icons-material/Person';
 import AudioFileIcon from '@mui/icons-material/AudioFile';
-import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
 import type { PatientDetail, PatientStatus } from '../types';
 import {
@@ -37,9 +39,8 @@ import {
   advancePublicPatient,
   exportPatients,
 } from '../api/client';
-import { StatusBadge } from '../components/Badges';
-import ConfirmDialog from '../components/ConfirmDialog';
-import type { Exercise } from '../types';
+import { StatusBadge, PredictionBadge } from '../components/Badges';
+import type { Exercise, AudioFile as AudioFileType } from '../types';
 
 export default function PatientDetailsPage() {
   const { token } = useParams<{ token: string }>();
@@ -80,39 +81,74 @@ export default function PatientDetailsPage() {
     );
   }
 
+  const noRecordings = patient.audio_files_pre.length === 0 && patient.audio_files_post.length === 0;
+
   return (
-    <Box sx={{ minHeight: '100vh', bgcolor: 'background.default', px: { xs: 2, md: 3 }, py: 3 }}>
+    <Box sx={{ minHeight: '100vh', bgcolor: 'background.default', px: { xs: 2, md: 3 }, py: noRecordings ? 2 : 3 }}>
       <Button
         startIcon={<ArrowBackIcon />}
         onClick={() => navigate('/')}
-        sx={{ mb: 3 }}
+        sx={{ mb: noRecordings ? 2 : 3 }}
       >
         Zurück zur Übersicht
       </Button>
 
-      <Grid container spacing={3} justifyContent="center">
-        <Grid size={{ xs: 12, lg: 8 }}>
-          <PatientInfoCard patient={patient} onUpdated={fetchPatient} />
-          <AudioSection
-            title="Prä-OP Aufnahmen"
-            audioFiles={patient.audio_files_pre}
-            phase="PRE_OP"
-            date={patient.pre_op_date}
-            patientId={patient.id}
-            patientStatus={patient.status}
-            showUpload={patient.status === 'CONSENT_GIVEN'}
-            onUploaded={fetchPatient}
-          />
-          <AudioSection
-            title="Post-OP Aufnahmen"
-            audioFiles={patient.audio_files_post}
-            phase="POST_OP"
-            date={patient.post_op_date}
-            patientId={patient.id}
-            patientStatus={patient.status}
-            showUpload
-            onUploaded={fetchPatient}
-          />
+      <Grid container spacing={noRecordings ? 2 : 3} justifyContent="center">
+        <Grid size={{ xs: 12, lg: noRecordings ? 9 : 8 }}>
+          <PatientInfoCard patient={patient} onUpdated={fetchPatient} compact={noRecordings} />
+          {noRecordings ? (
+            <Grid container spacing={2}>
+              <Grid size={{ xs: 12, md: 6 }}>
+                <AudioSection
+                  title="Prä-OP Aufnahmen"
+                  audioFiles={patient.audio_files_pre}
+                  phase="PRE_OP"
+                  date={patient.pre_op_date}
+                  patientId={patient.id}
+                  patientStatus={patient.status}
+                  showUpload
+                  onUploaded={fetchPatient}
+                  compact
+                />
+              </Grid>
+              <Grid size={{ xs: 12, md: 6 }}>
+                <AudioSection
+                  title="Post-OP Aufnahmen"
+                  audioFiles={patient.audio_files_post}
+                  phase="POST_OP"
+                  date={patient.post_op_date}
+                  patientId={patient.id}
+                  patientStatus={patient.status}
+                  showUpload
+                  onUploaded={fetchPatient}
+                  compact
+                />
+              </Grid>
+            </Grid>
+          ) : (
+            <>
+              <AudioSection
+                title="Prä-OP Aufnahmen"
+                audioFiles={patient.audio_files_pre}
+                phase="PRE_OP"
+                date={patient.pre_op_date}
+                patientId={patient.id}
+                patientStatus={patient.status}
+                showUpload
+                onUploaded={fetchPatient}
+              />
+              <AudioSection
+                title="Post-OP Aufnahmen"
+                audioFiles={patient.audio_files_post}
+                phase="POST_OP"
+                date={patient.post_op_date}
+                patientId={patient.id}
+                patientStatus={patient.status}
+                showUpload
+                onUploaded={fetchPatient}
+              />
+            </>
+          )}
         </Grid>
       </Grid>
     </Box>
@@ -126,15 +162,16 @@ export default function PatientDetailsPage() {
 function PatientInfoCard({
   patient,
   onUpdated,
+  compact = false,
 }: {
   patient: PatientDetail;
   onUpdated: () => void;
+  compact?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [pid, setPid] = useState(patient.patient_id);
-  const [completeOpen, setCompleteOpen] = useState(false);
 
   const handleDownload = async () => {
     setDownloading(true);
@@ -158,29 +195,28 @@ function PatientInfoCard({
     }
   };
 
-  const handleComplete = async () => {
-    await advancePatient(patient.id);
-    setCompleteOpen(false);
-    onUpdated();
-  };
-
   return (
-    <Card sx={{ mb: 3 }}>
+    <Card sx={{ mb: compact ? 2 : 3 }}>
       <CardHeader
-        avatar={<PersonIcon color="primary" />}
-        title="Patienten Details"
-        action={
-          <Box sx={{ display: 'flex' }}>
-            <IconButton onClick={handleDownload} disabled={downloading} title="ZIP herunterladen">
-              {downloading ? <CircularProgress size={20} /> : <DownloadIcon />}
-            </IconButton>
-            <IconButton onClick={() => setEditing(!editing)}>
-              <EditIcon />
+        title={
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <PersonIcon color="primary" sx={{ fontSize: 20 }} />
+            <Typography variant="h6" fontWeight={600}>
+              Patienten Details
+            </Typography>
+            <IconButton size="small" onClick={() => setEditing(!editing)} sx={{ ml: 0.25 }}>
+              <EditIcon sx={{ fontSize: 16 }} />
             </IconButton>
           </Box>
         }
+        action={
+          <IconButton onClick={handleDownload} disabled={downloading} title="ZIP herunterladen">
+            {downloading ? <CircularProgress size={20} /> : <DownloadIcon />}
+          </IconButton>
+        }
+        sx={{ pb: 1 }}
       />
-      <CardContent>
+      <CardContent sx={{ pt: 0 }}>
         {editing ? (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             <TextField
@@ -200,44 +236,75 @@ function PatientInfoCard({
             </Box>
           </Box>
         ) : (
-          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
-            <InfoField label="Patienten-ID" value={patient.patient_id} />
+          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5 }}>
+            <InfoField label="Patienten-ID" value={patient.patient_id} mono />
             <InfoField label="Status">
               <StatusBadge status={patient.status as PatientStatus} />
             </InfoField>
             <InfoField
-              label="Ablaufdatum"
-              value={new Date(patient.expires_at).toLocaleDateString('de-DE')}
-            />
-            <InfoField
               label="Erstellt am"
               value={new Date(patient.created_at).toLocaleDateString('de-DE')}
+            />
+            <InfoField
+              label="Ablaufdatum"
+              value={new Date(patient.expires_at).toLocaleDateString('de-DE')}
             />
           </Box>
         )}
 
-        {patient.status === 'POST_OP_DONE' && (
-          <Box sx={{ mt: 2, pt: 2, borderTop: '1px solid', borderColor: 'divider' }}>
-            <Button
-              fullWidth
-              variant="contained"
-              color="success"
-              startIcon={<CheckCircleIcon />}
-              onClick={() => setCompleteOpen(true)}
-            >
-              Fall abschließen
-            </Button>
-            <ConfirmDialog
-              open={completeOpen}
-              title="Fall abschließen?"
-              message="Möchten Sie diesen Fall wirklich als abgeschlossen markieren?"
-              confirmLabel="Abschließen"
-              confirmColor="success"
-              onConfirm={handleComplete}
-              onCancel={() => setCompleteOpen(false)}
-            />
+        {/* CDSS prediction section */}
+        <Box
+          sx={{
+            mt: compact ? 1.5 : 2,
+            pt: compact ? 1.5 : 2,
+            borderTop: '1px solid',
+            borderColor: 'divider',
+            textAlign: 'center',
+          }}
+        >
+          <Typography variant="subtitle2" gutterBottom align="center">
+            Modellvorhersage (KI)
+          </Typography>
+          <Typography
+            variant="body2"
+            color="text.secondary"
+            align="center"
+            sx={{ mb: compact ? 1.25 : 2, fontStyle: 'italic', fontSize: '0.78rem' }}
+          >
+            Hinweis: Dies ist ein klinisches Entscheidungsunterstützungssystem (CDSS).
+            <br />
+            Die Vorhersage ersetzt keine ärztliche Diagnose.
+          </Typography>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: compact ? 1 : 1.5, alignItems: 'center' }}>
+            <Box sx={{ textAlign: 'center' }}>
+              <Typography variant="subtitle2" align="center" sx={{ mb: 0.5 }}>
+                Prä-OP Analyse
+              </Typography>
+              <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+                <PredictionBadge
+                  value={patient.prediction_pre}
+                  percentage={patient.ai_percentage_rp_pre}
+                  gradcamPrediction={patient.gradcam_prediction_pre}
+                  gradcamPercentage={patient.gradcam_percentage_pre}
+                />
+              </Box>
+            </Box>
+            <Box sx={{ textAlign: 'center' }}>
+              <Typography variant="subtitle2" align="center" sx={{ mb: 0.5 }}>
+                Post-OP Analyse
+              </Typography>
+              <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+                <PredictionBadge
+                  value={patient.prediction_post}
+                  percentage={patient.ai_percentage_rp_post}
+                  gradcamPrediction={patient.gradcam_prediction_post}
+                  gradcamPercentage={patient.gradcam_percentage_post}
+                />
+              </Box>
+            </Box>
           </Box>
-        )}
+        </Box>
+
       </CardContent>
     </Card>
   );
@@ -246,8 +313,6 @@ function PatientInfoCard({
 // ---------------------------------------------------------------------------
 // Audio section with manual upload
 // ---------------------------------------------------------------------------
-
-import type { AudioFile as AudioFileType } from '../types';
 
 function AudioSection({
   title,
@@ -258,6 +323,7 @@ function AudioSection({
   patientStatus,
   showUpload,
   onUploaded,
+  compact = false,
 }: {
   title: string;
   audioFiles: AudioFileType[];
@@ -267,20 +333,51 @@ function AudioSection({
   patientStatus: string;
   showUpload: boolean;
   onUploaded: () => void;
+  compact?: boolean;
 }) {
   return (
-    <Card sx={{ mb: 3 }}>
+    <Card sx={{ mb: compact ? 0 : 3, height: compact ? '100%' : 'auto' }}>
       <CardHeader
-        avatar={<AudioFileIcon color={phase === 'PRE_OP' ? 'primary' : 'warning'} />}
-        title={title}
-        subheader={date ? new Date(date).toLocaleDateString('de-DE') : undefined}
-        action={showUpload ? <ManualUpload patientId={patientId} phase={phase} patientStatus={patientStatus} onDone={onUploaded} /> : undefined}
+        title={
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1.5 }}>
+            <AudioFileIcon color='primary' />
+            {/* Display the title passed to the function */}
+            <Typography variant="h6" component="span">
+              {title}
+            </Typography>
+          </Box>
+        }
+          subheader={date ? new Date(date).toLocaleDateString('de-DE') : undefined}
+          slotProps={{
+            title: {
+              variant: 'h7',
+              component: 'div',
+            },
+            subheader: {
+              align: 'center',
+            },
+          }}
+          sx={{ 
+            '& .MuiCardHeader-content': { textAlign: 'center' },
+            '& .MuiCardHeader-avatar': { display: 'none' } 
+          }}
       />
       <CardContent>
+        {showUpload && audioFiles.length > 0 && (
+          <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 1 }}>
+            <ManualUpload
+              patientId={patientId}
+              phase={phase}
+              patientStatus={patientStatus}
+              onDone={onUploaded}
+              buttonLabel="Hochladen"
+            />
+          </Box>
+        )}
         {audioFiles.length === 0 ? (
           <Box
             sx={{
-              py: 4,
+              py: compact ? 2.5 : 4,
               textAlign: 'center',
               color: 'text.secondary',
               bgcolor: 'grey.50',
@@ -289,7 +386,20 @@ function AudioSection({
               borderColor: 'grey.300',
             }}
           >
-            Keine {phase === 'PRE_OP' ? 'Prä-OP' : 'Post-OP'} Aufnahmen vorhanden.
+            <Typography variant="body2">
+              Keine {phase === 'PRE_OP' ? 'Prä-OP' : 'Post-OP'} Aufnahmen vorhanden.
+            </Typography>
+            {showUpload && (
+              <Box sx={{ mt: 1 }}>
+                <ManualUpload
+                  patientId={patientId}
+                  phase={phase}
+                  patientStatus={patientStatus}
+                  onDone={onUploaded}
+                  buttonLabel="Dateien hochladen"
+                />
+              </Box>
+            )}
           </Box>
         ) : (
           <Grid container spacing={2}>
@@ -329,11 +439,13 @@ function ManualUpload({
   phase,
   patientStatus,
   onDone,
+  buttonLabel = 'Hochladen',
 }: {
   patientId: string;
   phase: 'PRE_OP' | 'POST_OP';
   patientStatus: string;
   onDone: () => void;
+  buttonLabel?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [exercises, setExercises] = useState<Exercise[]>([]);
@@ -381,31 +493,32 @@ function ManualUpload({
   return (
     <>
       <Button size="small" startIcon={<UploadFileIcon />} onClick={handleOpen}>
-        Dateien hochladen
+        {buttonLabel}
       </Button>
       <Dialog open={open} onClose={() => setOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Dateien hochladen ({phase === 'PRE_OP' ? 'Prä-OP' : 'Post-OP'})</DialogTitle>
-        <DialogContent sx={{ p: 0 }}>
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell>Übung</TableCell>
-                <TableCell align="right">Datei</TableCell>
-              </TableRow>
-            </TableHead>
+        <DialogTitle sx={{ pb: 1 }}>
+          Hochladen ({phase === 'PRE_OP' ? 'Prä-OP' : 'Post-OP'})
+        </DialogTitle>
+        <DialogContent sx={{ px: 3, py: 2 }}>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+            Bitte wählen Sie für jede der folgenden Übungen die entsprechende Audiodatei aus.
+          </Typography>
+          <Table size="medium">
             <TableBody>
               {exercises.map((ex) => (
                 <TableRow key={ex.exercise_id}>
-                  <TableCell>{ex.title}</TableCell>
-                  <TableCell align="right">
+                  <TableCell sx={{ pl: 0, fontWeight: 500 }}>{ex.title}</TableCell>
+                  <TableCell align="right" sx={{ pr: 0 }}>
                     <Button
                       component="label"
-                      size="small"
                       variant={files[ex.exercise_id] ? 'contained' : 'outlined'}
                       color={files[ex.exercise_id] ? 'success' : 'primary'}
                       startIcon={<UploadFileIcon />}
+                      sx={{ minWidth: '140px' }}
                     >
-                      {files[ex.exercise_id] ? files[ex.exercise_id].name : 'Auswählen'}
+                      <Typography variant="caption" noWrap sx={{ maxWidth: 120 }}>
+                        {files[ex.exercise_id] ? files[ex.exercise_id].name : 'Auswählen'}
+                      </Typography>
                       <input
                         type="file"
                         accept="audio/*"
@@ -421,12 +534,19 @@ function ManualUpload({
               ))}
             </TableBody>
           </Table>
-          {error && <Alert severity="error" sx={{ m: 2 }}>{error}</Alert>}
+          {error && <Alert severity="error" sx={{ mt: 3 }}>{error}</Alert>}
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setOpen(false)} disabled={uploading}>Abbrechen</Button>
-          <Button variant="contained" onClick={handleUpload} disabled={uploading}>
-            {uploading ? <CircularProgress size={20} /> : 'Hochladen'}
+        <DialogActions sx={{ p: 3, pt: 1 }}>
+          <Button onClick={() => setOpen(false)} disabled={uploading} color="inherit">
+            Abbrechen
+          </Button>
+          <Button 
+            variant="contained" 
+            onClick={handleUpload} 
+            disabled={uploading} 
+            sx={{ px: 4 }}
+          >
+            {uploading ? <CircularProgress size={20} /> : 'Alle Dateien hochladen'}
           </Button>
         </DialogActions>
       </Dialog>
@@ -434,8 +554,6 @@ function ManualUpload({
   );
 }
 
-// Need these imports for Dialog inside ManualUpload
-import { Dialog, DialogTitle, DialogContent, DialogActions } from '@mui/material';
 
 // ---------------------------------------------------------------------------
 // Helper
@@ -444,22 +562,44 @@ import { Dialog, DialogTitle, DialogContent, DialogActions } from '@mui/material
 function InfoField({
   label,
   value,
+  mono = false,
   children,
 }: {
   label: string;
   value?: string;
+  mono?: boolean;
   children?: React.ReactNode;
 }) {
   return (
-    <Box>
-      <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: 1 }}>
+    <Box
+      sx={{
+        px: 1.5,
+        py: 1.25,
+        bgcolor: 'background.default',
+        borderRadius: 1.5,
+        border: '1px solid',
+        borderColor: 'divider',
+      }}
+    >
+      <Typography
+        variant="caption"
+        color="text.secondary"
+        sx={{ textTransform: 'uppercase', letterSpacing: '0.06em', fontSize: '0.68rem', fontWeight: 600, display: 'block' }}
+      >
         {label}
       </Typography>
-      {children ?? (
-        <Typography variant="body1" fontWeight={500}>
-          {value || '-'}
-        </Typography>
-      )}
+      <Box sx={{ mt: 0.5 }}>
+        {children ?? (
+          <Typography
+            fontWeight={600}
+            fontSize="0.9375rem"
+            color="text.primary"
+            sx={mono ? { fontFamily: 'ui-monospace, Consolas, monospace' } : {}}
+          >
+            {value || '-'}
+          </Typography>
+        )}
+      </Box>
     </Box>
   );
 }

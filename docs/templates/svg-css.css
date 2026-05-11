@@ -1,0 +1,25 @@
+/* Container styling to match your dark sidebar */
+.sidebar-logo-container {
+  display: inline-flex;
+  align-items: center;
+  gap: 16px; /* Space between icon and text */
+  background-color: #0f1c30; /* Dark navy background matching your UI */
+  padding: 16px 24px;
+  border-radius: 8px; /* Rounded corners */
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+/* Sizing for the SVG */
+.recurrsens-icon {
+  width: 42px;
+  height: 42px;
+  overflow: visible; /* Prevents the glow effect from being clipped */
+}
+
+/* Typography for the brand name */
+.logo-wordmark {
+  color: #ffffff;
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: -0.02em; /* Slight negative tracking for a modern feel */
+}

@@ -186,7 +186,7 @@ STORAGES = {
 # ==============================================================================
 # DATA RETENTION
 # ==============================================================================
-# Number of days before patient data expires and is marked EXPIRED.
+# Number of days before patient data is considered expired for retention handling.
 DATA_RETENTION_DAYS = config('DATA_RETENTION_DAYS', default=3, cast=int)
 
 # Admin email that receives an expiry-warning notification (see tasks.py TODO).
