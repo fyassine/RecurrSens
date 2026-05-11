@@ -151,7 +151,7 @@ erDiagram
 
 The `Patient.status` field encodes a linear workflow with the following transitions:
 
-`NEW` -> `CONSENT_GIVEN` -> `DEMOGRAPHICS_DONE` -> `PRE_OP_DONE` -> `POST_OP_STARTED` -> `POST_OP_DONE` -> `COMPLETED`
+`NEW` -> `CONSENT_GIVEN` -> `PRE_OP_DONE` -> `POST_OP_STARTED` -> `POST_OP_DONE`
 
 Each transition is enforced by the `advance_patient_step()` service function, which also records timestamps (`pre_op_date`, `post_op_date`) and triggers asynchronous inference tasks at the appropriate stages.
 
@@ -159,7 +159,7 @@ Each transition is enforced by the `advance_patient_step()` service function, wh
 
 | Field | Values |
 | :--- | :--- |
-| `Patient.status` | NEW, CONSENT_GIVEN, DEMOGRAPHICS_DONE, PRE_OP_DONE, POST_OP_STARTED, POST_OP_DONE, COMPLETED |
+| `Patient.status` | NEW, CONSENT_GIVEN, PRE_OP_DONE, POST_OP_STARTED, POST_OP_DONE |
 | `Patient.gender` | M (male), W (female), D (diverse), ? (unknown) |
 | `Patient.diagnosis` | LEFT, RIGHT, BOTH, HEALTHY, TODO |
 | `Patient.prediction_*` | TODO, INFECTED, HEALTHY |
@@ -318,12 +318,11 @@ flowchart LR
 
 | Patient Status | Screen Component |
 | :--- | :--- |
-| `NEW` | `ConsentScreen` |
-| `CONSENT_GIVEN` | `DemographicsScreen` |
-| `DEMOGRAPHICS_DONE` | `RecordingScreen` (phase = PRE_OP) |
+| `NEW` | `LandingScreen` |
+| `CONSENT_GIVEN` | `RecordingScreen` (phase = PRE_OP) |
 | `PRE_OP_DONE` | `WaitingScreen` |
 | `POST_OP_STARTED` | `RecordingScreen` (phase = POST_OP) |
-| `POST_OP_DONE / COMPLETED` | `CompletedScreen` |
+| `POST_OP_DONE` | `CompletedScreen` |
 
 ### 6.4 Audio Recording
 

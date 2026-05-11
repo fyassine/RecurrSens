@@ -143,7 +143,7 @@ class PatientWorkflowTest(BaseAPITest):
         )
 
     def test_advance_full_workflow(self):
-        """Test advancing through all steps (except COMPLETED which needs data)."""
+        """Test advancing through all workflow steps."""
         patient = self.create_test_patient('WF-002')
         # NEW → CONSENT_GIVEN
         r = self.client.post(f'/api/patients/{patient.id}/advance/')
@@ -161,8 +161,8 @@ class PatientWorkflowTest(BaseAPITest):
         r = self.client.post(f'/api/patients/{patient.id}/advance/')
         self.assertEqual(r.data['status'], 'POST_OP_DONE')
 
-    def test_advance_completed_requires_data(self):
-        """COMPLETED requires all data to be present."""
+    def test_advance_beyond_post_op_done(self):
+        """Cannot advance beyond POST_OP_DONE."""
         patient = self.create_test_patient('WF-003')
         patient.status = Patient.Status.POST_OP_DONE
         patient.save()
@@ -171,10 +171,10 @@ class PatientWorkflowTest(BaseAPITest):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn('error', response.data)
 
-    def test_advance_already_completed(self):
-        """Cannot advance beyond COMPLETED."""
+    def test_advance_legacy_completed_status(self):
+        """Legacy COMPLETED status is treated as non-advancable."""
         patient = self.create_test_patient('WF-004')
-        patient.status = Patient.Status.COMPLETED
+        patient.status = 'COMPLETED'
         patient.save()
 
         response = self.client.post(f'/api/patients/{patient.id}/advance/')

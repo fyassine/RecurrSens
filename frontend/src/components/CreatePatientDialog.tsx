@@ -10,6 +10,7 @@ import {
   CircularProgress,
   Alert,
 } from '@mui/material';
+import type { SxProps, Theme } from '@mui/material/styles';
 import AddIcon from '@mui/icons-material/Add';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import { createPatient } from '../api/client';
@@ -24,7 +25,13 @@ type ApiError = {
   };
 };
 
-export default function CreatePatientDialog({ onCreated }: { onCreated: () => void }) {
+export default function CreatePatientDialog({
+  onCreated,
+  buttonSx,
+}: {
+  onCreated: () => void;
+  buttonSx?: SxProps<Theme>;
+}) {
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState<1 | 2>(1);
   const [patientId, setPatientId] = useState('');
@@ -62,7 +69,13 @@ export default function CreatePatientDialog({ onCreated }: { onCreated: () => vo
 
   return (
     <>
-      <Button variant="contained" startIcon={<AddIcon />} onClick={() => setOpen(true)}>
+      <Button
+        variant="contained"
+        size="small"
+        startIcon={<AddIcon />}
+        onClick={() => setOpen(true)}
+        sx={buttonSx}
+      >
         Patient anlegen
       </Button>
 

@@ -77,8 +77,6 @@ export type PatientStatus =
   | 'CONSENT_GIVEN'
   | 'PRE_OP_DONE'
   | 'POST_OP_STARTED'
-  | 'POST_OP_DONE'
-  | 'COMPLETED'
-  | 'EXPIRED';
+  | 'POST_OP_DONE';
 
 export type PredictionStatus = 'TODO' | 'INFECTED' | 'HEALTHY';

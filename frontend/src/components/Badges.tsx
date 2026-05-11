@@ -1,32 +1,41 @@
-import { Chip } from '@mui/material';
+import { Chip, useTheme } from '@mui/material';
 import type { PatientStatus, PredictionStatus } from '../types';
 
-const STATUS_CONFIG: Record<PatientStatus, { label: string; color: string; bg: string }> = {
-  NEW: { label: 'Einwilligung', color: '#616161', bg: '#f5f5f5' },
-  CONSENT_GIVEN: { label: 'Prä-OP', color: '#1565c0', bg: '#e3f2fd' },
-  PRE_OP_DONE: { label: 'Freigabe', color: '#6a1b9a', bg: '#f3e5f5' },
-  POST_OP_STARTED: { label: 'Post-OP', color: '#e65100', bg: '#fff3e0' },
-  POST_OP_DONE: { label: 'Aufnahmen fertig', color: '#00695c', bg: '#e0f2f1' },
-  COMPLETED: { label: 'Abgeschlossen', color: '#2e7d32', bg: '#e8f5e9' },
-  EXPIRED: { label: 'Löschung ausstehend', color: '#b71c1c', bg: '#ffebee' },
-};
-
 export function StatusBadge({ status }: { status: PatientStatus }) {
-  const config = STATUS_CONFIG[status] ?? { label: status, color: '#616161', bg: '#f5f5f5' };
-  return (
-    <Chip
-      label={config.label}
-      size="small"
-      sx={{ bgcolor: config.bg, color: config.color, fontWeight: 500 }}
-    />
-  );
-}
+  const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
 
-const PREDICTION_CONFIG: Record<PredictionStatus, { label: string; color: string; bg: string }> = {
-  TODO: { label: 'Ausstehend', color: '#9e9e9e', bg: '#f5f5f5' },
-  INFECTED: { label: 'RP', color: '#c62828', bg: '#ffebee' },
-  HEALTHY: { label: 'keine RP', color: '#2e7d32', bg: '#e8f5e9' },
-};
+  const config: Record<PatientStatus, { label: string; color: string; bg: string }> = {
+    NEW: {
+      label: 'Prä-OP unvollständig',
+      color: isDark ? '#9aafc4' : '#616161',
+      bg: isDark ? 'rgba(154,175,196,0.15)' : '#f5f5f5',
+    },
+    CONSENT_GIVEN: {
+      label: 'Prä-OP unvollständig',
+      color: isDark ? '#9aafc4' : '#616161',
+      bg: isDark ? 'rgba(154,175,196,0.15)' : '#f5f5f5',
+    },
+    PRE_OP_DONE: {
+      label: 'Prä-OP vollständig',
+      color: isDark ? '#4ade80' : '#2e7d32',
+      bg: isDark ? 'rgba(74,222,128,0.12)' : '#e8f5e9',
+    },
+    POST_OP_STARTED: {
+      label: 'Post-OP unvollständig',
+      color: isDark ? '#9aafc4' : '#616161',
+      bg: isDark ? 'rgba(154,175,196,0.15)' : '#f5f5f5',
+    },
+    POST_OP_DONE: {
+      label: 'Post-OP vollständig',
+      color: isDark ? '#4ade80' : '#2e7d32',
+      bg: isDark ? 'rgba(74,222,128,0.12)' : '#e8f5e9',
+    },
+  };
+
+  const c = config[status] ?? config.NEW;
+  return <Chip label={c.label} size="small" sx={{ bgcolor: c.bg, color: c.color, fontWeight: 500 }} />;
+}
 
 export function PredictionBadge({
   value,
@@ -39,21 +48,39 @@ export function PredictionBadge({
   gradcamPrediction?: string | null;
   gradcamPercentage?: number | null;
 }) {
-  const filmConfig = PREDICTION_CONFIG[value] ?? PREDICTION_CONFIG.TODO;
-  const filmLabel = `FiLM: ${filmConfig.label}${
-    percentage != null && percentage > 0 ? ` (${percentage.toFixed(2)}%)` : ''
-  }`;
+  const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
+
+  const config: Record<PredictionStatus, { label: string; color: string; bg: string }> = {
+    TODO: {
+      label: 'Ausstehend...',
+      color: isDark ? '#7a90a8' : '#9e9e9e',
+      bg: isDark ? 'rgba(122,144,168,0.12)' : '#f5f5f5',
+    },
+    INFECTED: {
+      label: 'RP',
+      color: isDark ? '#f87171' : '#c62828',
+      bg: isDark ? 'rgba(248,113,113,0.12)' : '#ffebee',
+    },
+    HEALTHY: {
+      label: 'Keine RP',
+      color: isDark ? '#4ade80' : '#2e7d32',
+      bg: isDark ? 'rgba(74,222,128,0.12)' : '#e8f5e9',
+    },
+  };
+
+  const c = config[value] ?? config.TODO;
+  const label =
+    value === 'TODO'
+      ? c.label
+      : `${c.label}${percentage != null && percentage > 0 ? ` (${percentage.toFixed(2)}%)` : ''}`;
 
   const gcKey = (gradcamPrediction?.toUpperCase() ?? 'TODO') as PredictionStatus;
-  const gcConfig = PREDICTION_CONFIG[gcKey] ?? PREDICTION_CONFIG.TODO;
+  const gcConfig = config[gcKey] ?? config.TODO;
 
   return (
     <>
-      <Chip
-        label={filmLabel}
-        size="small"
-        sx={{ bgcolor: filmConfig.bg, color: filmConfig.color, fontWeight: 500 }}
-      />
+      <Chip label={label} size="small" sx={{ bgcolor: c.bg, color: c.color, fontWeight: 500 }} />
       {gradcamPrediction && (
         <Chip
           label={`GC: ${gcConfig.label}${

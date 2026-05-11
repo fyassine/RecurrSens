@@ -147,7 +147,7 @@ def check_data_expiry():
     Runs daily (configured via CELERY_BEAT_SCHEDULE in settings).
     Two passes:
       1. Notify admin for patients expiring within 24 hours.
-      2. Mark patients as EXPIRED if their expires_at has passed.
+      2. Auto-delete expired patients that have already been exported.
     """
     from django.utils import timezone
     from .models import Patient
@@ -176,16 +176,7 @@ def check_data_expiry():
         patient.save(update_fields=['notification_sent_at'])
         logger.info(f'Expiry notification recorded for patient {patient.patient_id}')
 
-    # --- Pass 2: mark expired patients ---
-    expired = Patient.objects.filter(
-        expires_at__lte=now,
-    ).exclude(status=Patient.Status.EXPIRED)
-    count = expired.count()
-    expired.update(status=Patient.Status.EXPIRED)
-    if count:
-        logger.info(f'Marked {count} patient(s) as EXPIRED')
-
-    # --- Pass 3: auto-delete expired patients that have been downloaded ---
+    # --- Pass 2: auto-delete expired patients that have been downloaded ---
     from .services import delete_patient_with_files
     to_delete = Patient.objects.filter(
         expires_at__lte=now,

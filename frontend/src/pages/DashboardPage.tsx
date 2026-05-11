@@ -1,25 +1,129 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import {
-  AppBar,
   Box,
-  Button,
-  Toolbar,
+  Card,
+  CardActionArea,
+  CardContent,
+  Chip,
+  Tooltip,
   Typography,
+  useTheme,
 } from '@mui/material';
-import LogoutIcon from '@mui/icons-material/Logout';
-import DownloadIcon from '@mui/icons-material/Download';
-import { useNavigate } from 'react-router-dom';
-import { getPatients, clearTokens, exportPatients } from '../api/client';
+import EventAvailableIcon from '@mui/icons-material/EventAvailable';
+import MicIcon from '@mui/icons-material/Mic';
+import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty';
+import WarningAmberIcon from '@mui/icons-material/WarningAmber';
+import TimerOffIcon from '@mui/icons-material/TimerOff';
+import { getPatients, exportPatients } from '../api/client';
 import type { Patient } from '../types';
-import PatientList from '../components/PatientList';
-import CreatePatientDialog from '../components/CreatePatientDialog';
+import PatientList, { type DashboardFilter } from '../components/PatientList';
+import AblaufdatenPanel from '../components/AblaufdatenPanel';
+import { useAppData } from '../context/AppDataContext';
+
+type PaletteColorKey = 'primary' | 'info' | 'secondary' | 'error' | 'success' | 'neutral';
+
+const FILTER_LABELS: Record<DashboardFilter, string> = {
+  ALL: 'Alle Patienten',
+  PRE_OP: 'Prä-OP',
+  POST_OP: 'Post-OP',
+  RP: 'RP Vorhersagen',
+  OVERDUE_DELETE: 'Zum Löschen',
+};
+
+function KPICard({
+  title,
+  value,
+  displayValue,
+  icon,
+  color,
+  alert = false,
+  active = false,
+  dimmed = false,
+  tooltip,
+  onClick,
+}: {
+  title: string;
+  value: number;
+  displayValue?: string;
+  icon: React.ReactNode;
+  color: PaletteColorKey;
+  alert?: boolean;
+  active?: boolean;
+  dimmed?: boolean;
+  tooltip?: string;
+  onClick?: () => void;
+}) {
+  const theme = useTheme();
+
+  const resolvedColor = (() => {
+    if (color === 'neutral') return theme.palette.grey[500];
+    if (color === 'error' && alert && value === 0) return theme.palette.success.main;
+    return theme.palette[color].main;
+  })();
+
+  const card = (
+    <Card
+      sx={{
+        display: 'flex',
+        flexDirection: 'column',
+        minHeight: 96,
+        border: active ? `2px solid ${resolvedColor}` : '2px solid transparent',
+        bgcolor: active ? `${resolvedColor}0a` : 'background.paper',
+        opacity: dimmed ? 0.45 : 1,
+        transition: 'border-color 0.2s, background-color 0.2s, box-shadow 0.2s, transform 0.2s, opacity 0.2s',
+        '&:hover': { boxShadow: '0 4px 12px rgba(26,36,53,0.10)', transform: 'translateY(-1px)', opacity: dimmed ? 0.7 : 1 },
+      }}
+    >
+      <CardActionArea onClick={onClick} sx={{ flex: 1 }}>
+        <CardContent
+          sx={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            textAlign: 'center',
+            gap: 0.75,
+            py: '14px !important',
+            px: '12px !important',
+          }}
+        >
+          <Box
+            sx={{
+              bgcolor: active ? `${resolvedColor}25` : `${resolvedColor}18`,
+              color: resolvedColor,
+              p: 1,
+              borderRadius: 1.5,
+              display: 'flex',
+              transition: 'background-color 0.15s',
+            }}
+          >
+            {icon}
+          </Box>
+          <Typography variant="body2" color="text.secondary" fontWeight={500} lineHeight={1.2} fontSize="0.75rem">
+            {title}
+          </Typography>
+          <Typography
+            variant="h5"
+            fontWeight={700}
+            color={(alert || active) ? resolvedColor : 'text.primary'}
+            lineHeight={1}
+          >
+            {displayValue ?? value}
+          </Typography>
+        </CardContent>
+      </CardActionArea>
+    </Card>
+  );
+
+  return tooltip ? <Tooltip title={tooltip} arrow placement="bottom">{card}</Tooltip> : card;
+}
 
 export default function DashboardPage() {
-  const navigate = useNavigate();
+  const { setNotificationCount, setPatients: setGlobalPatients } = useAppData();
   const [patients, setPatients] = useState<Patient[]>([]);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [activeFilter, setActiveFilter] = useState<DashboardFilter | null>(null);
 
   const handleExport = async () => {
     setExporting(true);
@@ -36,70 +140,152 @@ export default function DashboardPage() {
     try {
       const data = await getPatients();
       setPatients(data);
+      setGlobalPatients(data);
     } catch {
       // 401 interceptor will clear tokens → redirect
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [setGlobalPatients]);
 
   useEffect(() => {
     fetchPatients();
   }, [fetchPatients]);
 
-  const handleLogout = () => {
-    clearTokens();
-    navigate('/login', { replace: true });
+  const handleCardClick = (filter: DashboardFilter) => {
+    setActiveFilter((prev: DashboardFilter | null) => (prev === filter ? null : filter));
   };
 
+  const stats = useMemo(() => {
+    const now = Date.now();
+    return {
+      total: patients.length,
+      waitingPre: patients.filter(
+        (p) => p.status === 'NEW' || p.status === 'CONSENT_GIVEN' || p.status === 'PRE_OP_DONE',
+      ).length,
+      waitingPost: patients.filter(
+        (p) => p.status === 'POST_OP_STARTED' || p.status === 'POST_OP_DONE',
+      ).length,
+      rpPredictions: patients.filter(
+        (p) => p.prediction_pre === 'INFECTED' || p.prediction_post === 'INFECTED',
+      ).length,
+      expired: patients.filter((p) => !p.deleted_at && new Date(p.expires_at).getTime() <= now).length,
+    };
+  }, [patients]);
+
+  useEffect(() => {
+    setNotificationCount(stats.expired + stats.rpPredictions);
+  }, [stats.expired, stats.rpPredictions, setNotificationCount]);
+
   return (
-    <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
-      <AppBar position="static" elevation={1}>
-        <Toolbar>
-          <Typography variant="h6" sx={{ flexGrow: 1 }}>
-            <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
-              RecurrSens — Dashboard
-            </Box>
-            <Box component="span" sx={{ display: { xs: 'inline', sm: 'none' } }}>
-              RecurrSens
-            </Box>
-          </Typography>
-          <Button color="inherit" startIcon={<LogoutIcon />} onClick={handleLogout}>
-            Abmelden
-          </Button>
-        </Toolbar>
-      </AppBar>
+    <Box>
+      {/* Page header */}
+      <Box sx={{ mb: 3 }}>
+        <Typography variant="h5" gutterBottom sx={{ fontWeight: 700, letterSpacing: '-0.02em' }}>
+          Klinikübersicht
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
+          Verwalten Sie aktive Patienten und Aufnahmen an einem Ort.
+        </Typography>
+      </Box>
 
-      <Box sx={{ px: { xs: 2, md: 3 }, py: 3 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: { xs: 'flex-start', sm: 'center' }, flexWrap: 'wrap', gap: 2, mb: 3 }}>
-          <Typography variant="h5" fontWeight={600}>
-            Patienten
-          </Typography>
-          <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 2 }}>
-            <Button
-              variant="outlined"
-              startIcon={<DownloadIcon />}
-              onClick={handleExport}
-              disabled={exporting}
-            >
-              {exporting
-                ? 'Exportiere…'
-                : selectedIds.size > 0
-                  ? `Auswahl exportieren (${selectedIds.size})`
-                  : 'Alle exportieren'}
-            </Button>
-            <CreatePatientDialog onCreated={fetchPatients} />
-          </Box>
-        </Box>
-
-        <PatientList
-          patients={patients}
-          loading={loading}
-          onRefresh={fetchPatients}
-          selectedIds={selectedIds}
-          onSelectionChange={setSelectedIds}
+      {/* KPI strip */}
+      <Box
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(5, minmax(0, 1fr))',
+          gap: 2,
+          mb: 2,
+        }}
+      >
+        <KPICard
+          title="Alle Patienten"
+          value={stats.total}
+          icon={<EventAvailableIcon fontSize="small" />}
+          color="primary"
+          active={activeFilter === 'ALL'}
+          dimmed={!!activeFilter && activeFilter !== 'ALL'}
+          tooltip="Alle aktiven Patienten in der Datenbank"
+          onClick={() => handleCardClick('ALL')}
+        />
+        <KPICard
+          title="Prä-OP"
+          value={stats.waitingPre}
+          icon={<MicIcon fontSize="small" />}
+          color="primary"
+          active={activeFilter === 'PRE_OP'}
+          dimmed={!!activeFilter && activeFilter !== 'PRE_OP'}
+          tooltip="Patienten mit ausstehenden Prä-OP-Aufnahmen"
+          onClick={() => handleCardClick('PRE_OP')}
+        />
+        <KPICard
+          title="Post-OP"
+          value={stats.waitingPost}
+          icon={<HourglassEmptyIcon fontSize="small" />}
+          color="primary"
+          active={activeFilter === 'POST_OP'}
+          dimmed={!!activeFilter && activeFilter !== 'POST_OP'}
+          tooltip="Patienten mit abgeschlossenen Post-OP-Aufnahmen"
+          onClick={() => handleCardClick('POST_OP')}
+        />
+        <KPICard
+          title="KI Vorhersagen"
+          value={stats.rpPredictions}
+          displayValue="..."
+          icon={<WarningAmberIcon fontSize="small" />}
+          color="error"
+          alert
+          active={activeFilter === 'RP'}
+          dimmed={!!activeFilter && activeFilter !== 'RP'}
+          tooltip="Patienten mit KI-Vorhersage für rezidivierende Parotitis – sofortige Überprüfung erforderlich"
+          onClick={() => handleCardClick('RP')}
+        />
+        <KPICard
+          title="Zum Löschen"
+          value={stats.expired}
+          icon={<TimerOffIcon fontSize="small" />}
+          color="error"
+          alert
+          active={activeFilter === 'OVERDUE_DELETE'}
+          dimmed={!!activeFilter && activeFilter !== 'OVERDUE_DELETE'}
+          tooltip="Patienten mit abgelaufener Datenfrist – Löschung erforderlich"
+          onClick={() => handleCardClick('OVERDUE_DELETE')}
         />
       </Box>
+
+      {/* Ablaufdaten expanded panel — shown when Zum Löschen is active */}
+      {activeFilter === 'OVERDUE_DELETE' && (
+        <Box sx={{ mb: 2 }}>
+          <AblaufdatenPanel patients={patients} />
+        </Box>
+      )}
+
+      {/* Active filter chip (for other filters) */}
+      {activeFilter && activeFilter !== 'OVERDUE_DELETE' && (
+        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+          <Chip
+            label={`Filter: ${FILTER_LABELS[activeFilter]}`}
+            onDelete={() => setActiveFilter(null)}
+            size="small"
+            color="primary"
+            variant="outlined"
+          />
+        </Box>
+      )}
+
+      {/* Patient table — full width */}
+      <PatientList
+        patients={patients}
+        loading={loading}
+        onRefresh={fetchPatients}
+        selectedIds={selectedIds}
+        onSelectionChange={setSelectedIds}
+        activeFilter={activeFilter}
+        onExport={handleExport}
+        exporting={exporting}
+        exportCount={selectedIds.size}
+        onCreated={fetchPatients}
+      />
     </Box>
   );
 }
