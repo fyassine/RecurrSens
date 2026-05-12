@@ -7,9 +7,9 @@ import {
   CardContent,
   CardHeader,
   CircularProgress,
+  LinearProgress,
   Typography,
 } from '@mui/material';
-import SkipNextIcon from '@mui/icons-material/SkipNext';
 import AudioRecorder from '../AudioRecorder';
 import { useExerciseSession } from '../../hooks/useExerciseSession';
 
@@ -33,6 +33,8 @@ export default function RecordingScreen({
     currentBlob,
     audioQualityError,
     skipError,
+    qualityFailCount,
+    completedCount,
     handleRecordingComplete,
     handleRecordingError,
     handleRecordingReset,
@@ -55,12 +57,26 @@ export default function RecordingScreen({
   if (!currentExercise) return null;
 
   const exampleUrl = currentExercise.example_audio_url;
+  const totalExercises = exercises.length;
+  const progressPct = totalExercises > 0 ? (completedCount / totalExercises) * 100 : 0;
+  const showCannotDo = qualityFailCount >= 2 && !!audioQualityError;
 
   return (
     <Card sx={{ maxWidth: 640, mx: 'auto' }}>
       <CardHeader
         title={phase === 'PRE_OP' ? 'Pre-OP Aufnahme' : 'Post-OP Aufnahme'}
-        subheader={`Übung ${currentIndex + 1} von ${exercises.length}`}
+        subheader={
+          <Box sx={{ mt: 0.5 }}>
+            <Typography variant="caption" color="text.secondary" display="block" mb={0.75}>
+              Übung {currentIndex + 1} von {totalExercises}
+            </Typography>
+            <LinearProgress
+              variant="determinate"
+              value={progressPct}
+              sx={{ height: 6, borderRadius: 3 }}
+            />
+          </Box>
+        }
       />
       <CardContent sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
         <Box sx={{ p: 3, borderRadius: 2, bgcolor: '#e3f2fd' }}>
@@ -74,6 +90,7 @@ export default function RecordingScreen({
           key={currentExercise.exercise_id}
           exampleAudioUrl={exampleUrl}
           micStream={micStream}
+          hasQualityError={!!audioQualityError}
           onRecordingComplete={handleRecordingComplete}
           onRecordingError={handleRecordingError}
           onRecordingReset={handleRecordingReset}
@@ -87,40 +104,43 @@ export default function RecordingScreen({
           </Alert>
         )}
         {skipError && (
-          <Alert severity="warning">
-            {skipError}
-          </Alert>
+          <Alert severity="warning">{skipError}</Alert>
         )}
         {currentBlob && !audioQualityError && (
           <Alert severity="success">Aufnahme in Ordnung</Alert>
         )}
       </CardContent>
-      <CardActions sx={{ px: 2, pb: 2, gap: 2 }}>
-        <Button
-          variant="text"
-          size="large"
-          onClick={handleSkip}
-          disabled={isUploading || isSkipping}
-          startIcon={isSkipping ? <CircularProgress size={20} /> : <SkipNextIcon />}
-          sx={{ flex: 1 }}
-        >
-          Überspringen
-        </Button>
-        <Button
-          variant="contained"
-          size="large"
-          disabled={!currentBlob || isUploading || isSkipping || !!audioQualityError}
-          onClick={handleNext}
-          sx={{ flex: 1 }}
-        >
-          {isUploading ? (
-            <CircularProgress size={24} />
-          ) : hasNextIncomplete ? (
-            'Nächste Übung'
-          ) : (
-            'Abschließen'
-          )}
-        </Button>
+
+      <CardActions sx={{ px: 2, pb: 2 }}>
+        {showCannotDo ? (
+          <Button
+            variant="outlined"
+            color="warning"
+            size="large"
+            onClick={handleSkip}
+            disabled={isSkipping}
+            startIcon={isSkipping ? <CircularProgress size={20} /> : undefined}
+            fullWidth
+          >
+            Ich kann diese Übung nicht machen
+          </Button>
+        ) : (
+          <Button
+            variant="contained"
+            size="large"
+            disabled={!currentBlob || isUploading || isSkipping || !!audioQualityError}
+            onClick={handleNext}
+            fullWidth
+          >
+            {isUploading ? (
+              <CircularProgress size={24} />
+            ) : hasNextIncomplete ? (
+              'Nächste Übung'
+            ) : (
+              'Abschließen'
+            )}
+          </Button>
+        )}
       </CardActions>
     </Card>
   );
