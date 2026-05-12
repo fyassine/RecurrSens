@@ -11,6 +11,8 @@ interface AudioRecorderProps {
   exampleAudioUrl?: string;
   /** Pre-warmed mic stream — if provided, getUserMedia is skipped on press. */
   micStream?: MediaStream | null;
+  /** When true, overrides the "Aufnahme bereit" label and promotes "Neu aufnehmen" to primary. */
+  hasQualityError?: boolean;
   onRecordingComplete: (blob: Blob) => void;
   onRecordingReset?: () => void;
   onRecordingError?: (message: string) => void;
@@ -19,6 +21,7 @@ interface AudioRecorderProps {
 export default function AudioRecorder({
   exampleAudioUrl,
   micStream: externalStream,
+  hasQualityError = false,
   onRecordingComplete,
   onRecordingReset,
   onRecordingError,
@@ -375,12 +378,22 @@ export default function AudioRecorder({
             >
               Anhören
             </Button>
-            <Button variant="outlined" startIcon={<ReplayIcon />} onClick={resetRecording}>
+            <Button
+              variant={hasQualityError ? 'contained' : 'outlined'}
+              color={hasQualityError ? 'primary' : 'inherit'}
+              startIcon={<ReplayIcon />}
+              onClick={resetRecording}
+            >
               Neu aufnehmen
             </Button>
           </Box>
-          <Typography variant="body2" color="text.secondary" textAlign="center">
-            Aufnahme bereit
+          <Typography
+            variant="body2"
+            color={hasQualityError ? 'error.main' : 'text.secondary'}
+            fontWeight={hasQualityError ? 600 : 400}
+            textAlign="center"
+          >
+            {hasQualityError ? 'Aufnahme fehlgeschlagen' : 'Aufnahme bereit'}
           </Typography>
         </Box>
       )}

@@ -166,5 +166,17 @@
       "order": 14,
       "is_active": true
     }
+  },
+  {
+    "model": "patients.exercise",
+    "pk": 15,
+    "fields": {
+      "exercise_id": "happy_birthday",
+      "title": "Lied: Happy Birthday",
+      "description": "Bitte singen Sie das Lied \"Happy Birthday to You\" so laut und deutlich wie möglich.",
+      "example_audio_url": "",
+      "order": 15,
+      "is_active": true
+    }
   }
 ]

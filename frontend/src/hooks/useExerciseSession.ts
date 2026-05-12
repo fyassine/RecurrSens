@@ -21,6 +21,7 @@ export function useExerciseSession(
   const [audioQualityError, setAudioQualityError] = useState<string | null>(null);
   const [skipError, setSkipError] = useState<string | null>(null);
   const [completedIds, setCompletedIds] = useState<string[]>(completedExerciseIds);
+  const [qualityFailCount, setQualityFailCount] = useState(0);
 
   useEffect(() => {
     getExercises().then((data) => {
@@ -49,6 +50,7 @@ export function useExerciseSession(
       const dbfs = await calculateRMS(blob);
       if (dbfs < THRESHOLDS.MIN_DBFS) {
         setAudioQualityError(LOW_QUALITY_MESSAGE);
+        setQualityFailCount((prev) => prev + 1);
       } else if (dbfs > THRESHOLDS.MAX_DBFS) {
         setAudioQualityError('Die Aufnahme ist zu laut und übersteuert. Bitte etwas mehr Abstand zum Mikrofon.');
       }
@@ -85,6 +87,7 @@ export function useExerciseSession(
     }
 
     setCurrentIndex(nextIndex);
+    setQualityFailCount(0);
     handleRecordingReset();
   };
 
@@ -142,6 +145,8 @@ export function useExerciseSession(
     currentBlob,
     audioQualityError,
     skipError,
+    qualityFailCount,
+    completedCount: completedIds.length,
     handleRecordingComplete,
     handleRecordingError,
     handleRecordingReset,

@@ -26,12 +26,14 @@ import SearchIcon from '@mui/icons-material/Search';
 import DownloadIcon from '@mui/icons-material/Download';
 import DeleteIcon from '@mui/icons-material/Delete';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import LockIcon from '@mui/icons-material/Lock';
+import LockOpenIcon from '@mui/icons-material/LockOpen';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import NavigateBeforeIcon from '@mui/icons-material/NavigateBefore';
 import NavigateNextIcon from '@mui/icons-material/NavigateNext';
 import type { Patient, PatientStatus } from '../types';
 import { StatusBadge, PredictionBadge } from './Badges';
-import { deletePatient } from '../api/client';
+import { deletePatient, advancePatient } from '../api/client';
 import PatientAccessOptions from './PatientAccessOptions';
 import CreatePatientDialog from './CreatePatientDialog';
 import ConfirmDialog from './ConfirmDialog';
@@ -78,6 +80,7 @@ export default function PatientList({
   const [deleteTarget, setDeleteTarget] = useState<Patient | null>(null);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [accessPatient, setAccessPatient] = useState<Patient | null>(null);
+  const [unlocking, setUnlocking] = useState<string | null>(null);
 
   // Reset to page 0 when filter/search changes
   useEffect(() => {
@@ -165,6 +168,16 @@ export default function PatientList({
     setBulkDeleteOpen(false);
     onSelectionChange(new Set());
     onRefresh();
+  };
+
+  const handleUnlock = async (patient: Patient) => {
+    setUnlocking(patient.id);
+    try {
+      await advancePatient(patient.id);
+      onRefresh();
+    } finally {
+      setUnlocking(null);
+    }
   };
 
   if (loading) {
@@ -373,7 +386,12 @@ export default function PatientList({
                       {new Date(p.created_at).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })}
                     </TableCell>
                     <TableCell align="center">
-                      <StatusBadge status={p.status as PatientStatus} />
+                      <Box sx={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 0.75 }}>
+                        <StatusBadge status={p.status as PatientStatus} />
+                        {p.status === 'PRE_OP_DONE' && (
+                          <LockIcon sx={{ fontSize: 13, color: 'warning.main' }} />
+                        )}
+                      </Box>
                     </TableCell>
                     <TableCell align="center">
                       <PredictionBadge value={p.prediction_pre} />
@@ -410,6 +428,19 @@ export default function PatientList({
                             <OpenInNewIcon fontSize="small" color="primary" />
                           </IconButton>
                         </Tooltip>
+                        {p.status === 'PRE_OP_DONE' && (
+                          <Tooltip title="Für Post-OP freischalten">
+                            <IconButton
+                              size="small"
+                              disabled={unlocking === p.id}
+                              onClick={(e) => { e.stopPropagation(); handleUnlock(p); }}
+                            >
+                              {unlocking === p.id
+                                ? <CircularProgress size={14} />
+                                : <LockOpenIcon fontSize="small" sx={{ color: 'success.main' }} />}
+                            </IconButton>
+                          </Tooltip>
+                        )}
                         <Tooltip title="Löschen">
                           <IconButton
                             size="small"
