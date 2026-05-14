@@ -175,7 +175,7 @@ class Patient(models.Model):
 
     def save(self, *args, **kwargs):
         if not self.expires_at:
-            retention_days = getattr(settings, 'DATA_RETENTION_DAYS', 3)
+            retention_days = getattr(settings, 'DATA_RETENTION_DAYS', 7)
             self.expires_at = timezone.now() + timedelta(days=retention_days)
         super().save(*args, **kwargs)
 

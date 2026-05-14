@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Alert,
   Box,
@@ -68,6 +69,7 @@ export default function PatientList({
   exportCount?: number;
   onCreated?: () => void;
 }) {
+  const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const [orderBy, setOrderBy] = useState<SortKey>('created_at');
   const [order, setOrder] = useState<Order>('desc');
@@ -341,7 +343,7 @@ export default function PatientList({
                     key={p.id}
                     hover
                     selected={selectedIds.has(p.id)}
-                    onClick={() => setAccessPatient(p)}
+                    onClick={() => navigate(`/details/${p.id}`, { state: { patientLabel: p.patient_id } })}
                     sx={{
                       cursor: 'pointer',
                       '&:hover': {
@@ -585,7 +587,7 @@ export default function PatientList({
       <ConfirmDialog
         open={deleteOpen}
         title="Patient löschen?"
-        message={`Sind Sie sicher, dass Sie den Patienten "${deleteTarget?.patient_id}" löschen möchten? Alle zugehörigen Daten und Audiodateien werden dauerhaft entfernt.`}
+        message={`Sind Sie sicher, dass Sie den Patienten "${deleteTarget?.patient_id}" löschen möchten? Die Daten werden gelöscht — stellen Sie sicher, dass alle Audiodateien bereits auf den verschlüsselten lokalen Server übertragen wurden.`}
         confirmLabel="Löschen"
         confirmColor="error"
         onConfirm={handleDelete}
@@ -595,7 +597,7 @@ export default function PatientList({
       <ConfirmDialog
         open={bulkDeleteOpen}
         title={selectedIds.size > 1 ? 'Ausgewählte Patienten löschen?' : 'Ausgewählten Patienten löschen?'}
-        message={`Möchten Sie ${selectedIds.size > 1 ? `die ${selectedIds.size} ausgewählten Patienten` : 'den ausgewählten Patienten'} löschen? Alle zugehörigen Daten und Audiodateien werden dauerhaft entfernt.`}
+        message={`Möchten Sie ${selectedIds.size > 1 ? `die ${selectedIds.size} ausgewählten Patienten` : 'den ausgewählten Patienten'} löschen? Die Daten werden gelöscht — stellen Sie sicher, dass alle Audiodateien bereits auf den verschlüsselten lokalen Server übertragen wurden.`}
         confirmLabel={selectedIds.size > 1 ? `Alle (${selectedIds.size}) löschen` : 'Löschen'}
         confirmColor="error"
         onConfirm={handleBulkDelete}

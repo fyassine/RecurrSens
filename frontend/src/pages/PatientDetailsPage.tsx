@@ -84,7 +84,7 @@ export default function PatientDetailsPage() {
   const noRecordings = patient.audio_files_pre.length === 0 && patient.audio_files_post.length === 0;
 
   return (
-    <Box sx={{ minHeight: '100vh', bgcolor: 'background.default', px: { xs: 2, md: 3 }, py: noRecordings ? 2 : 3 }}>
+    <Box sx={{ minHeight: '100vh', bgcolor: 'background.default', pb: noRecordings ? 2 : 3 }}>
       <Button
         startIcon={<ArrowBackIcon />}
         onClick={() => navigate('/')}

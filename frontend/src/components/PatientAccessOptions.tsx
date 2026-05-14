@@ -30,10 +30,10 @@ function ActionRow({ icon, iconBg, iconColor, label, description, onClick, href,
       sx={{
         display: 'flex',
         alignItems: 'center',
-        gap: 1.5,
-        py: 1,
-        px: 1.25,
-        borderRadius: 1.5,
+        gap: 2,
+        py: 1.25,
+        px: 1.5,
+        borderRadius: 2,
         cursor: 'pointer',
         textDecoration: 'none',
         color: 'inherit',
@@ -43,9 +43,9 @@ function ActionRow({ icon, iconBg, iconColor, label, description, onClick, href,
     >
       <Box
         sx={{
-          width: 32,
-          height: 32,
-          borderRadius: 1,
+          width: 44,
+          height: 44,
+          borderRadius: 1.5,
           bgcolor: iconBg,
           color: iconColor,
           display: 'flex',
@@ -57,10 +57,10 @@ function ActionRow({ icon, iconBg, iconColor, label, description, onClick, href,
         {icon}
       </Box>
       <Box sx={{ minWidth: 0 }}>
-        <Typography fontSize="0.8125rem" fontWeight={600} color="text.primary" lineHeight={1.3}>
+        <Typography fontSize="0.9375rem" fontWeight={600} color="text.primary" lineHeight={1.35}>
           {label}
         </Typography>
-        <Typography fontSize="0.72rem" color="text.secondary" lineHeight={1.3} mt="1px">
+        <Typography fontSize="0.8125rem" color="text.secondary" lineHeight={1.35} mt="2px">
           {description}
         </Typography>
       </Box>
@@ -87,9 +87,9 @@ export default function PatientAccessOptions({
 
   return (
     <>
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.25, py: 0.5 }}>
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, py: 0.75 }}>
         <ActionRow
-          icon={<ArrowForwardIcon sx={{ fontSize: 17 }} />}
+          icon={<ArrowForwardIcon sx={{ fontSize: 20 }} />}
           iconBg={tint(p.primary.main)}
           iconColor={p.primary.main}
           label="Details anzeigen"
@@ -97,7 +97,7 @@ export default function PatientAccessOptions({
           href={`/details/${patientId}`}
         />
         <ActionRow
-          icon={copied ? <CheckIcon sx={{ fontSize: 17 }} /> : <ContentCopyIcon sx={{ fontSize: 17 }} />}
+          icon={copied ? <CheckIcon sx={{ fontSize: 20 }} /> : <ContentCopyIcon sx={{ fontSize: 20 }} />}
           iconBg={tint(p.info.main)}
           iconColor={p.info.main}
           label={copied ? 'In Zwischenablage kopiert!' : 'Patienten-Link kopieren'}
@@ -105,7 +105,7 @@ export default function PatientAccessOptions({
           onClick={handleCopy}
         />
         <ActionRow
-          icon={<PictureAsPdfIcon sx={{ fontSize: 17 }} />}
+          icon={<PictureAsPdfIcon sx={{ fontSize: 20 }} />}
           iconBg={tint(p.warning.main)}
           iconColor={p.warning.main}
           label="PDF öffnen"
@@ -113,7 +113,7 @@ export default function PatientAccessOptions({
           onClick={() => downloadPatientPdf(patientId)}
         />
         <ActionRow
-          icon={<OpenInNewIcon sx={{ fontSize: 17 }} />}
+          icon={<OpenInNewIcon sx={{ fontSize: 20 }} />}
           iconBg={tint(p.error.main)}
           iconColor={p.error.main}
           label="Patienten-Aufnahme öffnen"
