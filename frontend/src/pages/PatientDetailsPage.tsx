@@ -65,7 +65,7 @@ export default function PatientDetailsPage() {
     fetchPatient();
   }, [fetchPatient]);
 
-  if (loading) {
+if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
         <CircularProgress />

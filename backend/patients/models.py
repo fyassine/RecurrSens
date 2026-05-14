@@ -312,16 +312,22 @@ class PatientFeedback(models.Model):
 
 
 class ExerciseSkip(models.Model):
-    """Tracks skipped exercises per patient and phase."""
+    """Tracks skipped exercises per patient, scoped to a recording session."""
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     patient = models.ForeignKey(
         Patient, on_delete=models.CASCADE, related_name='exercise_skips',
         verbose_name='Patient'
     )
+    session = models.ForeignKey(
+        RecordingSession, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name='exercise_skips',
+        verbose_name='Sitzung',
+    )
     phase = models.CharField(
         max_length=10, choices=RecordingSession.Phase.choices,
-        verbose_name='Phase'
+        verbose_name='Phase',
+        help_text='Kept for backward compat and admin display; uniqueness enforced via session.'
     )
     exercise_id = models.CharField(
         max_length=50,
@@ -331,7 +337,7 @@ class ExerciseSkip(models.Model):
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='Erstellt am')
 
     class Meta:
-        unique_together = [('patient', 'phase', 'exercise_id')]
+        unique_together = [('patient', 'session', 'exercise_id')]
         ordering = ['-created_at']
         verbose_name = 'Übung übersprungen'
         verbose_name_plural = 'Übungen übersprungen'

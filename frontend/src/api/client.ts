@@ -117,6 +117,14 @@ export async function advancePatient(id: string): Promise<PatientDetail> {
   return data;
 }
 
+export async function createSession(
+  patientId: string,
+  phase: 'PRE_OP' | 'POST_OP',
+): Promise<{ id: string; phase: string; session_number: number; created_at: string }> {
+  const { data } = await api.post(`/patients/${patientId}/sessions/`, { phase });
+  return data;
+}
+
 export async function getCompleteness(id: string): Promise<Completeness> {
   const { data } = await api.get(`/patients/${id}/completeness/`);
   return data;

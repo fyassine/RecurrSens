@@ -8,6 +8,7 @@ Provides different serializer variants depending on the consumer:
 """
 from rest_framework import serializers
 from .models import Patient, AudioFile, Exercise, RecordingSession, PatientFeedback, ExerciseSkip
+from .services import get_active_session
 
 
 # =============================================================================
@@ -124,6 +125,7 @@ class PatientListSerializer(serializers.ModelSerializer):
     """
     audio_count_pre = serializers.SerializerMethodField()
     audio_count_post = serializers.SerializerMethodField()
+    current_post_op_session_number = serializers.SerializerMethodField()
 
     class Meta:
         model = Patient
@@ -131,6 +133,7 @@ class PatientListSerializer(serializers.ModelSerializer):
             'id', 'patient_id', 'status',
             'prediction_pre', 'prediction_post',
             'audio_count_pre', 'audio_count_post',
+            'current_post_op_session_number',
             'pre_op_date', 'post_op_date',
             'expires_at', 'created_at', 'updated_at',
         ]
@@ -141,6 +144,10 @@ class PatientListSerializer(serializers.ModelSerializer):
 
     def get_audio_count_post(self, obj):
         return obj.audio_files.filter(phase='POST_OP').count()
+
+    def get_current_post_op_session_number(self, obj):
+        session = get_active_session(obj, 'POST_OP')
+        return session.session_number if session else None
 
 
 class PatientDetailSerializer(serializers.ModelSerializer):
@@ -186,6 +193,8 @@ class PatientPublicSerializer(serializers.ModelSerializer):
     """
     Patient-facing serializer. Omits sensitive AI internals and admin-only fields.
     Used by the patient wizard (accessed via UUID token in URL).
+    Completion and skip tracking are scoped to the active session so that
+    longitudinal follow-up sessions always start with a clean slate.
     """
     completed_exercise_ids_pre = serializers.SerializerMethodField()
     completed_exercise_ids_post = serializers.SerializerMethodField()
@@ -193,6 +202,7 @@ class PatientPublicSerializer(serializers.ModelSerializer):
     skipped_exercise_ids_post = serializers.SerializerMethodField()
     feedback_submitted_pre = serializers.SerializerMethodField()
     feedback_submitted_post = serializers.SerializerMethodField()
+    current_post_op_session_number = serializers.SerializerMethodField()
 
     class Meta:
         model = Patient
@@ -201,39 +211,44 @@ class PatientPublicSerializer(serializers.ModelSerializer):
             'completed_exercise_ids_pre', 'completed_exercise_ids_post',
             'skipped_exercise_ids_pre', 'skipped_exercise_ids_post',
             'feedback_submitted_pre', 'feedback_submitted_post',
+            'current_post_op_session_number',
             'created_at',
         ]
         read_only_fields = fields
 
     def get_completed_exercise_ids_pre(self, obj):
-        return list(
-            obj.audio_files.filter(phase='PRE_OP')
-            .values_list('exercise_id', flat=True)
-        )
+        session = get_active_session(obj, 'PRE_OP')
+        if not session:
+            return []
+        return list(obj.audio_files.filter(session=session).values_list('exercise_id', flat=True))
 
     def get_completed_exercise_ids_post(self, obj):
-        return list(
-            obj.audio_files.filter(phase='POST_OP')
-            .values_list('exercise_id', flat=True)
-        )
+        session = get_active_session(obj, 'POST_OP')
+        if not session:
+            return []
+        return list(obj.audio_files.filter(session=session).values_list('exercise_id', flat=True))
 
     def get_skipped_exercise_ids_pre(self, obj):
-        return list(
-            obj.exercise_skips.filter(phase='PRE_OP')
-            .values_list('exercise_id', flat=True)
-        )
+        session = get_active_session(obj, 'PRE_OP')
+        if not session:
+            return []
+        return list(obj.exercise_skips.filter(session=session).values_list('exercise_id', flat=True))
 
     def get_skipped_exercise_ids_post(self, obj):
-        return list(
-            obj.exercise_skips.filter(phase='POST_OP')
-            .values_list('exercise_id', flat=True)
-        )
+        session = get_active_session(obj, 'POST_OP')
+        if not session:
+            return []
+        return list(obj.exercise_skips.filter(session=session).values_list('exercise_id', flat=True))
 
     def get_feedback_submitted_pre(self, obj):
         return obj.feedback_entries.filter(phase='PRE_OP').exists()
 
     def get_feedback_submitted_post(self, obj):
         return obj.feedback_entries.filter(phase='POST_OP').exists()
+
+    def get_current_post_op_session_number(self, obj):
+        session = get_active_session(obj, 'POST_OP')
+        return session.session_number if session else None
 
 
 class PatientCreateSerializer(serializers.ModelSerializer):

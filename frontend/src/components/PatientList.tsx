@@ -5,6 +5,7 @@ import {
   Box,
   Button,
   Checkbox,
+  Chip,
   CircularProgress,
   Dialog,
   DialogActions,
@@ -22,6 +23,7 @@ import {
   TextField,
   Tooltip,
   Typography,
+  useTheme,
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import DownloadIcon from '@mui/icons-material/Download';
@@ -34,7 +36,7 @@ import NavigateBeforeIcon from '@mui/icons-material/NavigateBefore';
 import NavigateNextIcon from '@mui/icons-material/NavigateNext';
 import type { Patient, PatientStatus } from '../types';
 import { StatusBadge, PredictionBadge } from './Badges';
-import { deletePatient, advancePatient } from '../api/client';
+import { deletePatient, advancePatient, createSession } from '../api/client';
 import PatientAccessOptions from './PatientAccessOptions';
 import CreatePatientDialog from './CreatePatientDialog';
 import ConfirmDialog from './ConfirmDialog';
@@ -83,6 +85,7 @@ export default function PatientList({
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [accessPatient, setAccessPatient] = useState<Patient | null>(null);
   const [unlocking, setUnlocking] = useState<string | null>(null);
+  const [creatingFollowUp, setCreatingFollowUp] = useState<string | null>(null);
 
   // Reset to page 0 when filter/search changes
   useEffect(() => {
@@ -179,6 +182,16 @@ export default function PatientList({
       onRefresh();
     } finally {
       setUnlocking(null);
+    }
+  };
+
+  const handleCreateFollowUp = async (patient: Patient) => {
+    setCreatingFollowUp(patient.id);
+    try {
+      await createSession(patient.id, 'POST_OP');
+      onRefresh();
+    } finally {
+      setCreatingFollowUp(null);
     }
   };
 
@@ -389,8 +402,16 @@ export default function PatientList({
                     </TableCell>
                     <TableCell align="center">
                       <Box sx={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 0.75 }}>
-                        <StatusBadge status={p.status as PatientStatus} />
+                        {p.status === 'POST_OP_STARTED' && (p.current_post_op_session_number ?? 1) > 1
+                          ? <FollowUpBadge sessionNumber={p.current_post_op_session_number!} complete={false} />
+                          : p.status === 'POST_OP_DONE' && (p.current_post_op_session_number ?? 1) > 1
+                            ? <FollowUpBadge sessionNumber={p.current_post_op_session_number!} complete />
+                            : <StatusBadge status={p.status as PatientStatus} />
+                        }
                         {p.status === 'PRE_OP_DONE' && (
+                          <LockIcon sx={{ fontSize: 13, color: 'warning.main' }} />
+                        )}
+                        {p.status === 'POST_OP_DONE' && (
                           <LockIcon sx={{ fontSize: 13, color: 'warning.main' }} />
                         )}
                       </Box>
@@ -440,6 +461,19 @@ export default function PatientList({
                               {unlocking === p.id
                                 ? <CircularProgress size={14} />
                                 : <LockOpenIcon fontSize="small" sx={{ color: 'success.main' }} />}
+                            </IconButton>
+                          </Tooltip>
+                        )}
+                        {p.status === 'POST_OP_DONE' && (
+                          <Tooltip title="Neue Follow-Up Sitzung starten">
+                            <IconButton
+                              size="small"
+                              disabled={creatingFollowUp === p.id}
+                              onClick={(e) => { e.stopPropagation(); handleCreateFollowUp(p); }}
+                            >
+                              {creatingFollowUp === p.id
+                                ? <CircularProgress size={14} />
+                                : <LockOpenIcon fontSize="small" sx={{ color: 'info.main' }} />}
                             </IconButton>
                           </Tooltip>
                         )}
@@ -617,6 +651,24 @@ export default function PatientList({
         </DialogActions>
       </Dialog>
     </>
+  );
+}
+
+function FollowUpBadge({ sessionNumber, complete }: { sessionNumber: number; complete: boolean }) {
+  const { palette: p } = useTheme();
+  const isDark = p.mode === 'dark';
+  const color = complete
+    ? (isDark ? '#4ade80' : '#2e7d32')
+    : (isDark ? '#60a5fa' : '#1565c0');
+  const bg = complete
+    ? (isDark ? 'rgba(74,222,128,0.12)' : '#e8f5e9')
+    : (isDark ? 'rgba(96,165,250,0.12)' : '#e3f2fd');
+  return (
+    <Chip
+      label={`Follow-up (${sessionNumber}) ${complete ? 'vollständig' : 'unvollständig'}`}
+      size="small"
+      sx={{ bgcolor: bg, color, fontWeight: 500 }}
+    />
   );
 }
 
