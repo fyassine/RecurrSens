@@ -16,12 +16,14 @@ import { useExerciseSession } from '../../hooks/useExerciseSession';
 export default function RecordingScreen({
   token,
   phase,
+  sessionNumber = 1,
   micStream,
   completedExerciseIds = [],
   onComplete,
 }: {
   token: string;
   phase: 'PRE_OP' | 'POST_OP';
+  sessionNumber?: number;
   micStream?: MediaStream | null;
   completedExerciseIds?: string[];
   onComplete: () => void;
@@ -64,7 +66,13 @@ export default function RecordingScreen({
   return (
     <Card sx={{ maxWidth: 640, mx: 'auto' }}>
       <CardHeader
-        title={phase === 'PRE_OP' ? 'Pre-OP Aufnahme' : 'Post-OP Aufnahme'}
+        title={
+          phase === 'PRE_OP'
+            ? 'Prä-OP Aufnahme'
+            : sessionNumber > 1
+              ? `Post-OP Aufnahme (Sitzung ${sessionNumber})`
+              : 'Post-OP Aufnahme'
+        }
         subheader={
           <Box sx={{ mt: 0.5 }}>
             <Typography variant="caption" color="text.secondary" display="block" mb={0.75}>

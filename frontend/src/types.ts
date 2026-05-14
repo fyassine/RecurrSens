@@ -6,6 +6,7 @@ export interface Patient {
   prediction_post: PredictionStatus;
   audio_count_pre: number;
   audio_count_post: number;
+  current_post_op_session_number: number | null;
   pre_op_date: string | null;
   post_op_date: string | null;
   deleted_at: string | null;
@@ -38,6 +39,7 @@ export interface PatientPublic {
   skipped_exercise_ids_post: string[];
   feedback_submitted_pre: boolean;
   feedback_submitted_post: boolean;
+  current_post_op_session_number: number | null;
   created_at: string;
 }
 

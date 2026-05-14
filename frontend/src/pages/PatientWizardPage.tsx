@@ -22,6 +22,7 @@ export default function PatientWizardPage() {
   const [skippedExerciseIdsPost, setSkippedExerciseIdsPost] = useState<string[]>([]);
   const [feedbackSubmittedPre, setFeedbackSubmittedPre] = useState(false);
   const [feedbackSubmittedPost, setFeedbackSubmittedPost] = useState(false);
+  const [postOpSessionNumber, setPostOpSessionNumber] = useState<number>(1);
 
   // Pre-warmed mic stream, acquired on the LandingScreen's "Start" click.
   // Kept alive across exercises so every record-press is instant (no getUserMedia).
@@ -38,6 +39,7 @@ export default function PatientWizardPage() {
         setSkippedExerciseIdsPost(data.skipped_exercise_ids_post);
         setFeedbackSubmittedPre(data.feedback_submitted_pre);
         setFeedbackSubmittedPost(data.feedback_submitted_post);
+        setPostOpSessionNumber(data.current_post_op_session_number ?? 1);
 
         if (data.status === 'PRE_OP_DONE' && !data.feedback_submitted_pre) {
           setStatus('PRE_OP_FEEDBACK');
@@ -121,6 +123,7 @@ export default function PatientWizardPage() {
           <RecordingScreen
             token={token}
             phase="POST_OP"
+            sessionNumber={postOpSessionNumber}
             micStream={micStream}
             completedExerciseIds={postOpCompletedIds}
             onComplete={() =>

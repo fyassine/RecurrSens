@@ -146,9 +146,13 @@ class PatientViewSet(viewsets.ModelViewSet):
             )
 
         session = services.create_recording_session(patient, phase)
+
+        # Reopen the wizard for longitudinal follow-up sessions
+        if phase == 'POST_OP' and patient.status == Patient.Status.POST_OP_DONE:
+            patient.status = Patient.Status.POST_OP_STARTED
+            patient.save(update_fields=['status', 'updated_at'])
+
         # TODO: Send email notification with QR code / recording link to patient
-        # Requires SMTP configuration. The email should contain a link to /p/{token}
-        # and a QR code for the patient to scan.
         return Response(
             RecordingSessionSerializer(session).data,
             status=status.HTTP_201_CREATED,
@@ -301,10 +305,12 @@ class ExerciseSkipView(APIView):
         serializer.is_valid(raise_exception=True)
 
         data = serializer.validated_data
+        active_session = services.get_active_session(patient, data['phase'])
         skip, created = ExerciseSkip.objects.get_or_create(
             patient=patient,
-            phase=data['phase'],
+            session=active_session,
             exercise_id=data['exercise_id'],
+            defaults={'phase': data['phase']},
         )
 
         return Response(
