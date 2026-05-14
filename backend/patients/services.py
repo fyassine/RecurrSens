@@ -18,6 +18,8 @@ from typing import Optional
 from django.utils import timezone
 
 import boto3
+import boto3.session
+from botocore.config import Config as BotocoreConfig
 import qrcode
 from django.conf import settings
 from reportlab.lib.pagesizes import A4
@@ -37,6 +39,7 @@ def get_s3_client():
         endpoint_url=settings.S3_ENDPOINT,
         aws_access_key_id=settings.S3_ACCESS_KEY,
         aws_secret_access_key=settings.S3_SECRET_KEY,
+        config=BotocoreConfig(s3={'addressing_style': 'path'}),
     )
 
 
@@ -418,6 +421,8 @@ def export_patients_zip(patient_ids: list | None = None) -> bytes:
 
         s3 = get_s3_client()
         export_time = timezone.now()
+        fetch_errors: list[str] = []
+
         for patient in patients:
             audio_files = list(patient.audio_files.all())
             pre_count = sum(1 for f in audio_files if f.phase == 'PRE_OP')
@@ -449,15 +454,19 @@ def export_patients_zip(patient_ids: list | None = None) -> bytes:
                     )
                     zf.writestr(zip_path, response['Body'].read())
                 except Exception as e:
+                    msg = f'ERROR: {audio_file.storage_key} → {e}'
                     logger.error(
                         f'Failed to fetch audio {audio_file.storage_key} '
                         f'for patient {patient.patient_id}: {e}'
                     )
+                    fetch_errors.append(msg)
 
             patient.last_exported_at = export_time
             patient.save(update_fields=['last_exported_at'])
 
         zf.writestr('metadata.csv', csv_buffer.getvalue())
+        if fetch_errors:
+            zf.writestr('errors.txt', '\n'.join(fetch_errors))
 
     zip_buffer.seek(0)
     return zip_buffer.read()
