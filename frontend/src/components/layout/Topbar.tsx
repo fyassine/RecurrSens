@@ -15,9 +15,12 @@ import { useLocation, useParams } from 'react-router-dom';
 import { useColorMode } from '../../context/ColorModeContext';
 import { useAppData } from '../../context/AppDataContext';
 
-function getBreadcrumb(pathname: string, patientId?: string): string {
+function getBreadcrumb(pathname: string, patientLabel?: string, token?: string): string {
   if (pathname === '/') return 'Übersicht';
-  if (pathname.startsWith('/details/')) return patientId ? `Übersicht / ${patientId}` : 'Übersicht';
+  if (pathname.startsWith('/details/')) {
+    const label = patientLabel || token;
+    return label ? `Übersicht / ${label}` : 'Übersicht';
+  }
   if (pathname.startsWith('/analytik')) return 'Analytik';
   if (pathname.startsWith('/einstellungen')) return 'Einstellungen';
   return 'Übersicht';
@@ -45,7 +48,8 @@ export default function Topbar() {
   const { token } = useParams<{ token?: string }>();
   const [bellAnchor, setBellAnchor] = useState<null | HTMLElement>(null);
 
-  const crumb = getBreadcrumb(location.pathname, token);
+  const patientLabel = (location.state as { patientLabel?: string } | null)?.patientLabel;
+  const crumb = getBreadcrumb(location.pathname, patientLabel, token);
   const isDark = theme.palette.mode === 'dark';
   const parts = crumb.split(' / ');
   const p = theme.palette;
@@ -60,12 +64,14 @@ export default function Topbar() {
       if (pt.prediction_pre !== 'TODO') {
         events.push({ text: <>KI-Prä-OP Vorhersage <strong>{pt.patient_id}</strong> bereit</>, time: formatTime(pt.updated_at), dotColor: p.info.main, sort: new Date(pt.updated_at).getTime() });
       }
-      if (!pt.deleted_at && new Date(pt.expires_at).getTime() <= nowMs) {
+      if (pt.deleted_at) {
+        events.push({ text: <>Patient <strong>{pt.patient_id}</strong> gelöscht</>, time: formatTime(pt.deleted_at), dotColor: p.error.main, sort: new Date(pt.deleted_at).getTime() });
+      } else if (new Date(pt.expires_at).getTime() <= nowMs) {
         events.push({ text: <>Ablaufdatum <strong>{pt.patient_id}</strong> überschritten</>, time: formatTime(pt.expires_at), dotColor: p.error.main, sort: new Date(pt.expires_at).getTime() });
       }
       events.push({ text: <>Patient <strong>{pt.patient_id}</strong> angelegt</>, time: formatTime(pt.created_at), dotColor: p.info.main, sort: new Date(pt.created_at).getTime() });
     }
-    return events.sort((a, b) => b.sort - a.sort).slice(0, 10);
+    return events.sort((a, b) => b.sort - a.sort).slice(0, 15);
   }, [patients, p]);
 
   return (
@@ -119,13 +125,13 @@ export default function Topbar() {
         onClose={() => setBellAnchor(null)}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
         transformOrigin={{ vertical: 'top', horizontal: 'right' }}
-        slotProps={{ paper: { sx: { width: 300, borderRadius: 2, boxShadow: '0 8px 24px rgba(0,0,0,0.12)', mt: 0.5, border: '1px solid', borderColor: 'divider' } } }}
+        slotProps={{ paper: { sx: { width: 400, borderRadius: 2, boxShadow: '0 8px 24px rgba(0,0,0,0.12)', mt: 0.5, border: '1px solid', borderColor: 'divider' } } }}
       >
         <Box sx={{ px: 2, py: 1.25, borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 1 }}>
           <ShowChartIcon sx={{ fontSize: 15, color: 'info.main' }} />
           <Typography fontWeight={700} fontSize="0.875rem">Letzte Aktivität</Typography>
         </Box>
-        <Box sx={{ maxHeight: 340, overflowY: 'auto', p: 0.75 }}>
+        <Box sx={{ maxHeight: 480, overflowY: 'auto', p: 0.75 }}>
           {activities.length === 0 ? (
             <Typography fontSize="0.8125rem" color="text.secondary" sx={{ p: 1.5 }}>Keine Aktivitäten vorhanden.</Typography>
           ) : activities.map((ev, i) => (

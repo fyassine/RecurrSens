@@ -1,10 +1,16 @@
 import { useState, useEffect } from 'react';
 import { uploadAudio, advancePublicPatient, getExercises, skipExercise } from '../api/client';
-import { calculateRMS } from '../utils';
+import { calculateRMS, getAudioDuration } from '../utils';
 import type { Exercise } from '../types';
 
 const THRESHOLDS = { MIN_DBFS: -30, MAX_DBFS: -6 };
 const LOW_QUALITY_MESSAGE = 'Die Aufnahme ist zu leise. Bitte sprechen Sie lauter oder näher am Mikrofon.';
+
+function getMinDuration(exerciseId: string): number {
+  if (exerciseId === 'happy_birthday') return 6;
+  if (exerciseId === 'phrase') return 3;
+  return 2;
+}
 
 export function useExerciseSession(
   token: string,
@@ -51,8 +57,18 @@ export function useExerciseSession(
       if (dbfs < THRESHOLDS.MIN_DBFS) {
         setAudioQualityError(LOW_QUALITY_MESSAGE);
         setQualityFailCount((prev) => prev + 1);
+        return;
       } else if (dbfs > THRESHOLDS.MAX_DBFS) {
         setAudioQualityError('Die Aufnahme ist zu laut und übersteuert. Bitte etwas mehr Abstand zum Mikrofon.');
+        return;
+      }
+
+      const duration = await getAudioDuration(blob);
+      const exerciseId = exercises[currentIndex]?.exercise_id ?? '';
+      const minSec = getMinDuration(exerciseId);
+      if (duration < minSec) {
+        setAudioQualityError(`Die Aufnahme ist zu kurz (${duration.toFixed(1)}s). Bitte mindestens ${minSec} Sekunden aufnehmen.`);
+        setQualityFailCount((prev) => prev + 1);
       }
     } catch {
       setAudioQualityError(LOW_QUALITY_MESSAGE);
