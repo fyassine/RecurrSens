@@ -1,16 +1,11 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Alert,
   Box,
   Button,
   Checkbox,
-  Chip,
   CircularProgress,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
   IconButton,
   InputAdornment,
   Table,
@@ -23,11 +18,13 @@ import {
   TextField,
   Tooltip,
   Typography,
-  useTheme,
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import DownloadIcon from '@mui/icons-material/Download';
 import DeleteIcon from '@mui/icons-material/Delete';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import CheckIcon from '@mui/icons-material/Check';
+import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import LockIcon from '@mui/icons-material/Lock';
 import LockOpenIcon from '@mui/icons-material/LockOpen';
@@ -35,10 +32,9 @@ import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import NavigateBeforeIcon from '@mui/icons-material/NavigateBefore';
 import NavigateNextIcon from '@mui/icons-material/NavigateNext';
 import type { Patient, PatientStatus } from '../types';
-import { StatusBadge, PredictionBadge } from './Badges';
-import { deletePatient, advancePatient, createSession } from '../api/client';
-import PatientAccessOptions from './PatientAccessOptions';
-import CreatePatientDialog from './CreatePatientDialog';
+import { StatusBadge, PredictionBadge, FollowUpBadge } from './Badges';
+import { deletePatient, advancePatient, createSession, downloadPatientPdf, exportPatients } from '../api/client';
+import { formatDate, NO_RECORDING_DATE } from '../utils';
 import ConfirmDialog from './ConfirmDialog';
 
 export type DashboardFilter = 'ALL' | 'PRE_OP' | 'POST_OP' | 'RP' | 'OVERDUE_DELETE';
@@ -58,7 +54,6 @@ export default function PatientList({
   onExport,
   exporting = false,
   exportCount = 0,
-  onCreated,
 }: {
   patients: Patient[];
   loading: boolean;
@@ -69,7 +64,6 @@ export default function PatientList({
   onExport?: () => void;
   exporting?: boolean;
   exportCount?: number;
-  onCreated?: () => void;
 }) {
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
@@ -83,9 +77,9 @@ export default function PatientList({
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Patient | null>(null);
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
-  const [accessPatient, setAccessPatient] = useState<Patient | null>(null);
   const [unlocking, setUnlocking] = useState<string | null>(null);
   const [creatingFollowUp, setCreatingFollowUp] = useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   // Reset to page 0 when filter/search changes
   useEffect(() => {
@@ -283,12 +277,11 @@ export default function PatientList({
               startIcon={<DownloadIcon />}
               onClick={onExport}
               disabled={exporting}
-              sx={{ height: 32, minWidth: 140 }}
+              sx={{ height: 32 }}
             >
               {exporting ? 'Exportiere…' : exportCount > 1 ? `Exportieren (${exportCount})` : 'Exportieren'}
             </Button>
           )}
-          {onCreated && <CreatePatientDialog onCreated={onCreated} buttonSx={{ height: 32 }} />}
         </Box>
 
         {/* RP alert banner */}
@@ -342,7 +335,8 @@ export default function PatientList({
                   </Tooltip>
                 </TableCell>
                 <SortCell label="Löschdatum" field="expires_at" orderBy={orderBy} order={order} onSort={handleSort} />
-                <TableCell align="center" sx={{ whiteSpace: 'nowrap' }} />
+                <SortCell label="Aufnahmedatum" field="pre_op_date" orderBy={orderBy} order={order} onSort={handleSort} />
+                <TableCell sx={{ padding: 0 }} />
               </TableRow>
             </TableHead>
             <TableBody>
@@ -360,7 +354,7 @@ export default function PatientList({
                     sx={{
                       cursor: 'pointer',
                       '&:hover': {
-                        boxShadow: 'inset 0 0 0 1px rgba(14,165,201,0.2)',
+                        bgcolor: 'rgba(0,0,0,0.06)',
                         '& .row-actions': { opacity: 1 },
                       },
                     }}
@@ -398,23 +392,10 @@ export default function PatientList({
                       </Box>
                     </TableCell>
                     <TableCell align="center">
-                      {new Date(p.created_at).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+                      {formatDate(p.created_at)}
                     </TableCell>
                     <TableCell align="center">
-                      <Box sx={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 0.75 }}>
-                        {p.status === 'POST_OP_STARTED' && (p.current_post_op_session_number ?? 1) > 1
-                          ? <FollowUpBadge sessionNumber={p.current_post_op_session_number!} complete={false} />
-                          : p.status === 'POST_OP_DONE' && (p.current_post_op_session_number ?? 1) > 1
-                            ? <FollowUpBadge sessionNumber={p.current_post_op_session_number!} complete />
-                            : <StatusBadge status={p.status as PatientStatus} />
-                        }
-                        {p.status === 'PRE_OP_DONE' && (
-                          <LockIcon sx={{ fontSize: 13, color: 'warning.main' }} />
-                        )}
-                        {p.status === 'POST_OP_DONE' && (
-                          <LockIcon sx={{ fontSize: 13, color: 'warning.main' }} />
-                        )}
-                      </Box>
+                      <PatientStatusCell patient={p} />
                     </TableCell>
                     <TableCell align="center">
                       <PredictionBadge value={p.prediction_pre} />
@@ -424,15 +405,24 @@ export default function PatientList({
                     </TableCell>
                     <TableCell
                       sx={{
-                        color: isExpired || isExpiringSoon ? 'error.main' : 'text.primary',
-                        fontWeight: isExpired ? 700 : 400,
+                        color: p.deleted_at ? 'success.main' : isExpired || isExpiringSoon ? 'error.main' : 'text.primary',
+                        fontWeight: p.deleted_at || isExpired ? 700 : 400,
                       }}
                       align="center"
                     >
-                      <Box sx={{ display: 'inline-flex', justifyContent: 'center', alignItems: 'center', gap: 0.5 }}>
-                        {new Date(p.expires_at).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })}
-                        {isExpired && <WarningAmberIcon sx={{ fontSize: 16, color: 'error.main' }} />}
-                      </Box>
+                      {p.deleted_at ? (
+                        <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
+                          Gelöscht <CheckIcon sx={{ fontSize: 14 }} />
+                        </Box>
+                      ) : (
+                        <Box sx={{ display: 'inline-flex', justifyContent: 'center', alignItems: 'center', gap: 0.5 }}>
+                          {formatDate(p.expires_at)}
+                          {isExpired && <WarningAmberIcon sx={{ fontSize: 16, color: 'error.main' }} />}
+                        </Box>
+                      )}
+                    </TableCell>
+                    <TableCell align="center" sx={{ color: p.pre_op_date ? 'text.primary' : 'text.disabled', fontSize: '0.8rem', whiteSpace: 'nowrap' }}>
+                      {p.pre_op_date ? formatDate(p.pre_op_date) : NO_RECORDING_DATE}
                     </TableCell>
                     <TableCell align="center" onClick={(e) => e.stopPropagation()}>
                       <Box
@@ -446,8 +436,46 @@ export default function PatientList({
                           transition: 'opacity 0.15s',
                         }}
                       >
-                        <Tooltip title="Zugangsoptionen">
-                          <IconButton size="small" onClick={() => setAccessPatient(p)}>
+                        <Tooltip title={copiedId === p.id ? 'Kopiert!' : 'Patienten-Link kopieren'}>
+                          <IconButton
+                            size="small"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigator.clipboard.writeText(`${window.location.origin}/p/${p.id}`);
+                              setCopiedId(p.id);
+                              setTimeout(() => setCopiedId(null), 2000);
+                            }}
+                          >
+                            {copiedId === p.id
+                              ? <CheckIcon fontSize="small" sx={{ color: 'success.main' }} />
+                              : <ContentCopyIcon fontSize="small" sx={{ color: 'info.main' }} />}
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip title="PDF / QR-Code öffnen">
+                          <IconButton
+                            size="small"
+                            onClick={(e) => { e.stopPropagation(); downloadPatientPdf(p.id); }}
+                          >
+                            <PictureAsPdfIcon fontSize="small" sx={{ color: 'warning.main' }} />
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip title="Daten herunterladen">
+                          <IconButton
+                            size="small"
+                            onClick={(e) => { e.stopPropagation(); exportPatients([p.id]); }}
+                          >
+                            <DownloadIcon fontSize="small" sx={{ color: 'text.secondary' }} />
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip title="Patienten-Aufnahme öffnen">
+                          <IconButton
+                            size="small"
+                            component="a"
+                            href={`/p/${p.id}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e: React.MouseEvent) => e.stopPropagation()}
+                          >
                             <OpenInNewIcon fontSize="small" color="primary" />
                           </IconButton>
                         </Tooltip>
@@ -492,7 +520,7 @@ export default function PatientList({
               })}
               {paginated.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={8} align="center" sx={{ py: 6, color: 'text.secondary' }}>
+                  <TableCell colSpan={9} align="center" sx={{ py: 6, color: 'text.secondary' }}>
                     {search
                       ? `Kein Patient mit ID „${search}" gefunden.`
                       : activeFilter
@@ -638,37 +666,29 @@ export default function PatientList({
         onCancel={() => setBulkDeleteOpen(false)}
       />
 
-      {/* Patient access dialog — opened by row click or hover icon */}
-      <Dialog open={!!accessPatient} onClose={() => setAccessPatient(null)} maxWidth="xs" fullWidth>
-        <DialogTitle>Patienten-Zugang</DialogTitle>
-        <DialogContent>
-          {accessPatient && (
-            <PatientAccessOptions patientId={accessPatient.id} patientLabel={accessPatient.patient_id} />
-          )}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setAccessPatient(null)}>Schließen</Button>
-        </DialogActions>
-      </Dialog>
     </>
   );
 }
 
-function FollowUpBadge({ sessionNumber, complete }: { sessionNumber: number; complete: boolean }) {
-  const { palette: p } = useTheme();
-  const isDark = p.mode === 'dark';
-  const color = complete
-    ? (isDark ? '#4ade80' : '#2e7d32')
-    : (isDark ? '#60a5fa' : '#1565c0');
-  const bg = complete
-    ? (isDark ? 'rgba(74,222,128,0.12)' : '#e8f5e9')
-    : (isDark ? 'rgba(96,165,250,0.12)' : '#e3f2fd');
+
+function PatientStatusCell({ patient }: { patient: Patient }) {
+  const { status, current_post_op_session_number: sessionNum } = patient;
+  const showLock = status === 'PRE_OP_DONE' || status === 'POST_OP_DONE';
+
+  let badge: ReactNode;
+  if (sessionNum != null && status === 'POST_OP_STARTED') {
+    badge = <FollowUpBadge sessionNumber={sessionNum} complete={false} />;
+  } else if (sessionNum != null && status === 'POST_OP_DONE') {
+    badge = <FollowUpBadge sessionNumber={sessionNum} complete />;
+  } else {
+    badge = <StatusBadge status={status as PatientStatus} />;
+  }
+
   return (
-    <Chip
-      label={`Follow-up (${sessionNumber}) ${complete ? 'vollständig' : 'unvollständig'}`}
-      size="small"
-      sx={{ bgcolor: bg, color, fontWeight: 500 }}
-    />
+    <Box sx={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 0.75 }}>
+      {badge}
+      {showLock && <LockIcon sx={{ fontSize: 13, color: 'warning.main' }} />}
+    </Box>
   );
 }
 

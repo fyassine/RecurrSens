@@ -6,7 +6,7 @@ import type { Exercise } from '../types';
 const THRESHOLDS = { MIN_DBFS: -30, MAX_DBFS: -6 };
 const LOW_QUALITY_MESSAGE = 'Die Aufnahme ist zu leise. Bitte sprechen Sie lauter oder näher am Mikrofon.';
 
-function getMinDuration(exerciseId: string): number {
+export function getMinDuration(exerciseId: string): number {
   if (exerciseId === 'happy_birthday') return 6;
   if (exerciseId === 'phrase') return 3;
   return 2;

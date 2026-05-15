@@ -1,6 +1,24 @@
 import { Chip, useTheme } from '@mui/material';
 import type { PatientStatus, PredictionStatus } from '../types';
 
+export function FollowUpBadge({ sessionNumber, complete }: { sessionNumber: number; complete: boolean }) {
+  const { palette: p } = useTheme();
+  const isDark = p.mode === 'dark';
+  const color = complete
+    ? (isDark ? '#4ade80' : '#2e7d32')
+    : (isDark ? '#60a5fa' : '#1565c0');
+  const bg = complete
+    ? (isDark ? 'rgba(74,222,128,0.12)' : '#e8f5e9')
+    : (isDark ? 'rgba(96,165,250,0.12)' : '#e3f2fd');
+  return (
+    <Chip
+      label={`Follow-up (${sessionNumber}) ${complete ? 'vollständig' : 'unvollständig'}`}
+      size="small"
+      sx={{ bgcolor: bg, color, fontWeight: 500 }}
+    />
+  );
+}
+
 export function StatusBadge({ status }: { status: PatientStatus }) {
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';

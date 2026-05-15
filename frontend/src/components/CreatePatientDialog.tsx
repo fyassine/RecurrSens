@@ -28,9 +28,11 @@ type ApiError = {
 export default function CreatePatientDialog({
   onCreated,
   buttonSx,
+  buttonSize = 'small',
 }: {
   onCreated: () => void;
   buttonSx?: SxProps<Theme>;
+  buttonSize?: 'small' | 'medium' | 'large';
 }) {
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState<1 | 2>(1);
@@ -71,7 +73,7 @@ export default function CreatePatientDialog({
     <>
       <Button
         variant="contained"
-        size="small"
+        size={buttonSize}
         startIcon={<AddIcon />}
         onClick={() => setOpen(true)}
         sx={buttonSx}
