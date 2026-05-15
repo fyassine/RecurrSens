@@ -39,7 +39,8 @@ import {
   advancePublicPatient,
   exportPatients,
 } from '../api/client';
-import { StatusBadge, PredictionBadge } from '../components/Badges';
+import { StatusBadge, PredictionBadge, FollowUpBadge } from '../components/Badges';
+import { formatDate, formatDateTime, NO_RECORDING_DATE } from '../utils';
 import type { Exercise, AudioFile as AudioFileType } from '../types';
 
 export default function PatientDetailsPage() {
@@ -210,13 +211,23 @@ function PatientInfoCard({
           </Box>
         }
         action={
-          <IconButton onClick={handleDownload} disabled={downloading} title="ZIP herunterladen">
-            {downloading ? <CircularProgress size={20} /> : <DownloadIcon />}
-          </IconButton>
+          <Button
+            size="small"
+            startIcon={downloading ? <CircularProgress size={16} /> : <DownloadIcon />}
+            onClick={handleDownload}
+            disabled={downloading}
+          >
+            Herunterladen
+          </Button>
         }
         sx={{ pb: 1 }}
       />
       <CardContent sx={{ pt: 0 }}>
+        {patient.deleted_at && (
+          <Alert severity="error" sx={{ mb: 1.5 }}>
+            Gelöscht am {formatDateTime(patient.deleted_at)}
+          </Alert>
+        )}
         {editing ? (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             <TextField
@@ -239,15 +250,21 @@ function PatientInfoCard({
           <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5 }}>
             <InfoField label="Patienten-ID" value={patient.patient_id} mono />
             <InfoField label="Status">
-              <StatusBadge status={patient.status as PatientStatus} />
+              {patient.current_post_op_session_number != null
+                ? <FollowUpBadge
+                    sessionNumber={patient.current_post_op_session_number}
+                    complete={patient.status === 'POST_OP_DONE'}
+                  />
+                : <StatusBadge status={patient.status as PatientStatus} />
+              }
             </InfoField>
             <InfoField
               label="Erstellt am"
-              value={new Date(patient.created_at).toLocaleDateString('de-DE')}
+              value={formatDate(patient.created_at)}
             />
             <InfoField
               label="Ablaufdatum"
-              value={new Date(patient.expires_at).toLocaleDateString('de-DE')}
+              value={formatDate(patient.expires_at)}
             />
           </Box>
         )}
@@ -347,7 +364,7 @@ function AudioSection({
             </Typography>
           </Box>
         }
-          subheader={date ? new Date(date).toLocaleDateString('de-DE') : undefined}
+          subheader={date ? formatDate(date) : NO_RECORDING_DATE}
           slotProps={{
             title: {
               variant: 'h7',

@@ -6,12 +6,15 @@ import {
   CardActions,
   CardContent,
   CardHeader,
+  Chip,
   CircularProgress,
   LinearProgress,
   Typography,
 } from '@mui/material';
+import TimerIcon from '@mui/icons-material/Timer';
+import VolumeUpIcon from '@mui/icons-material/VolumeUp';
 import AudioRecorder from '../AudioRecorder';
-import { useExerciseSession } from '../../hooks/useExerciseSession';
+import { useExerciseSession, getMinDuration } from '../../hooks/useExerciseSession';
 
 export default function RecordingScreen({
   token,
@@ -92,6 +95,22 @@ export default function RecordingScreen({
             {currentExercise.title}
           </Typography>
           <Typography variant="body2">{currentExercise.description}</Typography>
+          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mt: 1.5 }}>
+            <Chip
+              size="small"
+              icon={<TimerIcon />}
+              label={`Mind. ${getMinDuration(currentExercise.exercise_id)} Sek.`}
+              variant="outlined"
+              color="info"
+            />
+            <Chip
+              size="small"
+              icon={<VolumeUpIcon />}
+              label="Angemessene Lautstärke"
+              variant="outlined"
+              color="info"
+            />
+          </Box>
         </Box>
 
         <AudioRecorder

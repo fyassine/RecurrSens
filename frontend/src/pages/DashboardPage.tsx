@@ -18,6 +18,7 @@ import { getPatients, exportPatients } from '../api/client';
 import type { Patient } from '../types';
 import PatientList, { type DashboardFilter } from '../components/PatientList';
 import AblaufdatenPanel from '../components/AblaufdatenPanel';
+import CreatePatientDialog from '../components/CreatePatientDialog';
 import { useAppData } from '../context/AppDataContext';
 
 type PaletteColorKey = 'primary' | 'info' | 'secondary' | 'error' | 'success' | 'neutral';
@@ -57,7 +58,6 @@ function KPICard({
 
   const resolvedColor = (() => {
     if (color === 'neutral') return theme.palette.grey[500];
-    if (color === 'error' && alert && value === 0) return theme.palette.success.main;
     return theme.palette[color].main;
   })();
 
@@ -173,20 +173,42 @@ export default function DashboardPage() {
     };
   }, [patients]);
 
+  const todayNotifications = useMemo(() => {
+    const todayMs = new Date().setHours(0, 0, 0, 0);
+    const now = Date.now();
+    const notifiedIds = new Set<string>();
+    for (const p of patients) {
+      const updatedMs = new Date(p.updated_at).getTime();
+      const hasEvent =
+        (p.status === 'POST_OP_DONE' && updatedMs >= todayMs) ||
+        (p.prediction_pre !== 'TODO' && updatedMs >= todayMs) ||
+        (!!p.deleted_at && new Date(p.deleted_at).getTime() >= todayMs) ||
+        (!p.deleted_at && new Date(p.expires_at).getTime() >= todayMs && new Date(p.expires_at).getTime() <= now) ||
+        (new Date(p.created_at).getTime() >= todayMs);
+      if (hasEvent) notifiedIds.add(p.id);
+    }
+    return notifiedIds.size;
+  }, [patients]);
+
   useEffect(() => {
-    setNotificationCount(stats.expired + stats.rpPredictions);
-  }, [stats.expired, stats.rpPredictions, setNotificationCount]);
+    setNotificationCount(todayNotifications);
+  }, [todayNotifications, setNotificationCount]);
 
   return (
     <Box>
       {/* Page header */}
-      <Box sx={{ mb: 3 }}>
-        <Typography variant="h5" gutterBottom sx={{ fontWeight: 700, letterSpacing: '-0.02em' }}>
-          Klinikübersicht
-        </Typography>
-        <Typography variant="body2" color="text.secondary">
-          Verwalten Sie aktive Patienten und Aufnahmen an einem Ort.
-        </Typography>
+      <Box sx={{ mb: 3, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 2 }}>
+        <Box>
+          <Typography variant="h5" gutterBottom sx={{ fontWeight: 700, letterSpacing: '-0.02em' }}>
+            Klinikübersicht
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Verwalten Sie aktive Patienten und Aufnahmen an einem Ort.
+          </Typography>
+        </Box>
+        <Box sx={{ display: 'flex', gap: 1, pt: 0.5, flexShrink: 0 }}>
+          <CreatePatientDialog onCreated={fetchPatients} buttonSize="medium" />
+        </Box>
       </Box>
 
       {/* KPI strip */}
@@ -284,7 +306,6 @@ export default function DashboardPage() {
         onExport={handleExport}
         exporting={exporting}
         exportCount={selectedIds.size}
-        onCreated={fetchPatients}
       />
     </Box>
   );

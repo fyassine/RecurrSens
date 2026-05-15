@@ -135,6 +135,7 @@ class PatientListSerializer(serializers.ModelSerializer):
             'audio_count_pre', 'audio_count_post',
             'current_post_op_session_number',
             'pre_op_date', 'post_op_date',
+            'deleted_at',
             'expires_at', 'created_at', 'updated_at',
         ]
         read_only_fields = fields

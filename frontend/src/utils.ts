@@ -1,3 +1,16 @@
+export const NO_RECORDING_DATE = 'Kein Aufnahmedatum vorhanden';
+
+const DE_DATE_OPTS: Intl.DateTimeFormatOptions = { day: '2-digit', month: '2-digit', year: 'numeric' };
+const DE_DATETIME_OPTS: Intl.DateTimeFormatOptions = { ...DE_DATE_OPTS, hour: '2-digit', minute: '2-digit' };
+
+export function formatDate(date: string | Date): string {
+  return new Date(date).toLocaleDateString('de-DE', DE_DATE_OPTS);
+}
+
+export function formatDateTime(date: string | Date): string {
+  return new Date(date).toLocaleString('de-DE', DE_DATETIME_OPTS);
+}
+
 export function formatTime(seconds: number): string {
   const m = Math.floor(seconds / 60);
   const s = Math.floor(seconds % 60);

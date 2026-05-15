@@ -120,6 +120,15 @@ export default function RightPanel({ patients }: { patients: Patient[] }) {
           sortDate: new Date(p.updated_at),
         });
       }
+      // Deleted
+      if (p.deleted_at) {
+        events.push({
+          text: <>Patient <strong>{p.patient_id}</strong> gelöscht</>,
+          time: formatActivityTime(p.deleted_at),
+          dotColor: theme.palette.error.main,
+          sortDate: new Date(p.deleted_at),
+        });
+      }
       // Expired
       if (!p.deleted_at && new Date(p.expires_at).getTime() <= nowMs) {
         events.push({
