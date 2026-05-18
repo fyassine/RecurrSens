@@ -36,12 +36,12 @@ Internal only (not exposed):
 ## Server Specifications
 
 - **Provider:** Strato VPS Linux VC1-1
-- **IP:** 212.227.176.203
+- **IP:** 31.70.77.124
 - **OS:** Ubuntu 22.04.5 LTS
 - **CPU:** 1 vCPU (AMD EPYC-Milan)
 - **RAM:** 856MB + 2GB swap
 - **Disk:** 10GB NVMe SSD
-- **SSH:** `ssh -i ~/.ssh/id_ed25519 flakhal@212.227.176.203`
+- **SSH:** `ssh -i ~/.ssh/id_ed25519 flakhal@31.70.77.124`
 
 ## Container Memory Limits
 
@@ -111,7 +111,7 @@ Staging also auto-deploys when code is pushed to the `staging` branch.
 # 1. Create staging database on the shared PostgreSQL instance
 docker exec -it recurrsens-db-1 psql -U postgres -c "CREATE DATABASE stimmbandlaesion_staging;"
 
-# 2. Add DNS A record for staging.recurrsens.eu → 212.227.176.203
+# 2. Add DNS A record for staging.recurrsens.eu → 31.70.77.124
 
 # 3. Obtain SSL certificate for staging subdomain
 sudo certbot certonly --webroot -w /var/www/certbot -d staging.recurrsens.eu
@@ -128,19 +128,19 @@ sudo certbot certonly --webroot -w /var/www/certbot -d staging.recurrsens.eu
 
 ```bash
 # Container status
-ssh flakhal@212.227.176.203 "docker compose -p recurrsens-staging -f ~/recurrsens-staging/docker-compose.yml -f ~/recurrsens-staging/docker-compose.staging.yml ps"
+ssh flakhal@31.70.77.124 "docker compose -p recurrsens-staging -f ~/recurrsens-staging/docker-compose.yml -f ~/recurrsens-staging/docker-compose.staging.yml ps"
 
 # Logs
-ssh flakhal@212.227.176.203 "docker compose -p recurrsens-staging -f ~/recurrsens-staging/docker-compose.yml -f ~/recurrsens-staging/docker-compose.staging.yml logs backend --tail=50"
+ssh flakhal@31.70.77.124 "docker compose -p recurrsens-staging -f ~/recurrsens-staging/docker-compose.yml -f ~/recurrsens-staging/docker-compose.staging.yml logs backend --tail=50"
 
 # Restart
-ssh flakhal@212.227.176.203 "docker compose -p recurrsens-staging -f ~/recurrsens-staging/docker-compose.yml -f ~/recurrsens-staging/docker-compose.staging.yml restart"
+ssh flakhal@31.70.77.124 "docker compose -p recurrsens-staging -f ~/recurrsens-staging/docker-compose.yml -f ~/recurrsens-staging/docker-compose.staging.yml restart"
 
 # Stop staging (to free resources)
-ssh flakhal@212.227.176.203 "docker compose -p recurrsens-staging -f ~/recurrsens-staging/docker-compose.yml -f ~/recurrsens-staging/docker-compose.staging.yml down"
+ssh flakhal@31.70.77.124 "docker compose -p recurrsens-staging -f ~/recurrsens-staging/docker-compose.yml -f ~/recurrsens-staging/docker-compose.staging.yml down"
 
 # Django management commands
-ssh flakhal@212.227.176.203 "docker compose -p recurrsens-staging -f ~/recurrsens-staging/docker-compose.yml -f ~/recurrsens-staging/docker-compose.staging.yml exec backend python manage.py <command>"
+ssh flakhal@31.70.77.124 "docker compose -p recurrsens-staging -f ~/recurrsens-staging/docker-compose.yml -f ~/recurrsens-staging/docker-compose.staging.yml exec backend python manage.py <command>"
 ```
 
 ## File Layout on Server
@@ -186,10 +186,10 @@ docker push ghcr.io/fyassine/stimmbandlaesion-backend:latest
 docker push ghcr.io/fyassine/stimmbandlaesion-nginx:latest
 
 # 3. Copy compose files (only if changed)
-scp -i ~/.ssh/id_ed25519 docker-compose.yml docker-compose.prod.yml flakhal@212.227.176.203:~/stimmbandlaesion/
+scp -i ~/.ssh/id_ed25519 docker-compose.yml docker-compose.prod.yml flakhal@31.70.77.124:~/stimmbandlaesion/
 
 # 4. Pull and restart on server
-ssh -i ~/.ssh/id_ed25519 flakhal@212.227.176.203 \
+ssh -i ~/.ssh/id_ed25519 flakhal@31.70.77.124 \
   "cd ~/stimmbandlaesion && docker compose -f docker-compose.yml -f docker-compose.prod.yml pull && docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d"
 ```
 
@@ -197,31 +197,31 @@ ssh -i ~/.ssh/id_ed25519 flakhal@212.227.176.203 \
 
 ```bash
 # Container status
-ssh flakhal@212.227.176.203 "cd ~/stimmbandlaesion && docker compose -f docker-compose.yml -f docker-compose.prod.yml ps"
+ssh flakhal@31.70.77.124 "cd ~/stimmbandlaesion && docker compose -f docker-compose.yml -f docker-compose.prod.yml ps"
 
 # Memory usage
-ssh flakhal@212.227.176.203 "cd ~/stimmbandlaesion && docker stats --no-stream"
+ssh flakhal@31.70.77.124 "cd ~/stimmbandlaesion && docker stats --no-stream"
 
 # Logs (all services)
-ssh flakhal@212.227.176.203 "cd ~/stimmbandlaesion && docker compose -f docker-compose.yml -f docker-compose.prod.yml logs --tail=50"
+ssh flakhal@31.70.77.124 "cd ~/stimmbandlaesion && docker compose -f docker-compose.yml -f docker-compose.prod.yml logs --tail=50"
 
 # Logs (specific service)
-ssh flakhal@212.227.176.203 "cd ~/stimmbandlaesion && docker compose -f docker-compose.yml -f docker-compose.prod.yml logs backend --tail=50"
+ssh flakhal@31.70.77.124 "cd ~/stimmbandlaesion && docker compose -f docker-compose.yml -f docker-compose.prod.yml logs backend --tail=50"
 
 # System resources
-ssh flakhal@212.227.176.203 "free -h && df -h /"
+ssh flakhal@31.70.77.124 "free -h && df -h /"
 ```
 
 ### Restart Services
 
 ```bash
-ssh flakhal@212.227.176.203 "cd ~/stimmbandlaesion && docker compose -f docker-compose.yml -f docker-compose.prod.yml restart"
+ssh flakhal@31.70.77.124 "cd ~/stimmbandlaesion && docker compose -f docker-compose.yml -f docker-compose.prod.yml restart"
 ```
 
 ### Run Django Management Commands
 
 ```bash
-ssh flakhal@212.227.176.203 "cd ~/stimmbandlaesion && docker compose -f docker-compose.yml -f docker-compose.prod.yml exec backend python manage.py <command>"
+ssh flakhal@31.70.77.124 "cd ~/stimmbandlaesion && docker compose -f docker-compose.yml -f docker-compose.prod.yml exec backend python manage.py <command>"
 ```
 
 ## Security
@@ -235,7 +235,7 @@ ssh flakhal@212.227.176.203 "cd ~/stimmbandlaesion && docker compose -f docker-c
 
 ## SSL Setup (when domain is purchased)
 
-1. Point domain A record to `212.227.176.203` in Strato DNS panel
+1. Point domain A record to `31.70.77.124` in Strato DNS panel
 2. Install Certbot: `sudo apt install certbot`
 3. Get certificate: `sudo certbot certonly --standalone -d yourdomain.de`
 4. Update `nginx/default.conf` with SSL server block (443 + HTTP→HTTPS redirect)
