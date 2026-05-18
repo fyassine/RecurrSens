@@ -185,6 +185,16 @@ jobs:
             echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.repository_owner }} --password-stdin
             docker compose -p recurrsens -f docker-compose.yml -f docker-compose.prod.yml pull
 
+            echo "=== Ensuring SSL cert exists (self-signed fallback) ==="
+            if [ ! -f /etc/letsencrypt/live/recurrsens.eu/fullchain.pem ]; then
+              sudo mkdir -p /etc/letsencrypt/live/recurrsens.eu
+              sudo openssl req -x509 -nodes -days 3650 -newkey rsa:2048 \
+                -keyout /etc/letsencrypt/live/recurrsens.eu/privkey.pem \
+                -out /etc/letsencrypt/live/recurrsens.eu/fullchain.pem \
+                -subj "/CN=recurrsens.eu" 2>/dev/null
+              echo "Self-signed cert created — replace with Let's Encrypt cert after DNS points here"
+            fi
+
             echo "=== Restarting containers ==="
             docker compose -p recurrsens -f docker-compose.yml -f docker-compose.prod.yml up -d --wait
 
