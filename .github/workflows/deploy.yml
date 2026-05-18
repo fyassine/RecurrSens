@@ -186,7 +186,7 @@ jobs:
             docker compose -p recurrsens -f docker-compose.yml -f docker-compose.prod.yml pull
 
             echo "=== Restarting containers ==="
-            docker compose -p recurrsens -f docker-compose.yml -f docker-compose.prod.yml up -d
+            docker compose -p recurrsens -f docker-compose.yml -f docker-compose.prod.yml up -d --wait
 
             echo "=== Reloading nginx upstream DNS ==="
             docker compose -p recurrsens -f docker-compose.yml -f docker-compose.prod.yml exec -T nginx nginx -s reload
