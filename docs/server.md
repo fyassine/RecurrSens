@@ -42,10 +42,10 @@ Internal only (not exposed):
 |---|---|
 | **Provider** | Strato VPS Linux VC 1-1 |
 | **Plan** | 1 vCore · 10 GB SSD · 1 GB RAM · 1 €/month |
-| **IP** | `212.227.176.203` |
+| **IP** | `31.70.77.124` |
 | **OS** | Ubuntu 22.04.5 LTS |
 | **Swap** | 2 GB |
-| **SSH** | `ssh -i ~/.ssh/id_ed25519 flakhal@212.227.176.203` |
+| **SSH** | `ssh -i ~/.ssh/id_ed25519 flakhal@31.70.77.124` |
 
 ## Container Memory Limits
 
@@ -108,7 +108,7 @@ git push origin dev/my-feature
 
 | Secret | Value |
 |---|---|
-| `SSH_HOST` | `212.227.176.203` |
+| `SSH_HOST` | `31.70.77.124` |
 | `SSH_USER` | `flakhal` |
 | `SSH_PRIVATE_KEY` | ED25519 deploy key (public key in `~/.ssh/authorized_keys` on server) |
 
@@ -116,7 +116,7 @@ git push origin dev/my-feature
 
 ```bash
 # On the server directly
-ssh -i ~/.ssh/id_ed25519 flakhal@212.227.176.203
+ssh -i ~/.ssh/id_ed25519 flakhal@31.70.77.124
 cd ~/RecurrSens
 git pull origin main
 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
@@ -152,31 +152,31 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 
 ```bash
 # Container status
-ssh -i ~/.ssh/id_ed25519 flakhal@212.227.176.203 \
+ssh -i ~/.ssh/id_ed25519 flakhal@31.70.77.124 \
   "cd ~/RecurrSens && docker compose -f docker-compose.yml -f docker-compose.prod.yml ps"
 
 # Memory usage per container
-ssh -i ~/.ssh/id_ed25519 flakhal@212.227.176.203 "docker stats --no-stream"
+ssh -i ~/.ssh/id_ed25519 flakhal@31.70.77.124 "docker stats --no-stream"
 
 # System resources
-ssh -i ~/.ssh/id_ed25519 flakhal@212.227.176.203 "free -h && df -h /"
+ssh -i ~/.ssh/id_ed25519 flakhal@31.70.77.124 "free -h && df -h /"
 
 # Logs — all services
-ssh -i ~/.ssh/id_ed25519 flakhal@212.227.176.203 \
+ssh -i ~/.ssh/id_ed25519 flakhal@31.70.77.124 \
   "cd ~/RecurrSens && docker compose -f docker-compose.yml -f docker-compose.prod.yml logs --tail=50"
 
 # Logs — specific service (backend / celery / nginx / dozzle …)
-ssh -i ~/.ssh/id_ed25519 flakhal@212.227.176.203 \
+ssh -i ~/.ssh/id_ed25519 flakhal@31.70.77.124 \
   "cd ~/RecurrSens && docker compose -f docker-compose.yml -f docker-compose.prod.yml logs backend --tail=50"
 
 # Or open Dozzle in the browser:
-#   http://212.227.176.203/logs/   (login: admin / <dozzle password>)
+#   http://31.70.77.124/logs/   (login: admin / <dozzle password>)
 ```
 
 ### Django management commands
 
 ```bash
-ssh -i ~/.ssh/id_ed25519 flakhal@212.227.176.203 \
+ssh -i ~/.ssh/id_ed25519 flakhal@31.70.77.124 \
   "cd ~/RecurrSens && docker compose -f docker-compose.yml -f docker-compose.prod.yml exec backend python manage.py <command>"
 
 # Examples:
@@ -188,7 +188,7 @@ ssh -i ~/.ssh/id_ed25519 flakhal@212.227.176.203 \
 ### Restart services
 
 ```bash
-ssh -i ~/.ssh/id_ed25519 flakhal@212.227.176.203 \
+ssh -i ~/.ssh/id_ed25519 flakhal@31.70.77.124 \
   "cd ~/RecurrSens && docker compose -f docker-compose.yml -f docker-compose.prod.yml restart"
 ```
 
@@ -215,20 +215,20 @@ At your domain registrar add:
 
 | Type | Host | Value | TTL |
 |------|------|-------|-----|
-| A | `@` | `212.227.176.203` | 300 |
-| A | `www` | `212.227.176.203` | 300 |
+| A | `@` | `31.70.77.124` | 300 |
+| A | `www` | `31.70.77.124` | 300 |
 
 Verify propagation:
 
 ```bash
 dig +short recurrsens.eu
-# Should return: 212.227.176.203
+# Should return: 31.70.77.124
 ```
 
 ### Step 2 — Obtain certificate
 
 ```bash
-ssh -i ~/.ssh/id_ed25519 flakhal@212.227.176.203
+ssh -i ~/.ssh/id_ed25519 flakhal@31.70.77.124
 
 cd ~/RecurrSens
 docker compose -f docker-compose.yml -f docker-compose.prod.yml run --rm certbot \
@@ -262,7 +262,7 @@ Then update `.env` with the domain values:
 
 ```bash
 nano ~/RecurrSens/.env
-# ALLOWED_HOSTS=recurrsens.eu,www.recurrsens.eu,212.227.176.203,localhost
+# ALLOWED_HOSTS=recurrsens.eu,www.recurrsens.eu,31.70.77.124,localhost
 # APP_URL=https://recurrsens.eu
 # CORS_ALLOWED_ORIGINS=https://recurrsens.eu
 # CSRF_TRUSTED_ORIGINS=https://recurrsens.eu,https://www.recurrsens.eu
@@ -292,7 +292,7 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml exec nginx nginx
 
 ### HTTPS verification checklist
 
-- [ ] `dig +short recurrsens.eu` → `212.227.176.203`
+- [ ] `dig +short recurrsens.eu` → `31.70.77.124`
 - [ ] `curl -I http://recurrsens.eu` → `301` redirect to HTTPS
 - [ ] `curl -I https://recurrsens.eu` → `200 OK`
 - [ ] `https://recurrsens.eu/admin/login/` → Django admin (no CSRF 403)

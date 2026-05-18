@@ -3,7 +3,7 @@
 ## Prerequisites
 
 - Domain: `recurrsens.eu` registered
-- Server IP: `212.227.176.203` (Strato VPS)
+- Server IP: `31.70.77.124` (Strato VPS)
 - Docker + Docker Compose installed on server
 - Host certbot installed (`sudo apt install certbot`)
 
@@ -15,14 +15,14 @@ Add the following DNS records at your domain registrar:
 
 | Type | Host | Value | TTL |
 |------|------|-------|-----|
-| A | `@` | `212.227.176.203` | 300 |
-| A | `www` | `212.227.176.203` | 300 |
+| A | `@` | `31.70.77.124` | 300 |
+| A | `www` | `31.70.77.124` | 300 |
 
 Wait for DNS propagation (can take up to 48 hours, usually 5–30 minutes):
 
 ```bash
 dig +short recurrsens.eu
-# Should return: 212.227.176.203
+# Should return: 31.70.77.124
 ```
 
 ---
@@ -109,7 +109,7 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml exec -T nginx ng
 
 ## Verification Checklist
 
-- [ ] `dig +short recurrsens.eu` → `212.227.176.203`
+- [ ] `dig +short recurrsens.eu` → `31.70.77.124`
 - [ ] `curl -I http://recurrsens.eu` → `301` redirect to HTTPS
 - [ ] `curl -I https://recurrsens.eu` → `200 OK`
 - [ ] `https://recurrsens.eu/admin/` → Django admin login (no CSRF 403)
