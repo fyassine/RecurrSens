@@ -186,7 +186,14 @@ jobs:
             docker compose -p recurrsens -f docker-compose.yml -f docker-compose.prod.yml pull
 
             echo "=== Ensuring SSL cert exists (self-signed fallback) ==="
-            if [ ! -f /etc/letsencrypt/live/recurrsens.eu/fullchain.pem ]; then
+            CERT_V1="/etc/letsencrypt/live/recurrsens.eu/fullchain.pem"
+            CERT_V2="/etc/letsencrypt/live/recurrsens.eu-0001/fullchain.pem"
+            if [ -f "$CERT_V2" ]; then
+              sudo ln -sfn /etc/letsencrypt/live/recurrsens.eu-0001/fullchain.pem "$CERT_V1"
+              sudo ln -sfn /etc/letsencrypt/live/recurrsens.eu-0001/privkey.pem \
+                /etc/letsencrypt/live/recurrsens.eu/privkey.pem
+              echo "Symlinked recurrsens.eu -> recurrsens.eu-0001 (Let's Encrypt cert)"
+            elif [ ! -f "$CERT_V1" ]; then
               sudo mkdir -p /etc/letsencrypt/live/recurrsens.eu
               sudo openssl req -x509 -nodes -days 3650 -newkey rsa:2048 \
                 -keyout /etc/letsencrypt/live/recurrsens.eu/privkey.pem \
