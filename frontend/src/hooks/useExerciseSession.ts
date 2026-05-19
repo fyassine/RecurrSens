@@ -8,7 +8,7 @@ const LOW_QUALITY_MESSAGE = 'Die Aufnahme ist zu leise. Bitte sprechen Sie laute
 
 export function getMinDuration(exerciseId: string): number {
   if (exerciseId === 'happy_birthday') return 6;
-  if (exerciseId === 'phrase') return 3;
+  if (exerciseId === 'phrase') return 2;
   return 2;
 }
 

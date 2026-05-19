@@ -34,7 +34,7 @@ import NavigateNextIcon from '@mui/icons-material/NavigateNext';
 import type { Patient, PatientStatus } from '../types';
 import { StatusBadge, PredictionBadge, FollowUpBadge } from './Badges';
 import { deletePatient, advancePatient, createSession, downloadPatientPdf, exportPatients } from '../api/client';
-import { formatDate, NO_RECORDING_DATE } from '../utils';
+import { formatDate, formatDateTime, NO_RECORDING_DATE } from '../utils';
 import ConfirmDialog from './ConfirmDialog';
 
 export type DashboardFilter = 'ALL' | 'PRE_OP' | 'POST_OP' | 'RP' | 'OVERDUE_DELETE';
@@ -422,7 +422,7 @@ export default function PatientList({
                       )}
                     </TableCell>
                     <TableCell align="center" sx={{ color: p.pre_op_date ? 'text.primary' : 'text.disabled', fontSize: '0.8rem', whiteSpace: 'nowrap' }}>
-                      {p.pre_op_date ? formatDate(p.pre_op_date) : NO_RECORDING_DATE}
+                      {p.pre_op_date ? formatDateTime(p.pre_op_date) : NO_RECORDING_DATE}
                     </TableCell>
                     <TableCell align="center" onClick={(e) => e.stopPropagation()}>
                       <Box

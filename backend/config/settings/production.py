@@ -15,6 +15,11 @@ SECURE_HSTS_SECONDS = 31536000
 SECURE_HSTS_INCLUDE_SUBDOMAINS = True
 SECURE_HSTS_PRELOAD = True
 
+# Behind nginx reverse proxy — trust X-Forwarded-Proto so Django knows the
+# request is HTTPS, otherwise CSRF rejects HTTPS Origin headers
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+USE_X_FORWARDED_HOST = True
+
 # Only JSON renderer in production (no browsable API)
 REST_FRAMEWORK['DEFAULT_RENDERER_CLASSES'] = [  # noqa: F405
     'rest_framework.renderers.JSONRenderer',

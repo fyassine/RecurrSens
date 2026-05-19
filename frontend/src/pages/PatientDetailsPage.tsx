@@ -364,7 +364,7 @@ function AudioSection({
             </Typography>
           </Box>
         }
-          subheader={date ? formatDate(date) : NO_RECORDING_DATE}
+          subheader={date ? formatDateTime(date) : NO_RECORDING_DATE}
           slotProps={{
             title: {
               variant: 'h7',
