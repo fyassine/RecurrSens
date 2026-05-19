@@ -180,6 +180,9 @@ jobs:
             # CORS
             CORS_ALLOWED_ORIGINS=${{ vars.CORS_ALLOWED_ORIGINS }}
 
+            # CSRF (Django admin & session auth)
+            CSRF_TRUSTED_ORIGINS=${{ vars.CSRF_TRUSTED_ORIGINS }}
+
             # Data retention
             DATA_RETENTION_DAYS=${{ vars.DATA_RETENTION_DAYS }}
             EOF
