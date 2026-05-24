@@ -1,27 +1,30 @@
-import { Chip, useTheme } from '@mui/material';
+import { Badge, useMantineColorScheme } from '@mantine/core';
 import type { PatientStatus, PredictionStatus } from '../types';
 
 export function FollowUpBadge({ sessionNumber, complete }: { sessionNumber: number; complete: boolean }) {
-  const { palette: p } = useTheme();
-  const isDark = p.mode === 'dark';
+  const { colorScheme } = useMantineColorScheme();
+  const isDark = colorScheme === 'dark';
   const color = complete
-    ? (isDark ? '#4ade80' : '#2e7d32')
-    : (isDark ? '#60a5fa' : '#1565c0');
+    ? isDark ? '#4ade80' : '#2e7d32'
+    : isDark ? '#60a5fa' : '#1565c0';
   const bg = complete
-    ? (isDark ? 'rgba(74,222,128,0.12)' : '#e8f5e9')
-    : (isDark ? 'rgba(96,165,250,0.12)' : '#e3f2fd');
+    ? isDark ? 'rgba(74,222,128,0.12)' : '#e8f5e9'
+    : isDark ? 'rgba(96,165,250,0.12)' : '#e3f2fd';
   return (
-    <Chip
-      label={`Follow-up (${sessionNumber}) ${complete ? 'vollständig' : 'unvollständig'}`}
-      size="small"
-      sx={{ bgcolor: bg, color, fontWeight: 500 }}
-    />
+    <Badge
+      variant="filled"
+      size="lg"
+      radius="sm"
+      style={{ backgroundColor: bg, color, fontWeight: 500, textTransform: 'none' }}
+    >
+      Follow-up ({sessionNumber}) {complete ? 'vollständig' : 'unvollständig'}
+    </Badge>
   );
 }
 
 export function StatusBadge({ status }: { status: PatientStatus }) {
-  const theme = useTheme();
-  const isDark = theme.palette.mode === 'dark';
+  const { colorScheme } = useMantineColorScheme();
+  const isDark = colorScheme === 'dark';
 
   const config: Record<PatientStatus, { label: string; color: string; bg: string }> = {
     NEW: {
@@ -52,7 +55,16 @@ export function StatusBadge({ status }: { status: PatientStatus }) {
   };
 
   const c = config[status] ?? config.NEW;
-  return <Chip label={c.label} size="small" sx={{ bgcolor: c.bg, color: c.color, fontWeight: 500 }} />;
+  return (
+    <Badge
+      variant="filled"
+      size="lg"
+      radius="sm"
+      style={{ backgroundColor: c.bg, color: c.color, fontWeight: 500, textTransform: 'none' }}
+    >
+      {c.label}
+    </Badge>
+  );
 }
 
 export function PredictionBadge({
@@ -66,8 +78,8 @@ export function PredictionBadge({
   gradcamPrediction?: string | null;
   gradcamPercentage?: number | null;
 }) {
-  const theme = useTheme();
-  const isDark = theme.palette.mode === 'dark';
+  const { colorScheme } = useMantineColorScheme();
+  const isDark = colorScheme === 'dark';
 
   const config: Record<PredictionStatus, { label: string; color: string; bg: string }> = {
     TODO: {
@@ -98,17 +110,30 @@ export function PredictionBadge({
 
   return (
     <>
-      <Chip label={label} size="small" sx={{ bgcolor: c.bg, color: c.color, fontWeight: 500 }} />
+      <Badge
+        variant="filled"
+        radius="sm"
+        style={{ backgroundColor: c.bg, color: c.color, fontWeight: 500, textTransform: 'none' }}
+      >
+        {label}
+      </Badge>
       {gradcamPrediction && (
-        <Chip
-          label={`GC: ${gcConfig.label}${
-            gradcamPercentage != null && gradcamPercentage > 0
-              ? ` (${gradcamPercentage.toFixed(2)}%)`
-              : ''
-          }`}
-          size="small"
-          sx={{ bgcolor: gcConfig.bg, color: gcConfig.color, fontWeight: 500, ml: 0.5 }}
-        />
+        <Badge
+          variant="filled"
+          radius="sm"
+          ml={4}
+          style={{
+            backgroundColor: gcConfig.bg,
+            color: gcConfig.color,
+            fontWeight: 500,
+            textTransform: 'none',
+          }}
+        >
+          GC: {gcConfig.label}
+          {gradcamPercentage != null && gradcamPercentage > 0
+            ? ` (${gradcamPercentage.toFixed(2)}%)`
+            : ''}
+        </Badge>
       )}
     </>
   );

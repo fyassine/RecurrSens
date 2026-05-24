@@ -1,19 +1,16 @@
 import { useEffect, useState } from 'react';
 import {
   Alert,
-  Box,
   Button,
   Card,
-  CardActions,
-  CardContent,
-  CardHeader,
-  CircularProgress,
+  Group,
   Rating,
-  TextField,
-  Typography,
-} from '@mui/material';
-import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import FeedbackOutlinedIcon from '@mui/icons-material/FeedbackOutlined';
+  Stack,
+  Text,
+  Textarea,
+  Title,
+} from '@mantine/core';
+import { CheckCircle2, MessageSquare } from 'lucide-react';
 import { submitFeedback } from '../../api/client';
 
 export default function FeedbackScreen({
@@ -25,17 +22,15 @@ export default function FeedbackScreen({
   phase: 'PRE_OP' | 'POST_OP';
   onComplete: () => void;
 }) {
-  const [rating, setRating] = useState<number | null>(null);
+  const [rating, setRating] = useState<number>(0);
   const [comment, setComment] = useState('');
   const [error, setError] = useState('');
   const [showSuccess, setShowSuccess] = useState(false);
   const [submitMode, setSubmitMode] = useState<'submit' | 'skip' | null>(null);
 
   const isSubmitting = submitMode !== null;
-  const showComment = rating !== null;
-  const commentLabel = rating !== null && rating <= 3
-    ? 'Was können wir verbessern?'
-    : 'Optionaler Kommentar';
+  const showComment = rating > 0;
+  const commentLabel = rating > 0 && rating <= 3 ? 'Was können wir verbessern?' : 'Optionaler Kommentar';
 
   useEffect(() => {
     if (!showSuccess) return;
@@ -44,10 +39,9 @@ export default function FeedbackScreen({
   }, [showSuccess, onComplete]);
 
   const handleSubmit = async () => {
-    if (rating === null) return;
+    if (rating === 0) return;
     setError('');
     setSubmitMode('submit');
-
     try {
       await submitFeedback(token, {
         phase,
@@ -66,12 +60,8 @@ export default function FeedbackScreen({
   const handleSkip = async () => {
     setError('');
     setSubmitMode('skip');
-
     try {
-      await submitFeedback(token, {
-        phase,
-        skipped: true,
-      });
+      await submitFeedback(token, { phase, skipped: true });
     } catch {
       setError('Feedback konnte nicht gespeichert werden. Sie können trotzdem fortfahren.');
     } finally {
@@ -82,99 +72,52 @@ export default function FeedbackScreen({
 
   if (showSuccess) {
     return (
-      <Card sx={{ maxWidth: 640, mx: 'auto', textAlign: 'center' }}>
-        <CardHeader
-          title={
-            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-              <Box
-                sx={{
-                  bgcolor: 'success.light',
-                  borderRadius: '50%',
-                  width: 72,
-                  height: 72,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                <CheckCircleIcon sx={{ fontSize: 44, color: 'success.main' }} />
-              </Box>
-              <Typography variant="h5">Danke für Ihr Feedback!</Typography>
-            </Box>
-          }
-        />
-        <CardContent>
-          <Typography variant="body2" color="text.secondary">
-            Einen Moment bitte ...
-          </Typography>
-        </CardContent>
+      <Card withBorder radius="md" maw={640} mx="auto" p="lg">
+        <Stack gap="md" align="center">
+          <div className="flex h-[72px] w-[72px] items-center justify-center rounded-full bg-green-100 dark:bg-green-950/40">
+            <CheckCircle2 size={44} className="text-green-600" />
+          </div>
+          <Title order={4}>Danke für Ihr Feedback!</Title>
+          <Text size="sm" c="dimmed">Einen Moment bitte ...</Text>
+        </Stack>
       </Card>
     );
   }
 
   return (
-    <Card sx={{ maxWidth: 640, mx: 'auto' }}>
-      <CardHeader
-        title={
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-            <FeedbackOutlinedIcon color="action" />
-            <Typography variant="h5">Kurzes Feedback</Typography>
-          </Box>
-        }
-        subheader="Vielen Dank! Ihre Rückmeldung hilft uns, den Ablauf zu verbessern."
-      />
-      <CardContent sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
-        <Typography variant="body1" fontWeight={600}>
-          Wie war Ihre Erfahrung mit dem Aufnahmeprozess?
-        </Typography>
-
-        <Box sx={{ display: 'flex', justifyContent: 'center' }}>
-          <Rating
-            size="large"
-            value={rating}
-            onChange={(_event, value) => setRating(value)}
-            sx={{ fontSize: 40 }}
-          />
-        </Box>
-
+    <Card withBorder radius="md" maw={640} mx="auto" p="lg">
+      <Group gap="xs" mb={4}>
+        <MessageSquare size={20} />
+        <Title order={4}>Kurzes Feedback</Title>
+      </Group>
+      <Text size="sm" c="dimmed" mb="md">
+        Vielen Dank! Ihre Rückmeldung hilft uns, den Ablauf zu verbessern.
+      </Text>
+      <Stack gap="md">
+        <Text fw={600}>Wie war Ihre Erfahrung mit dem Aufnahmeprozess?</Text>
+        <div className="flex justify-center">
+          <Rating size="xl" value={rating} onChange={setRating} />
+        </div>
         {showComment && (
-          <TextField
+          <Textarea
             label={commentLabel}
             value={comment}
-            onChange={(event) => setComment(event.target.value)}
-            multiline
+            onChange={(e) => setComment(e.currentTarget.value)}
             minRows={3}
-            InputLabelProps={{ shrink: true }}
+            autosize
           />
         )}
-
-        {error && <Alert severity="warning">{error}</Alert>}
-      </CardContent>
-      <CardActions sx={{ px: 2, pb: 2, gap: 2, alignItems: 'center' }}>
-        <Button
-          variant="text"
-          size="large"
-          onClick={handleSkip}
-          disabled={isSubmitting}
-          sx={{ flex: 1 }}
-        >
-          {submitMode === 'skip' ? <CircularProgress size={22} /> : 'Überspringen'}
-        </Button>
-        <Button
-          variant="contained"
-          size="large"
-          onClick={handleSubmit}
-          disabled={rating === null || isSubmitting}
-          sx={{ flex: 1 }}
-        >
-          {submitMode === 'submit' ? <CircularProgress size={22} /> : 'Absenden'}
-        </Button>
-      </CardActions>
-      <Box sx={{ pb: 2, px: 3 }}>
-        <Typography variant="caption" color="text.secondary">
-          Antworten anonym
-        </Typography>
-      </Box>
+        {error && <Alert color="yellow">{error}</Alert>}
+        <Group gap="md">
+          <Button variant="subtle" size="lg" className="flex-1" onClick={handleSkip} loading={submitMode === 'skip'} disabled={isSubmitting && submitMode !== 'skip'}>
+            Überspringen
+          </Button>
+          <Button size="lg" className="flex-1" onClick={handleSubmit} disabled={rating === 0 || (isSubmitting && submitMode !== 'submit')} loading={submitMode === 'submit'}>
+            Absenden
+          </Button>
+        </Group>
+        <Text size="xs" c="dimmed">Antworten anonym</Text>
+      </Stack>
     </Card>
   );
 }

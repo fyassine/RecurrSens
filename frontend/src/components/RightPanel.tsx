@@ -1,57 +1,34 @@
 import { useMemo } from 'react';
-import { Box, Typography, useTheme } from '@mui/material';
-import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
-import ShowChartIcon from '@mui/icons-material/ShowChart';
+import { Paper, ScrollArea, Text, useMantineTheme } from '@mantine/core';
+import { Calendar, Activity } from 'lucide-react';
 import type { Patient } from '../types';
 
-function PanelCard({ title, icon, children, action }: {
+function PanelCard({
+  title,
+  icon,
+  children,
+  action,
+}: {
   title: string;
   icon: React.ReactNode;
   children: React.ReactNode;
   action?: string;
 }) {
   return (
-    <Box
-      sx={{
-        bgcolor: 'background.paper',
-        border: '1px solid',
-        borderColor: 'divider',
-        borderRadius: 2,
-        overflow: 'hidden',
-        boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
-      }}
-    >
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          px: 2,
-          py: 1,
-          borderBottom: '1px solid',
-          borderColor: 'divider',
-        }}
-      >
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'text.primary' }}>
-          <Box sx={{ color: 'info.main', display: 'flex' }}>{icon}</Box>
-          <Typography fontWeight={700} fontSize="0.875rem">
-            {title}
-          </Typography>
-        </Box>
+    <Paper withBorder radius="md" className="overflow-hidden shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+      <div className="flex items-center justify-between border-b border-[var(--mantine-color-default-border)] px-4 py-2">
+        <div className="flex items-center gap-2">
+          <div className="flex text-cyan-500">{icon}</div>
+          <Text fw={700} size="sm">{title}</Text>
+        </div>
         {action && (
-          <Typography
-            component="span"
-            fontSize="0.75rem"
-            fontWeight={600}
-            color="info.main"
-            sx={{ cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }}
-          >
+          <Text size="xs" fw={600} c="cyan" className="cursor-pointer hover:underline">
             {action}
-          </Typography>
+          </Text>
         )}
-      </Box>
+      </div>
       {children}
-    </Box>
+    </Paper>
   );
 }
 
@@ -78,9 +55,14 @@ interface ActivityEvent {
 }
 
 export default function RightPanel({ patients }: { patients: Patient[] }) {
-  const theme = useTheme();
+  const theme = useMantineTheme();
   const nowMs = Date.now();
   const weekMs = 7 * 86400000;
+
+  const success = theme.colors.green[6];
+  const warning = theme.colors.yellow[6];
+  const error = theme.colors.red[6];
+  const info = theme.colors.cyan[6];
 
   const expiryStats = useMemo(() => {
     const active = patients.filter((p) => !p.deleted_at);
@@ -96,141 +78,113 @@ export default function RightPanel({ patients }: { patients: Patient[] }) {
       }).length,
       valid: active.filter((p) => new Date(p.expires_at).getTime() > nowMs + 2 * weekMs).length,
     };
-  }, [patients, nowMs]);
+  }, [patients, nowMs, weekMs]);
 
   const activities = useMemo((): ActivityEvent[] => {
     const events: ActivityEvent[] = [];
 
     for (const p of patients) {
-      // Post-OP completed
       if (p.status === 'POST_OP_DONE') {
         events.push({
           text: <>Patient <strong>{p.patient_id}</strong> Post-OP abgeschlossen</>,
           time: formatActivityTime(p.updated_at),
-          dotColor: theme.palette.success.main,
+          dotColor: success,
           sortDate: new Date(p.updated_at),
         });
       }
-      // KI prediction ready
       if (p.prediction_pre !== 'TODO') {
         events.push({
           text: <>KI-Prä-OP Vorhersage <strong>{p.patient_id}</strong> bereit</>,
           time: formatActivityTime(p.updated_at),
-          dotColor: theme.palette.info.main,
+          dotColor: info,
           sortDate: new Date(p.updated_at),
         });
       }
-      // Deleted
       if (p.deleted_at) {
         events.push({
           text: <>Patient <strong>{p.patient_id}</strong> gelöscht</>,
           time: formatActivityTime(p.deleted_at),
-          dotColor: theme.palette.error.main,
+          dotColor: error,
           sortDate: new Date(p.deleted_at),
         });
       }
-      // Expired
       if (!p.deleted_at && new Date(p.expires_at).getTime() <= nowMs) {
         events.push({
           text: <>Ablaufdatum <strong>{p.patient_id}</strong> überschritten</>,
           time: formatActivityTime(p.expires_at),
-          dotColor: theme.palette.error.main,
+          dotColor: error,
           sortDate: new Date(p.expires_at),
         });
       }
-      // Created
       events.push({
         text: <>Patient <strong>{p.patient_id}</strong> angelegt</>,
         time: formatActivityTime(p.created_at),
-        dotColor: theme.palette.info.main,
+        dotColor: info,
         sortDate: new Date(p.created_at),
       });
     }
 
     return events.sort((a, b) => b.sortDate.getTime() - a.sortDate.getTime()).slice(0, 8);
-  }, [patients, nowMs, theme]);
+  }, [patients, nowMs, success, info, error]);
 
   const expiryRows = [
-    { label: 'Bereits abgelaufen', count: expiryStats.expired, color: theme.palette.error.main },
-    { label: 'Läuft diese Woche ab', count: expiryStats.thisWeek, color: theme.palette.warning.main },
-    { label: 'Läuft nächste Woche ab', count: expiryStats.nextWeek, color: theme.palette.warning.main },
-    { label: 'Aktiv & gültig', count: expiryStats.valid, color: theme.palette.success.main },
+    { label: 'Bereits abgelaufen', count: expiryStats.expired, color: error },
+    { label: 'Läuft diese Woche ab', count: expiryStats.thisWeek, color: warning },
+    { label: 'Läuft nächste Woche ab', count: expiryStats.nextWeek, color: warning },
+    { label: 'Aktiv & gültig', count: expiryStats.valid, color: success },
   ];
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      {/* Ablaufdaten */}
-      <PanelCard title="Ablaufdaten" icon={<CalendarTodayIcon sx={{ fontSize: 15 }} />} action="Details">
-        <Box sx={{ px: 2 }}>
+    <div className="flex flex-col gap-4">
+      <PanelCard title="Ablaufdaten" icon={<Calendar size={15} />} action="Details">
+        <div className="px-4">
           {expiryRows.map((row, i) => (
-            <Box
+            <div
               key={row.label}
-              sx={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                py: 1,
-                borderBottom: i < expiryRows.length - 1 ? '1px solid' : 'none',
-                borderColor: 'divider',
-              }}
+              className={[
+                'flex items-center justify-between py-2',
+                i < expiryRows.length - 1 ? 'border-b border-[var(--mantine-color-default-border)]' : '',
+              ].join(' ')}
             >
-              <Typography fontSize="0.8125rem" color="text.secondary">
-                {row.label}
-              </Typography>
-              <Typography
-                fontSize="0.875rem"
-                fontWeight={700}
-                sx={{ color: row.count > 0 ? row.color : 'text.secondary', fontVariantNumeric: 'tabular-nums' }}
+              <Text size="sm" c="dimmed">{row.label}</Text>
+              <Text
+                size="sm"
+                fw={700}
+                style={{
+                  color: row.count > 0 ? row.color : undefined,
+                  fontVariantNumeric: 'tabular-nums',
+                }}
+                c={row.count > 0 ? undefined : 'dimmed'}
               >
                 {row.count}
-              </Typography>
-            </Box>
+              </Text>
+            </div>
           ))}
-        </Box>
+        </div>
       </PanelCard>
 
-      {/* Letzte Aktivität */}
-      <PanelCard title="Letzte Aktivität" icon={<ShowChartIcon sx={{ fontSize: 15 }} />} action="Alle">
-        <Box sx={{ p: 1, maxHeight: 260, overflowY: 'auto' }}>
-          {activities.length === 0 ? (
-            <Typography fontSize="0.8125rem" color="text.secondary" sx={{ p: 1.5 }}>
-              Keine Aktivitäten vorhanden.
-            </Typography>
-          ) : (
-            activities.map((ev, i) => (
-              <Box
-                key={i}
-                sx={{
-                  display: 'flex',
-                  gap: 1.5,
-                  p: 1,
-                  borderRadius: 1,
-                  '&:hover': { bgcolor: 'action.hover' },
-                }}
-              >
-                <Box
-                  sx={{
-                    width: 7,
-                    height: 7,
-                    borderRadius: '50%',
-                    bgcolor: ev.dotColor,
-                    flexShrink: 0,
-                    mt: '5px',
-                  }}
-                />
-                <Box sx={{ flex: 1, minWidth: 0 }}>
-                  <Typography fontSize="0.78rem" color="text.primary" lineHeight={1.4}>
-                    {ev.text}
-                  </Typography>
-                  <Typography fontSize="0.68rem" color="text.disabled" mt="1px">
-                    {ev.time}
-                  </Typography>
-                </Box>
-              </Box>
-            ))
-          )}
-        </Box>
+      <PanelCard title="Letzte Aktivität" icon={<Activity size={15} />} action="Alle">
+        <ScrollArea.Autosize mah={260} type="hover">
+          <div className="p-1">
+            {activities.length === 0 ? (
+              <Text size="sm" c="dimmed" p="sm">Keine Aktivitäten vorhanden.</Text>
+            ) : (
+              activities.map((ev, i) => (
+                <div key={i} className="flex gap-3 rounded p-2 hover:bg-[var(--mantine-color-default-hover)]">
+                  <div
+                    className="mt-[5px] h-[7px] w-[7px] shrink-0 rounded-full"
+                    style={{ backgroundColor: ev.dotColor }}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <Text size="xs" lh={1.4}>{ev.text}</Text>
+                    <Text size="xs" c="dimmed" mt={1}>{ev.time}</Text>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </ScrollArea.Autosize>
       </PanelCard>
-    </Box>
+    </div>
   );
 }

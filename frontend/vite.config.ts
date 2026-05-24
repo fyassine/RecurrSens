@@ -1,8 +1,9 @@
 import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
+import react from '@vitejs/plugin-react-swc'
+import tailwindcss from '@tailwindcss/vite'
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), tailwindcss()],
   server: {
     proxy: {
       '/api': {
@@ -10,8 +11,6 @@ export default defineConfig({
         changeOrigin: true,
       },
     },
-    // Safari requires explicit HMR config and no-cache headers to avoid
-    // stale module loading that silently breaks the page
     hmr: {
       protocol: 'ws',
       host: 'localhost',

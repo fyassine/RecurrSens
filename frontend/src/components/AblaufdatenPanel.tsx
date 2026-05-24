@@ -1,40 +1,29 @@
 import { useMemo } from 'react';
-import { Box, Typography, useTheme } from '@mui/material';
-import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
+import { Paper, Text, useMantineTheme } from '@mantine/core';
+import { Calendar } from 'lucide-react';
 import type { Patient } from '../types';
 
 const WEEK_MS = 7 * 86400000;
 
 function StatBox({ label, count, color }: { label: string; count: number; color: string }) {
   return (
-    <Box
-      sx={{
-        flex: '1 1 0',
-        minWidth: 0,
-        px: 2,
-        py: 1.5,
-        bgcolor: 'background.default',
-        border: '1px solid',
-        borderColor: 'divider',
-        borderRadius: 1.5,
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 0.5,
-      }}
-    >
-      <Typography fontSize="0.75rem" color="text.secondary" fontWeight={500} lineHeight={1.3}>
+    <div className="flex min-w-0 flex-1 flex-col gap-1 rounded-md border border-[var(--mantine-color-default-border)] bg-[var(--mantine-color-body)] px-4 py-3">
+      <Text size="xs" fw={500} c="dimmed" lh={1.3}>
         {label}
-      </Typography>
-      <Typography fontSize="1.75rem" fontWeight={700} lineHeight={1} sx={{ color }}>
+      </Text>
+      <div className="text-3xl font-bold leading-none" style={{ color }}>
         {count}
-      </Typography>
-    </Box>
+      </div>
+    </div>
   );
 }
 
 export default function AblaufdatenPanel({ patients }: { patients: Patient[] }) {
-  const theme = useTheme();
-  const p = theme.palette;
+  const theme = useMantineTheme();
+  const error = theme.colors.red[6];
+  const warning = theme.colors.yellow[6];
+  const info = theme.colors.cyan[6];
+  const success = theme.colors.green[6];
   const nowMs = Date.now();
 
   const stats = useMemo(() => {
@@ -54,39 +43,19 @@ export default function AblaufdatenPanel({ patients }: { patients: Patient[] }) 
   }, [patients, nowMs]);
 
   return (
-    <Box
-      sx={{
-        bgcolor: 'background.paper',
-        border: '1px solid',
-        borderColor: 'divider',
-        borderRadius: 2,
-        overflow: 'hidden',
-      }}
-    >
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 1,
-          px: 2,
-          py: 1,
-          borderBottom: '1px solid',
-          borderColor: 'divider',
-          bgcolor: 'background.default',
-        }}
-      >
-        <CalendarTodayIcon sx={{ fontSize: 14, color: 'error.main' }} />
-        <Typography fontWeight={700} fontSize="0.8125rem" color="error.main">
+    <Paper withBorder radius="md" className="overflow-hidden">
+      <div className="flex items-center gap-2 border-b border-[var(--mantine-color-default-border)] bg-[var(--mantine-color-default-hover)] px-4 py-2">
+        <Calendar size={14} color={error} />
+        <Text fw={700} size="sm" style={{ color: error }}>
           Ablaufdaten – Details
-        </Typography>
-      </Box>
-
-      <Box sx={{ p: 2, display: 'flex', gap: 1.5 }}>
-        <StatBox label="Bereits abgelaufen" count={stats.expired} color={p.error.main} />
-        <StatBox label="Läuft diese Woche ab" count={stats.thisWeek} color={p.warning.main} />
-        <StatBox label="Läuft nächste Woche ab" count={stats.nextWeek} color={p.info.main} />
-        <StatBox label="Aktiv & gültig" count={stats.valid} color={p.success.main} />
-      </Box>
-    </Box>
+        </Text>
+      </div>
+      <div className="flex gap-3 p-4">
+        <StatBox label="Bereits abgelaufen" count={stats.expired} color={error} />
+        <StatBox label="Läuft diese Woche ab" count={stats.thisWeek} color={warning} />
+        <StatBox label="Läuft nächste Woche ab" count={stats.nextWeek} color={info} />
+        <StatBox label="Aktiv & gültig" count={stats.valid} color={success} />
+      </div>
+    </Paper>
   );
 }

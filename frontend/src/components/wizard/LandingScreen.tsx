@@ -1,21 +1,15 @@
 import { useState, useEffect } from 'react';
 import {
   Alert,
-  AlertTitle,
-  Box,
   Button,
   Card,
-  CardActions,
-  CardContent,
-  CardHeader,
-  CircularProgress,
   Collapse,
   Divider,
-  Typography,
-} from '@mui/material';
-import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import MicIcon from '@mui/icons-material/Mic';
-import MicOffIcon from '@mui/icons-material/MicOff';
+  Stack,
+  Text,
+  Title,
+} from '@mantine/core';
+import { CheckCircle2, Mic, MicOff } from 'lucide-react';
 import { advancePublicPatient } from '../../api/client';
 
 type PermState = 'granted' | 'prompt' | 'denied' | 'unknown';
@@ -23,26 +17,26 @@ type PermState = 'granted' | 'prompt' | 'denied' | 'unknown';
 function MicPermissionBadge({ state }: { state: PermState }) {
   if (state === 'granted') {
     return (
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'success.main' }}>
-        <CheckCircleIcon fontSize="small" />
-        <Typography variant="body2">Mikrofonzugriff erlaubt</Typography>
-      </Box>
+      <div className="flex items-center gap-2 text-green-600">
+        <CheckCircle2 size={16} />
+        <Text size="sm">Mikrofonzugriff erlaubt</Text>
+      </div>
     );
   }
   if (state === 'denied') {
     return (
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'error.main' }}>
-        <MicOffIcon fontSize="small" />
-        <Typography variant="body2" fontWeight={600}>Mikrofonzugriff verweigert</Typography>
-      </Box>
+      <div className="flex items-center gap-2 text-red-600">
+        <MicOff size={16} />
+        <Text size="sm" fw={600}>Mikrofonzugriff verweigert</Text>
+      </div>
     );
   }
   if (state === 'prompt') {
     return (
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'text.secondary' }}>
-        <MicIcon fontSize="small" />
-        <Typography variant="body2">Mikrofon-Erlaubnis wird beim Start abgefragt</Typography>
-      </Box>
+      <div className="flex items-center gap-2 text-[var(--mantine-color-dimmed)]">
+        <Mic size={16} />
+        <Text size="sm">Mikrofon-Erlaubnis wird beim Start abgefragt</Text>
+      </div>
     );
   }
   return null;
@@ -50,46 +44,39 @@ function MicPermissionBadge({ state }: { state: PermState }) {
 
 function MicDeniedInstructions() {
   return (
-    <Alert severity="error" sx={{ mt: 2 }}>
-      <AlertTitle>Mikrofonzugriff verweigert</AlertTitle>
-      <Typography variant="body2" sx={{ mb: 1 }}>
+    <Alert color="red" mt="md" title="Mikrofonzugriff verweigert">
+      <Text size="sm" mb="xs">
         Ihr Browser blockiert den Mikrofonzugriff. So aktivieren Sie ihn:
-      </Typography>
+      </Text>
 
-      <Typography variant="body2" fontWeight={600} gutterBottom>
-        Samsung Internet
-      </Typography>
-      <Typography variant="body2" component="ol" sx={{ pl: 2, mb: 1.5 }}>
+      <Text size="sm" fw={600} mb={4}>Samsung Internet</Text>
+      <Text size="sm" component="ol" className="mb-3 pl-4">
         <li>Tippen Sie auf das <strong>Dreistrich-Menü</strong> (☰) unten rechts</li>
         <li>Gehen Sie zu <strong>Einstellungen → Datenschutz → Website-Berechtigungen</strong></li>
         <li>Wählen Sie <strong>Mikrofon</strong> und suchen Sie diese Website</li>
         <li>Setzen Sie die Berechtigung auf <strong>Erlauben</strong></li>
         <li>Laden Sie die Seite neu</li>
-      </Typography>
+      </Text>
 
-      <Divider sx={{ my: 1 }} />
+      <Divider my="xs" />
 
-      <Typography variant="body2" fontWeight={600} gutterBottom>
-        Chrome (Android)
-      </Typography>
-      <Typography variant="body2" component="ol" sx={{ pl: 2, mb: 1.5 }}>
+      <Text size="sm" fw={600} mb={4}>Chrome (Android)</Text>
+      <Text size="sm" component="ol" className="mb-3 pl-4">
         <li>Tippen Sie auf das <strong>Schloss-Symbol</strong> in der Adressleiste</li>
         <li>Wählen Sie <strong>Berechtigungen</strong></li>
         <li>Setzen Sie <strong>Mikrofon</strong> auf <strong>Erlauben</strong></li>
         <li>Laden Sie die Seite neu</li>
-      </Typography>
+      </Text>
 
-      <Divider sx={{ my: 1 }} />
+      <Divider my="xs" />
 
-      <Typography variant="body2" fontWeight={600} gutterBottom>
-        Safari (iPhone/iPad)
-      </Typography>
-      <Typography variant="body2" component="ol" sx={{ pl: 2 }}>
+      <Text size="sm" fw={600} mb={4}>Safari (iPhone/iPad)</Text>
+      <Text size="sm" component="ol" className="pl-4">
         <li>Öffnen Sie <strong>Einstellungen</strong> auf Ihrem Gerät</li>
         <li>Scrollen Sie zu <strong>Safari</strong></li>
         <li>Tippen Sie auf <strong>Mikrofonzugriff</strong> → <strong>Fragen</strong> oder <strong>Erlauben</strong></li>
         <li>Kommen Sie zurück und laden Sie die Seite neu</li>
-      </Typography>
+      </Text>
     </Alert>
   );
 }
@@ -117,7 +104,7 @@ export default function LandingScreen({
         status.onchange = () => setPermState(status.state as PermState);
       })
       .catch(() => {
-        // Permissions API not supported (e.g. some Samsung Browser versions)
+        // Permissions API not supported
       });
 
     return () => {
@@ -130,11 +117,7 @@ export default function LandingScreen({
     setMicError('');
 
     try {
-      // Acquire microphone permission NOW — inside a click handler, which is a
-      // valid "user activation" on ALL platforms including iOS Safari.
-      // This pre-warms the stream so the record button never calls getUserMedia.
       const micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-
       await advancePublicPatient(token);
       onStart(micStream);
     } catch (err: unknown) {
@@ -147,13 +130,9 @@ export default function LandingScreen({
       if (errName === 'NotAllowedError' || permState === 'denied') {
         setPermState('denied');
       } else if (errName === 'NotFoundError') {
-        setMicError(
-          'Kein Mikrofon gefunden. Bitte stellen Sie sicher, dass ein Mikrofon angeschlossen ist.'
-        );
+        setMicError('Kein Mikrofon gefunden. Bitte stellen Sie sicher, dass ein Mikrofon angeschlossen ist.');
       } else if (!window.isSecureContext) {
-        setMicError(
-          'Mikrofon erfordert eine sichere Verbindung (HTTPS). Bitte verwenden Sie https://recurrsens.eu'
-        );
+        setMicError('Mikrofon erfordert eine sichere Verbindung (HTTPS). Bitte verwenden Sie https://recurrsens.eu');
       } else {
         setMicError('Fehler beim Starten. Bitte versuchen Sie es erneut.');
       }
@@ -165,19 +144,15 @@ export default function LandingScreen({
   const showDeniedInstructions = permState === 'denied';
 
   return (
-    <Card sx={{ maxWidth: 640, mx: 'auto' }}>
-      <CardHeader title="Willkommen zur RecurrSens Stimmprobenerfassung" />
-      <CardContent>
-        <Typography variant="body1" sx={{ mb: 2 }}>
-          Vielen Dank, dass Sie an unserer Studie zur Erfassung von Stimmproben teilnehmen.
-        </Typography>
-        <Typography variant="body1" sx={{ mb: 2 }}>
+    <Card withBorder radius="md" maw={640} mx="auto" p="lg">
+      <Title order={4} mb="md">Willkommen zur RecurrSens Stimmprobenerfassung</Title>
+      <Stack gap="md">
+        <Text>Vielen Dank, dass Sie an unserer Studie zur Erfassung von Stimmproben teilnehmen.</Text>
+        <Text>
           Sie werden gleich einige kurze Sprachaufnahmen machen. Halten Sie dazu
           den Aufnahme-Button gedrückt und lassen Sie ihn los, wenn Sie fertig sind.
-        </Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          Ihr Betreuer wird Ihnen bei der ersten Aufnahme helfen.
-        </Typography>
+        </Text>
+        <Text size="sm" c="dimmed">Ihr Betreuer wird Ihnen bei der ersten Aufnahme helfen.</Text>
 
         <MicPermissionBadge state={permState} />
 
@@ -186,22 +161,19 @@ export default function LandingScreen({
         </Collapse>
 
         {micError && !showDeniedInstructions && (
-          <Alert severity="error" sx={{ mt: 2 }}>
-            {micError}
-          </Alert>
+          <Alert color="red">{micError}</Alert>
         )}
-      </CardContent>
-      <CardActions sx={{ px: 2, pb: 2 }}>
+
         <Button
           fullWidth
-          variant="contained"
-          size="large"
-          disabled={loading || permState === 'denied'}
+          size="lg"
+          loading={loading}
+          disabled={permState === 'denied'}
           onClick={handleStart}
         >
-          {loading ? <CircularProgress size={24} /> : 'Aufnahme starten'}
+          Aufnahme starten
         </Button>
-      </CardActions>
+      </Stack>
     </Card>
   );
 }

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { Box, CircularProgress, Typography } from '@mui/material';
+import { Loader, Text } from '@mantine/core';
+import { motion, AnimatePresence } from 'motion/react';
 import { getPublicPatient } from '../api/client';
 import type { PatientStatus } from '../types';
 import LandingScreen from '../components/wizard/LandingScreen';
@@ -24,8 +25,6 @@ export default function PatientWizardPage() {
   const [feedbackSubmittedPost, setFeedbackSubmittedPost] = useState(false);
   const [postOpSessionNumber, setPostOpSessionNumber] = useState<number>(1);
 
-  // Pre-warmed mic stream, acquired on the LandingScreen's "Start" click.
-  // Kept alive across exercises so every record-press is instant (no getUserMedia).
   const [micStream, setMicStream] = useState<MediaStream | null>(null);
   const micStreamRef = useRef<MediaStream | null>(null);
 
@@ -53,7 +52,6 @@ export default function PatientWizardPage() {
       .finally(() => setLoading(false));
   }, [token]);
 
-  // Clean up the mic stream when the wizard unmounts (user leaves page, etc.)
   useEffect(() => {
     return () => {
       micStreamRef.current?.getTracks().forEach((t) => t.stop());
@@ -68,17 +66,17 @@ export default function PatientWizardPage() {
 
   if (loading) {
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
-        <CircularProgress />
-      </Box>
+      <div className="flex min-h-screen items-center justify-center">
+        <Loader />
+      </div>
     );
   }
 
   if (error || !token || !status) {
     return (
-      <Box sx={{ p: 4, textAlign: 'center' }}>
-        <Typography color="error">{error || 'Unbekannter Fehler'}</Typography>
-      </Box>
+      <div className="p-8 text-center">
+        <Text c="red">{error || 'Unbekannter Fehler'}</Text>
+      </div>
     );
   }
 
@@ -89,7 +87,6 @@ export default function PatientWizardPage() {
     switch (status) {
       case 'NEW':
         return <LandingScreen token={token} onStart={handleLandingStart} />;
-
       case 'CONSENT_GIVEN':
         return (
           <RecordingScreen
@@ -97,12 +94,9 @@ export default function PatientWizardPage() {
             phase="PRE_OP"
             micStream={micStream}
             completedExerciseIds={preOpCompletedIds}
-            onComplete={() =>
-              setStatus(feedbackSubmittedPre ? 'PRE_OP_DONE' : 'PRE_OP_FEEDBACK')
-            }
+            onComplete={() => setStatus(feedbackSubmittedPre ? 'PRE_OP_DONE' : 'PRE_OP_FEEDBACK')}
           />
         );
-
       case 'PRE_OP_FEEDBACK':
         return (
           <FeedbackScreen
@@ -114,10 +108,8 @@ export default function PatientWizardPage() {
             }}
           />
         );
-
       case 'PRE_OP_DONE':
         return <WaitingScreen />;
-
       case 'POST_OP_STARTED':
         return (
           <RecordingScreen
@@ -126,12 +118,9 @@ export default function PatientWizardPage() {
             sessionNumber={postOpSessionNumber}
             micStream={micStream}
             completedExerciseIds={postOpCompletedIds}
-            onComplete={() =>
-              setStatus(feedbackSubmittedPost ? 'POST_OP_DONE' : 'POST_OP_FEEDBACK')
-            }
+            onComplete={() => setStatus(feedbackSubmittedPost ? 'POST_OP_DONE' : 'POST_OP_FEEDBACK')}
           />
         );
-
       case 'POST_OP_FEEDBACK':
         return (
           <FeedbackScreen
@@ -143,18 +132,26 @@ export default function PatientWizardPage() {
             }}
           />
         );
-
       case 'POST_OP_DONE':
         return <CompletedScreen />;
-
       default:
-        return <Typography>Unbekannter Status: {status}</Typography>;
+        return <Text>Unbekannter Status: {status}</Text>;
     }
   };
 
   return (
-    <Box sx={{ minHeight: '100vh', bgcolor: 'background.default', py: 6, px: 2 }}>
-      {renderScreen()}
-    </Box>
+    <div className="min-h-screen bg-[var(--mantine-color-body)] px-4 py-12">
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={status}
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -8 }}
+          transition={{ duration: 0.2 }}
+        >
+          {renderScreen()}
+        </motion.div>
+      </AnimatePresence>
+    </div>
   );
 }

@@ -1,95 +1,85 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Box,
-  Button,
-  Card,
-  CardContent,
-  TextField,
-  Typography,
   Alert,
-  CircularProgress,
-} from '@mui/material';
+  Button,
+  Paper,
+  PasswordInput,
+  Stack,
+  Text,
+  TextInput,
+  Title,
+} from '@mantine/core';
+import { useForm } from '@mantine/form';
+import { motion } from 'motion/react';
 import { login } from '../api/client';
 
 export default function LoginPage() {
   const navigate = useNavigate();
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const form = useForm({
+    initialValues: { username: '', password: '' },
+    validate: {
+      username: (v) => (v.trim().length === 0 ? 'Erforderlich' : null),
+      password: (v) => (v.length === 0 ? 'Erforderlich' : null),
+    },
+  });
+
+  const handleSubmit = form.onSubmit(async (values) => {
     setError('');
     setLoading(true);
     try {
-      await login(username, password);
+      await login(values.username, values.password);
       navigate('/', { replace: true });
     } catch {
       setError('Anmeldung fehlgeschlagen. Bitte überprüfen Sie Ihre Zugangsdaten.');
     } finally {
       setLoading(false);
     }
-  };
+  });
 
   return (
-    <Box
-      sx={{
-        minHeight: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        bgcolor: 'background.default',
-      }}
-    >
-      <Card sx={{ maxWidth: 400, width: '100%', mx: 2 }}>
-        <CardContent sx={{ p: 4 }}>
-          <Typography variant="h5" gutterBottom align="center">
-            RecurrSens
-          </Typography>
-          <Typography variant="body2" color="text.secondary" align="center" sx={{ mb: 3 }}>
-            Admin-Anmeldung
-          </Typography>
+    <div className="flex min-h-screen items-center justify-center bg-[var(--mantine-color-body)] p-4">
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.25, ease: 'easeOut' }}
+        className="w-full max-w-md"
+      >
+        <Paper withBorder shadow="sm" radius="md" p="xl">
+          <Stack gap="xs" align="center" mb="lg">
+            <Title order={3}>RecurrSens</Title>
+            <Text size="sm" c="dimmed">Admin-Anmeldung</Text>
+          </Stack>
 
           {error && (
-            <Alert severity="error" sx={{ mb: 2 }}>
+            <Alert color="red" mb="md" variant="light">
               {error}
             </Alert>
           )}
 
-          <Box component="form" onSubmit={handleSubmit}>
-            <TextField
-              label="Benutzername"
-              fullWidth
-              margin="normal"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              autoFocus
-              required
-            />
-            <TextField
-              label="Passwort"
-              type="password"
-              fullWidth
-              margin="normal"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
-            <Button
-              type="submit"
-              fullWidth
-              variant="contained"
-              size="large"
-              disabled={loading}
-              sx={{ mt: 2 }}
-            >
-              {loading ? <CircularProgress size={24} /> : 'Anmelden'}
-            </Button>
-          </Box>
-        </CardContent>
-      </Card>
-    </Box>
+          <form onSubmit={handleSubmit}>
+            <Stack gap="md">
+              <TextInput
+                label="Benutzername"
+                autoFocus
+                required
+                {...form.getInputProps('username')}
+              />
+              <PasswordInput
+                label="Passwort"
+                required
+                {...form.getInputProps('password')}
+              />
+              <Button type="submit" fullWidth size="md" loading={loading} mt="sm">
+                Anmelden
+              </Button>
+            </Stack>
+          </form>
+        </Paper>
+      </motion.div>
+    </div>
   );
 }

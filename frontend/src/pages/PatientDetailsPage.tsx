@@ -1,39 +1,32 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
+  ActionIcon,
   Alert,
-  Box,
+  Badge,
   Button,
   Card,
-  CardContent,
-  CardHeader,
   Checkbox,
-  Chip,
-  CircularProgress,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  FormControl,
-  Grid,
-  IconButton,
-  InputLabel,
-  MenuItem,
+  Group,
+  Loader,
+  Modal,
   Select,
-  Table,
-  TableBody,
-  TableCell,
-  TableRow,
-  TextField,
-  Typography,
-} from '@mui/material';
-import ArrowBackIcon from '@mui/icons-material/ArrowBack';
-import DownloadIcon from '@mui/icons-material/Download';
-import EditIcon from '@mui/icons-material/Edit';
-import PersonIcon from '@mui/icons-material/Person';
-import AudioFileIcon from '@mui/icons-material/AudioFile';
-import UploadFileIcon from '@mui/icons-material/UploadFile';
-import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
+  Stack,
+  Text,
+  TextInput,
+  Title,
+} from '@mantine/core';
+import {
+  ArrowLeft,
+  Check,
+  Download,
+  Pencil,
+  User,
+  AudioLines,
+  Upload,
+  ArrowLeftRight,
+  X,
+} from 'lucide-react';
 import type { PatientDetail, PatientStatus, RecordingSession } from '../types';
 import {
   getPatient,
@@ -49,7 +42,7 @@ import {
   AUDIO_ACCEPT_ATTR,
   isAllowedAudioFile,
 } from '../api/client';
-import { StatusBadge, PredictionBadge, FollowUpBadge } from '../components/Badges';
+import { StatusBadge, FollowUpBadge } from '../components/Badges';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { formatDate, formatDateTime, NO_RECORDING_DATE } from '../utils';
 import type { Exercise, AudioFile as AudioFileType } from '../types';
@@ -77,103 +70,94 @@ export default function PatientDetailsPage() {
     fetchPatient();
   }, [fetchPatient]);
 
-if (loading) {
+  if (loading) {
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
-        <CircularProgress />
-      </Box>
+      <div className="flex justify-center py-16">
+        <Loader />
+      </div>
     );
   }
 
   if (error || !patient) {
     return (
-      <Box sx={{ p: 4 }}>
-        <Alert severity="error">{error || 'Unbekannter Fehler'}</Alert>
-      </Box>
+      <div className="p-4">
+        <Alert color="red">{error || 'Unbekannter Fehler'}</Alert>
+      </div>
     );
   }
 
   const noRecordings = patient.audio_files_pre.length === 0 && patient.audio_files_post.length === 0;
 
   return (
-    <Box sx={{ minHeight: '100vh', bgcolor: 'background.default', pb: noRecordings ? 2 : 3 }}>
+    <div className="min-h-screen pb-4">
       <Button
-        startIcon={<ArrowBackIcon />}
+        variant="subtle"
+        leftSection={<ArrowLeft size={16} />}
         onClick={() => navigate('/')}
-        sx={{ mb: noRecordings ? 2 : 3 }}
+        mb={noRecordings ? 'sm' : 'md'}
       >
         Zurück zur Übersicht
       </Button>
 
-      <Grid container spacing={noRecordings ? 2 : 3} justifyContent="center">
-        <Grid size={{ xs: 12, lg: noRecordings ? 9 : 8 }}>
-          <PatientInfoCard patient={patient} onUpdated={fetchPatient} compact={noRecordings} />
-          {noRecordings ? (
-            <Grid container spacing={2}>
-              <Grid size={{ xs: 12, md: 6 }}>
-                <AudioSection
-                  title="Prä-OP Aufnahmen"
-                  audioFiles={patient.audio_files_pre}
-                  sessions={patient.sessions}
-                  phase="PRE_OP"
-                  date={patient.pre_op_date}
-                  patientId={patient.id}
-                  patientStatus={patient.status}
-                  showUpload
-                  onUploaded={fetchPatient}
-                  compact
-                />
-              </Grid>
-              <Grid size={{ xs: 12, md: 6 }}>
-                <AudioSection
-                  title="Post-OP Aufnahmen"
-                  audioFiles={patient.audio_files_post}
-                  sessions={patient.sessions}
-                  phase="POST_OP"
-                  date={patient.post_op_date}
-                  patientId={patient.id}
-                  patientStatus={patient.status}
-                  showUpload
-                  onUploaded={fetchPatient}
-                  compact
-                />
-              </Grid>
-            </Grid>
-          ) : (
-            <>
-              <AudioSection
-                title="Prä-OP Aufnahmen"
-                audioFiles={patient.audio_files_pre}
-                sessions={patient.sessions}
-                phase="PRE_OP"
-                date={patient.pre_op_date}
-                patientId={patient.id}
-                patientStatus={patient.status}
-                showUpload
-                onUploaded={fetchPatient}
-              />
-              <AudioSection
-                title="Post-OP Aufnahmen"
-                audioFiles={patient.audio_files_post}
-                sessions={patient.sessions}
-                phase="POST_OP"
-                date={patient.post_op_date}
-                patientId={patient.id}
-                patientStatus={patient.status}
-                showUpload
-                onUploaded={fetchPatient}
-              />
-            </>
-          )}
-        </Grid>
-      </Grid>
-    </Box>
+      <div className="mx-auto" style={{ maxWidth: noRecordings ? 1100 : 980 }}>
+        <PatientInfoCard patient={patient} onUpdated={fetchPatient} compact={noRecordings} />
+        {noRecordings ? (
+          <div className="grid gap-4 md:grid-cols-2">
+            <AudioSection
+              title="Prä-OP Aufnahmen"
+              audioFiles={patient.audio_files_pre}
+              sessions={patient.sessions}
+              phase="PRE_OP"
+              date={patient.pre_op_date}
+              patientId={patient.id}
+              patientStatus={patient.status}
+              showUpload
+              onUploaded={fetchPatient}
+              compact
+            />
+            <AudioSection
+              title="Post-OP Aufnahmen"
+              audioFiles={patient.audio_files_post}
+              sessions={patient.sessions}
+              phase="POST_OP"
+              date={patient.post_op_date}
+              patientId={patient.id}
+              patientStatus={patient.status}
+              showUpload
+              onUploaded={fetchPatient}
+              compact
+            />
+          </div>
+        ) : (
+          <>
+            <AudioSection
+              title="Prä-OP Aufnahmen"
+              audioFiles={patient.audio_files_pre}
+              sessions={patient.sessions}
+              phase="PRE_OP"
+              date={patient.pre_op_date}
+              patientId={patient.id}
+              patientStatus={patient.status}
+              showUpload
+              onUploaded={fetchPatient}
+            />
+            <AudioSection
+              title="Post-OP Aufnahmen"
+              audioFiles={patient.audio_files_post}
+              sessions={patient.sessions}
+              phase="POST_OP"
+              date={patient.post_op_date}
+              patientId={patient.id}
+              patientStatus={patient.status}
+              showUpload
+              onUploaded={fetchPatient}
+            />
+          </>
+        )}
+      </div>
+    </div>
   );
 }
-
-// ---------------------------------------------------------------------------
-// Patient info card with inline edit
-// ---------------------------------------------------------------------------
 
 function PatientInfoCard({
   patient,
@@ -188,8 +172,7 @@ function PatientInfoCard({
   const [saving, setSaving] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [pid, setPid] = useState(patient.patient_id);
-  const [preOpDate, setPreOpDate] = useState(toDatetimeLocal(patient.pre_op_date));
-  const [postOpDate, setPostOpDate] = useState(toDatetimeLocal(patient.post_op_date));
+  const [expiresAt, setExpiresAt] = useState(patient.expires_at.slice(0, 10));
 
   const handleDownload = async () => {
     setDownloading(true);
@@ -203,11 +186,7 @@ function PatientInfoCard({
   const handleSave = async () => {
     setSaving(true);
     try {
-      await updatePatient(patient.id, {
-        patient_id: pid,
-        pre_op_date: preOpDate ? new Date(preOpDate).toISOString() : null,
-        post_op_date: postOpDate ? new Date(postOpDate).toISOString() : null,
-      });
+      await updatePatient(patient.id, { patient_id: pid, expires_at: expiresAt });
       setEditing(false);
       onUpdated();
     } finally {
@@ -216,165 +195,93 @@ function PatientInfoCard({
   };
 
   return (
-    <Card sx={{ mb: compact ? 2 : 3 }}>
-      <CardHeader
-        title={
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <PersonIcon color="primary" sx={{ fontSize: 20 }} />
-            <Typography variant="h6" fontWeight={600}>
-              Patienten Details
-            </Typography>
-            <IconButton size="small" onClick={() => setEditing(!editing)} sx={{ ml: 0.25 }}>
-              <EditIcon sx={{ fontSize: 16 }} />
-            </IconButton>
-          </Box>
-        }
-        action={
-          <Button
-            size="small"
-            startIcon={downloading ? <CircularProgress size={16} /> : <DownloadIcon />}
-            onClick={handleDownload}
-            disabled={downloading}
-          >
-            Herunterladen
-          </Button>
-        }
-        sx={{ pb: 1 }}
-      />
-      <CardContent sx={{ pt: 0 }}>
-        {patient.deleted_at && (
-          <Alert severity="error" sx={{ mb: 1.5 }}>
-            Gelöscht am {formatDateTime(patient.deleted_at)}
-          </Alert>
-        )}
-        {editing ? (
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <TextField
-              label="Patienten-ID"
-              value={pid}
-              onChange={(e) => setPid(e.target.value)}
-              size="small"
-              fullWidth
-            />
-            <TextField
-              label="Prä-OP Aufnahmedatum"
-              type="datetime-local"
-              value={preOpDate}
-              onChange={(e) => setPreOpDate(e.target.value)}
-              size="small"
-              fullWidth
-              slotProps={{ inputLabel: { shrink: true } }}
-            />
-            <TextField
-              label="Post-OP Aufnahmedatum"
-              type="datetime-local"
-              value={postOpDate}
-              onChange={(e) => setPostOpDate(e.target.value)}
-              size="small"
-              fullWidth
-              slotProps={{ inputLabel: { shrink: true } }}
-            />
-            <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
-              <Button size="small" onClick={() => setEditing(false)}>
-                Abbrechen
-              </Button>
-              <Button size="small" variant="contained" onClick={handleSave} disabled={saving}>
-                {saving ? <CircularProgress size={16} /> : 'Speichern'}
-              </Button>
-            </Box>
-          </Box>
-        ) : (
-          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5 }}>
-            <InfoField label="Patienten-ID" value={patient.patient_id} mono />
-            <InfoField label="Status">
-              {patient.current_post_op_session_number != null
-                ? <FollowUpBadge
-                    sessionNumber={patient.current_post_op_session_number}
-                    complete={patient.status === 'POST_OP_DONE'}
-                  />
-                : <StatusBadge status={patient.status as PatientStatus} />
-              }
-            </InfoField>
-            <InfoField
-              label="Erstellt am"
-              value={formatDate(patient.created_at)}
-            />
-            <InfoField
-              label="Ablaufdatum"
-              value={formatDate(patient.expires_at)}
-            />
-            <InfoField
-              label="Prä-OP Aufnahmedatum"
-              value={patient.pre_op_date ? formatDateTime(patient.pre_op_date) : '—'}
-            />
-            <InfoField
-              label="Post-OP Aufnahmedatum"
-              value={patient.post_op_date ? formatDateTime(patient.post_op_date) : '—'}
-            />
-          </Box>
-        )}
-
-        {/* CDSS prediction section */}
-        <Box
-          sx={{
-            mt: compact ? 1.5 : 2,
-            pt: compact ? 1.5 : 2,
-            borderTop: '1px solid',
-            borderColor: 'divider',
-            textAlign: 'center',
-          }}
+    <Card withBorder radius="md" mb={compact ? 'sm' : 'md'} p="md">
+      <Group justify="space-between" mb="sm">
+        <Group gap="xs">
+          <User size={20} color="var(--mantine-color-brand-7)" />
+          <Title order={5}>Patienten Details</Title>
+          <ActionIcon variant="subtle" color="gray" size="sm" onClick={() => setEditing(!editing)}>
+            <Pencil size={14} />
+          </ActionIcon>
+        </Group>
+        <Button
+          size="xs"
+          variant="subtle"
+          leftSection={<Download size={14} />}
+          onClick={handleDownload}
+          loading={downloading}
         >
-          <Typography variant="subtitle2" gutterBottom align="center">
-            Modellvorhersage (KI)
-          </Typography>
-          <Typography
-            variant="body2"
-            color="text.secondary"
-            align="center"
-            sx={{ mb: compact ? 1.25 : 2, fontStyle: 'italic', fontSize: '0.78rem' }}
-          >
-            Hinweis: Dies ist ein klinisches Entscheidungsunterstützungssystem (CDSS).
-            <br />
-            Die Vorhersage ersetzt keine ärztliche Diagnose.
-          </Typography>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: compact ? 1 : 1.5, alignItems: 'center' }}>
-            <Box sx={{ textAlign: 'center' }}>
-              <Typography variant="subtitle2" align="center" sx={{ mb: 0.5 }}>
-                Prä-OP Analyse
-              </Typography>
-              <Box sx={{ display: 'flex', justifyContent: 'center' }}>
-                <PredictionBadge
-                  value={patient.prediction_pre}
-                  percentage={patient.ai_percentage_rp_pre}
-                  gradcamPrediction={patient.gradcam_prediction_pre}
-                  gradcamPercentage={patient.gradcam_percentage_pre}
-                />
-              </Box>
-            </Box>
-            <Box sx={{ textAlign: 'center' }}>
-              <Typography variant="subtitle2" align="center" sx={{ mb: 0.5 }}>
-                Post-OP Analyse
-              </Typography>
-              <Box sx={{ display: 'flex', justifyContent: 'center' }}>
-                <PredictionBadge
-                  value={patient.prediction_post}
-                  percentage={patient.ai_percentage_rp_post}
-                  gradcamPrediction={patient.gradcam_prediction_post}
-                  gradcamPercentage={patient.gradcam_percentage_post}
-                />
-              </Box>
-            </Box>
-          </Box>
-        </Box>
+          Herunterladen
+        </Button>
+      </Group>
 
-      </CardContent>
+      {patient.deleted_at && (
+        <Alert color="red" mb="sm">
+          Gelöscht am {formatDateTime(patient.deleted_at)}
+        </Alert>
+      )}
+
+      <div className="grid grid-cols-2 gap-3">
+        <InfoField label="Patienten-ID">
+          {editing ? (
+            <TextInput
+              value={pid}
+              onChange={(e) => setPid(e.currentTarget.value)}
+              size="xs"
+              variant="unstyled"
+              styles={{ input: { fontSize: '0.9375rem', fontWeight: 600, fontFamily: 'ui-monospace, Consolas, monospace', padding: 0 } }}
+            />
+          ) : (
+            <div className="text-[0.9375rem] font-semibold" style={{ fontFamily: 'ui-monospace, Consolas, monospace' }}>
+              {patient.patient_id}
+            </div>
+          )}
+        </InfoField>
+        <InfoField label="Status">
+          {patient.current_post_op_session_number != null && patient.current_post_op_session_number >= 2 ? (
+            <FollowUpBadge
+              sessionNumber={patient.current_post_op_session_number - 1}
+              complete={patient.status === 'POST_OP_DONE'}
+            />
+          ) : (
+            <StatusBadge status={patient.status as PatientStatus} />
+          )}
+        </InfoField>
+        <InfoField label="Erstellt am" value={formatDate(patient.created_at)} />
+        <InfoField label="Ablaufdatum">
+          {editing ? (
+            <input
+              type="date"
+              value={expiresAt}
+              onChange={(e) => setExpiresAt(e.currentTarget.value)}
+              style={{
+                background: 'none',
+                border: 'none',
+                outline: 'none',
+                fontSize: '0.9375rem',
+                fontWeight: 600,
+                fontFamily: 'inherit',
+                color: 'var(--mantine-color-text)',
+                padding: 0,
+                width: '100%',
+                colorScheme: 'dark',
+              }}
+            />
+          ) : (
+            <div className="text-[0.9375rem] font-semibold">{formatDate(patient.expires_at)}</div>
+          )}
+        </InfoField>
+      </div>
+      {editing && (
+        <Group justify="flex-end" gap="sm" mt="sm">
+          <Button size="xs" variant="default" onClick={() => { setEditing(false); setPid(patient.patient_id); setExpiresAt(patient.expires_at.slice(0, 10)); }}>Abbrechen</Button>
+          <Button size="xs" onClick={handleSave} loading={saving}>Speichern</Button>
+        </Group>
+      )}
+
     </Card>
   );
 }
-
-// ---------------------------------------------------------------------------
-// Audio section with manual upload
-// ---------------------------------------------------------------------------
 
 function AudioSection({
   title,
@@ -401,12 +308,17 @@ function AudioSection({
 }) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkOpen, setBulkOpen] = useState(false);
+  const [editingDate, setEditingDate] = useState(false);
+  const [dateValue, setDateValue] = useState(toDatetimeLocal(date));
+  const [savingDate, setSavingDate] = useState(false);
 
-  const toggleSelect = (id: string) => setSelectedIds((prev) => {
-    const next = new Set(prev);
-    next.has(id) ? next.delete(id) : next.add(id);
-    return next;
-  });
+  const toggleSelect = (id: string) =>
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
 
   const handleDone = () => {
     setSelectedIds(new Set());
@@ -414,161 +326,161 @@ function AudioSection({
     onUploaded();
   };
 
+  const handleSaveDate = async () => {
+    setSavingDate(true);
+    try {
+      const field = phase === 'PRE_OP' ? 'pre_op_date' : 'post_op_date';
+      const iso = dateValue ? new Date(dateValue).toISOString() : new Date().toISOString();
+      await updatePatient(patientId, { [field]: iso });
+      setEditingDate(false);
+      onUploaded();
+    } finally {
+      setSavingDate(false);
+    }
+  };
+
   return (
-    <Card sx={{ mb: compact ? 0 : 3, height: compact ? '100%' : 'auto' }}>
-      <CardHeader
-        title={
-          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1.5 }}>
-            <AudioFileIcon color='primary' />
-            <Typography variant="h6" component="span">
-              {title}
-            </Typography>
-          </Box>
-        }
-          subheader={date ? formatDateTime(date) : NO_RECORDING_DATE}
-          slotProps={{
-            title: {
-              variant: 'h7',
-              component: 'div',
-            },
-            subheader: {
-              align: 'center',
-            },
-          }}
-          sx={{
-            '& .MuiCardHeader-content': { textAlign: 'center' },
-            '& .MuiCardHeader-avatar': { display: 'none' }
-          }}
-      />
-      <CardContent>
-        {showUpload && audioFiles.length > 0 && (
-          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0 }}>
-              <Checkbox
-                size="small"
-                checked={selectedIds.size === audioFiles.length}
-                indeterminate={selectedIds.size > 0 && selectedIds.size < audioFiles.length}
-                onChange={() => {
-                  if (selectedIds.size === audioFiles.length) {
-                    setSelectedIds(new Set());
-                  } else {
-                    setSelectedIds(new Set(audioFiles.map((f) => f.id)));
-                  }
-                }}
-                sx={{ p: 0.25 }}
-              />
-              <Button
-                size="small"
-                variant="text"
-                onClick={() => {
-                  if (selectedIds.size === audioFiles.length) {
-                    setSelectedIds(new Set());
-                  } else {
-                    setSelectedIds(new Set(audioFiles.map((f) => f.id)));
-                  }
-                }}
-              >
-                {selectedIds.size === audioFiles.length ? 'Auswahl aufheben' : 'Alle auswählen'}
-              </Button>
-              {selectedIds.size > 0 && (
-                <Button
-                  size="small"
-                  variant="outlined"
-                  startIcon={<SwapHorizIcon />}
-                  onClick={() => setBulkOpen(true)}
-                >
-                  Zuordnung ändern ({selectedIds.size})
-                </Button>
-              )}
-            </Box>
-            <ManualUpload
-              patientId={patientId}
-              phase={phase}
-              patientStatus={patientStatus}
-              onDone={onUploaded}
-              buttonLabel="Hochladen"
-              existingFiles={audioFiles}
+    <Card withBorder radius="md" mb={compact ? 0 : 'md'} p="md" h={compact ? '100%' : undefined}>
+      <Stack gap={4} align="center" mb="md">
+        <Group gap="xs">
+          <AudioLines size={20} color="var(--mantine-color-brand-7)" />
+          <Title order={6}>{title}</Title>
+        </Group>
+        {editingDate ? (
+          <Group gap="xs">
+            <TextInput
+              type="datetime-local"
+              value={dateValue}
+              onChange={(e) => setDateValue(e.currentTarget.value)}
+              size="xs"
+              style={{ width: 200 }}
             />
-          </Box>
-        )}
-        {audioFiles.length === 0 ? (
-          <Box
-            sx={{
-              py: compact ? 2.5 : 4,
-              textAlign: 'center',
-              color: 'text.secondary',
-              bgcolor: 'grey.50',
-              borderRadius: 1,
-              border: '1px dashed',
-              borderColor: 'grey.300',
-            }}
-          >
-            <Typography variant="body2">
-              Keine {phase === 'PRE_OP' ? 'Prä-OP' : 'Post-OP'} Aufnahmen vorhanden.
-            </Typography>
-            {showUpload && (
-              <Box sx={{ mt: 1 }}>
-                <ManualUpload
-                  patientId={patientId}
-                  phase={phase}
-                  patientStatus={patientStatus}
-                  onDone={onUploaded}
-                  buttonLabel="Dateien hochladen"
-                  existingFiles={audioFiles}
-                />
-              </Box>
-            )}
-          </Box>
+            <ActionIcon size="xs" variant="subtle" color="green" loading={savingDate} onClick={handleSaveDate}>
+              <Check size={12} />
+            </ActionIcon>
+            <ActionIcon size="xs" variant="subtle" color="gray" onClick={() => setEditingDate(false)}>
+              <X size={12} />
+            </ActionIcon>
+          </Group>
         ) : (
-          <Grid container spacing={2}>
-            {audioFiles.map((f, i) => (
-              <Grid key={f.id} size={{ xs: 12, sm: 6 }}>
-                <Box
-                  sx={{
-                    p: 2,
-                    border: '1px solid',
-                    borderColor: selectedIds.has(f.id) ? 'primary.main' : 'grey.200',
-                    borderRadius: 1,
-                    transition: 'border-color 0.15s',
-                  }}
-                >
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 1 }}>
-                    <Checkbox
-                      size="small"
-                      checked={selectedIds.has(f.id)}
-                      onChange={() => toggleSelect(f.id)}
-                      sx={{ p: 0.25 }}
-                    />
-                    <Typography variant="body2" fontWeight={500} component="span">
-                      Aufnahme {i + 1}
-                      {f.exercise_id && (
-                        <Chip label={f.exercise_id} size="small" sx={{ ml: 1 }} />
-                      )}
-                    </Typography>
-                  </Box>
-                  <audio controls src={getAudioStreamUrl(f.id)} style={{ width: '100%', height: 32 }} />
-                </Box>
-              </Grid>
-            ))}
-          </Grid>
+          <Group gap={4}>
+            <Text size="xs" c="dimmed">{date ? formatDateTime(date) : NO_RECORDING_DATE}</Text>
+            {showUpload && (
+              <ActionIcon
+                size="xs"
+                variant="subtle"
+                color="gray"
+                onClick={() => { setDateValue(toDatetimeLocal(date) || toDatetimeLocal(new Date().toISOString())); setEditingDate(true); }}
+              >
+                <Pencil size={11} />
+              </ActionIcon>
+            )}
+          </Group>
         )}
-        <BulkReassignDialog
-          open={bulkOpen}
-          fileIds={Array.from(selectedIds)}
-          sessions={sessions}
-          patientId={patientId}
-          defaultPhase={phase}
-          onClose={() => setBulkOpen(false)}
-          onDone={handleDone}
-        />
-      </CardContent>
+      </Stack>
+
+      {showUpload && audioFiles.length > 0 && (
+        <Group justify="space-between" mb="xs">
+          <Group gap={0}>
+            <Checkbox
+              size="xs"
+              checked={selectedIds.size === audioFiles.length}
+              indeterminate={selectedIds.size > 0 && selectedIds.size < audioFiles.length}
+              onChange={() => {
+                if (selectedIds.size === audioFiles.length) setSelectedIds(new Set());
+                else setSelectedIds(new Set(audioFiles.map((f) => f.id)));
+              }}
+            />
+            <Button
+              size="xs"
+              variant="subtle"
+              onClick={() => {
+                if (selectedIds.size === audioFiles.length) setSelectedIds(new Set());
+                else setSelectedIds(new Set(audioFiles.map((f) => f.id)));
+              }}
+            >
+              {selectedIds.size === audioFiles.length ? 'Auswahl aufheben' : 'Alle auswählen'}
+            </Button>
+            {selectedIds.size > 0 && (
+              <Button
+                size="xs"
+                variant="outline"
+                leftSection={<ArrowLeftRight size={14} />}
+                onClick={() => setBulkOpen(true)}
+              >
+                Zuordnung ändern ({selectedIds.size})
+              </Button>
+            )}
+          </Group>
+          <ManualUpload
+            patientId={patientId}
+            phase={phase}
+            patientStatus={patientStatus}
+            onDone={onUploaded}
+            buttonLabel="Hochladen"
+            existingFiles={audioFiles}
+          />
+        </Group>
+      )}
+
+      {audioFiles.length === 0 ? (
+        <div
+          className="rounded-md border border-dashed border-[var(--mantine-color-default-border)] bg-[var(--mantine-color-default-hover)] text-center"
+          style={{ padding: compact ? '20px' : '32px', color: 'var(--mantine-color-dimmed)' }}
+        >
+          <Text size="sm" c="dimmed">
+            Keine {phase === 'PRE_OP' ? 'Prä-OP' : 'Post-OP'} Aufnahmen vorhanden.
+          </Text>
+          {showUpload && (
+            <div className="mt-2">
+              <ManualUpload
+                patientId={patientId}
+                phase={phase}
+                patientStatus={patientStatus}
+                onDone={onUploaded}
+                buttonLabel="Dateien hochladen"
+                existingFiles={audioFiles}
+              />
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2">
+          {audioFiles.map((f, i) => (
+            <div
+              key={f.id}
+              className="rounded-md border p-3 transition-colors"
+              style={{
+                borderColor: selectedIds.has(f.id)
+                  ? 'var(--mantine-color-brand-6)'
+                  : 'var(--mantine-color-default-border)',
+              }}
+            >
+              <Group gap={4} mb="xs">
+                <Checkbox size="xs" checked={selectedIds.has(f.id)} onChange={() => toggleSelect(f.id)} />
+                <Text size="sm" fw={500}>
+                  Aufnahme {i + 1}
+                  {f.exercise_id && <Badge ml="xs" size="sm" variant="light">{f.exercise_id}</Badge>}
+                </Text>
+              </Group>
+              <audio controls src={getAudioStreamUrl(f.id)} className="w-full" style={{ height: 32 }} />
+            </div>
+          ))}
+        </div>
+      )}
+
+      <BulkReassignDialog
+        open={bulkOpen}
+        fileIds={Array.from(selectedIds)}
+        sessions={sessions}
+        patientId={patientId}
+        defaultPhase={phase}
+        onClose={() => setBulkOpen(false)}
+        onDone={handleDone}
+      />
     </Card>
   );
 }
-
-// ---------------------------------------------------------------------------
-// Bulk reassign dialog
-// ---------------------------------------------------------------------------
 
 function sessionLabel(s: RecordingSession): string {
   if (s.phase === 'PRE_OP') return `Prä-OP (Sitzung ${s.session_number})`;
@@ -594,7 +506,7 @@ function BulkReassignDialog({
   onDone: () => void;
 }) {
   const [selectedPhase, setSelectedPhase] = useState<'PRE_OP' | 'POST_OP'>(
-    defaultPhase === 'PRE_OP' ? 'POST_OP' : 'PRE_OP'
+    defaultPhase === 'PRE_OP' ? 'POST_OP' : 'PRE_OP',
   );
   const [selectedSession, setSelectedSession] = useState<string>('');
   const [saving, setSaving] = useState(false);
@@ -602,7 +514,6 @@ function BulkReassignDialog({
 
   useEffect(() => {
     if (open) {
-      // Default to the opposite phase — reassigning usually means moving to the other phase
       setSelectedPhase(defaultPhase === 'PRE_OP' ? 'POST_OP' : 'PRE_OP');
       setSelectedSession('');
       setError('');
@@ -618,6 +529,16 @@ function BulkReassignDialog({
 
   const nextFollowUpNumber = nextPostOpSessionNumber - 1;
   const isNewFollowup = selectedSession === 'NEW_FOLLOWUP';
+  const showSessionDropdown =
+    selectedPhase === 'POST_OP' && nextPostOpSessionNumber >= 2;
+
+  const sessionOptions = [
+    { value: '', label: 'Keine Sitzung' },
+    ...filteredSessions.map((s) => ({ value: s.id, label: sessionLabel(s) })),
+    ...(selectedPhase === 'POST_OP' && nextPostOpSessionNumber >= 2
+      ? [{ value: 'NEW_FOLLOWUP', label: '+ Neue Follow-up Sitzung anlegen' }]
+      : []),
+  ];
 
   const handleSave = async () => {
     setSaving(true);
@@ -627,6 +548,8 @@ function BulkReassignDialog({
       if (isNewFollowup) {
         const s = await createSession(patientId, 'POST_OP');
         targetSessionId = s.id;
+      } else if (!showSessionDropdown) {
+        targetSessionId = filteredSessions[0]?.id ?? null;
       } else {
         targetSessionId = selectedSession || null;
       }
@@ -642,71 +565,66 @@ function BulkReassignDialog({
   };
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth onClick={(e) => e.stopPropagation()}>
-      <DialogTitle sx={{ pb: 1 }}>
-        Zuordnung ändern ({fileIds.length} {fileIds.length === 1 ? 'Aufnahme' : 'Aufnahmen'})
-      </DialogTitle>
-      <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1.5 }}>
-        <Typography variant="body2" color="text.secondary">
+    <Modal
+      opened={open}
+      onClose={onClose}
+      title={`Zuordnung ändern (${fileIds.length} ${fileIds.length === 1 ? 'Aufnahme' : 'Aufnahmen'})`}
+      size="sm"
+      centered
+    >
+      <Stack gap="md">
+        <Text size="sm" c="dimmed">
           Wählen Sie die neue Phase und Sitzung für {fileIds.length === 1 ? 'diese Aufnahme' : 'alle ausgewählten Aufnahmen'}.
-        </Typography>
-        <FormControl size="small" fullWidth>
-          <InputLabel>Phase</InputLabel>
-          <Select
-            label="Phase"
-            value={selectedPhase}
-            onChange={(e) => {
-              setSelectedPhase(e.target.value as 'PRE_OP' | 'POST_OP');
-              setSelectedSession('');
-            }}
-          >
-            <MenuItem value="PRE_OP">Prä-OP</MenuItem>
-            <MenuItem value="POST_OP">Post-OP</MenuItem>
-          </Select>
-        </FormControl>
-        <FormControl size="small" fullWidth>
-          <InputLabel>Sitzung</InputLabel>
-          <Select
-            label="Sitzung"
-            value={selectedSession}
-            onChange={(e) => setSelectedSession(e.target.value)}
-          >
-            <MenuItem value=""><em>Keine Sitzung</em></MenuItem>
-            {filteredSessions.map((s) => (
-              <MenuItem key={s.id} value={s.id}>
-                {sessionLabel(s)}
-              </MenuItem>
-            ))}
-            {selectedPhase === 'POST_OP' && nextPostOpSessionNumber >= 2 && (
-              <MenuItem value="NEW_FOLLOWUP">
-                <em>+ Neue Follow-up Sitzung anlegen</em>
-              </MenuItem>
+        </Text>
+        <Select
+          label="Phase"
+          value={selectedPhase}
+          onChange={(v) => {
+            setSelectedPhase((v as 'PRE_OP' | 'POST_OP') || 'PRE_OP');
+            setSelectedSession('');
+          }}
+          data={[
+            { value: 'PRE_OP', label: 'Prä-OP' },
+            { value: 'POST_OP', label: 'Post-OP' },
+          ]}
+          allowDeselect={false}
+        />
+        {showSessionDropdown && (
+          <>
+            <Select
+              label="Sitzung"
+              value={selectedSession}
+              onChange={(v) => setSelectedSession(v ?? '')}
+              data={sessionOptions}
+            />
+            {isNewFollowup && (
+              <Alert color="cyan">
+                Es wird automatisch <strong>Post-OP Sitzung {nextPostOpSessionNumber}</strong>
+                {nextFollowUpNumber >= 1 ? ` (Follow-up ${nextFollowUpNumber})` : ''} angelegt.
+              </Alert>
             )}
-          </Select>
-        </FormControl>
-        {isNewFollowup && (
-          <Alert severity="info" sx={{ mt: 0 }}>
-            Es wird automatisch <strong>Post-OP Sitzung {nextPostOpSessionNumber}</strong>
-            {nextFollowUpNumber >= 1 ? ` (Follow-up ${nextFollowUpNumber})` : ''} angelegt.
-          </Alert>
+          </>
         )}
-        {error && <Alert severity="error">{error}</Alert>}
-      </DialogContent>
-      <DialogActions sx={{ px: 3, pb: 2 }}>
-        <Button onClick={onClose} color="inherit" disabled={saving}>
-          Abbrechen
-        </Button>
-        <Button variant="contained" onClick={handleSave} disabled={saving}>
-          {saving ? <CircularProgress size={18} /> : 'Speichern'}
-        </Button>
-      </DialogActions>
-    </Dialog>
+        {error && <Alert color="red">{error}</Alert>}
+        <Group justify="flex-end">
+          <Button variant="default" onClick={onClose} disabled={saving}>Abbrechen</Button>
+          <Button onClick={handleSave} loading={saving}>Speichern</Button>
+        </Group>
+      </Stack>
+    </Modal>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Manual upload for admin
-// ---------------------------------------------------------------------------
+const EXERCISE_GROUPS = [
+  { label: 'Vokal I', prefix: 'i_' },
+  { label: 'Vokal A', prefix: 'a_' },
+  { label: 'Vokal U', prefix: 'u_' },
+  { label: 'Sonstiges', ids: ['iau', 'phrase', 'happy_birthday'] as string[] },
+] as const;
+
+function shortExerciseLabel(title: string): string {
+  return title.replace(/^Vokal [IiAaUu]\s*/i, '').replace(/^Vokalfolge\s*/i, '');
+}
 
 function ManualUpload({
   patientId,
@@ -765,18 +683,14 @@ function ManualUpload({
     setError('');
     setUploading(true);
     try {
-      // For post-op, advance to POST_OP_STARTED first
       if (phase === 'POST_OP' && patientStatus === 'PRE_OP_DONE') {
         await advancePatient(patientId);
       }
-
       for (const exercise of exercises) {
         const file = files[exercise.exercise_id];
         if (!file) continue;
         await uploadAudio(patientId, file, exercise.exercise_id);
       }
-
-      // Only advance if the patient hasn't already completed this phase
       const shouldAdvance =
         (phase === 'PRE_OP' && patientStatus === 'CONSENT_GIVEN') ||
         (phase === 'POST_OP' && patientStatus === 'POST_OP_STARTED');
@@ -795,7 +709,7 @@ function ManualUpload({
 
   return (
     <>
-      <Button size="small" startIcon={<UploadFileIcon />} onClick={handleOpen}>
+      <Button size="xs" variant="subtle" leftSection={<Upload size={14} />} onClick={handleOpen}>
         {buttonLabel}
       </Button>
       <ConfirmDialog
@@ -803,14 +717,14 @@ function ManualUpload({
         title="Aufnahmen ersetzen?"
         message={
           <>
-            <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 0.5 }}>
+            <Text size="xs" c="dimmed" mb={4}>
               Für folgende Übungen existiert bereits eine Aufnahme:
-            </Typography>
+            </Text>
             {pendingConflicts.map((e) => e.title).join(', ')}. Möchten Sie diese ersetzen?
           </>
         }
         confirmLabel="Ersetzen"
-        confirmColor="warning"
+        confirmColor="yellow"
         onConfirm={() => {
           confirmedRef.current = true;
           setConfirmOpen(false);
@@ -818,73 +732,78 @@ function ManualUpload({
         }}
         onCancel={() => setConfirmOpen(false)}
       />
-      <Dialog open={open} onClose={() => setOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle sx={{ pb: 1 }}>
-          Hochladen ({phase === 'PRE_OP' ? 'Prä-OP' : 'Post-OP'})
-        </DialogTitle>
-        <DialogContent sx={{ px: 3, py: 2 }}>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-            Bitte wählen Sie für jede der folgenden Übungen die entsprechende Audiodatei aus.
-          </Typography>
-          <Table size="medium">
-            <TableBody>
-              {exercises.map((ex) => (
-                <TableRow key={ex.exercise_id}>
-                  <TableCell sx={{ pl: 0, fontWeight: 500 }}>{ex.title}</TableCell>
-                  <TableCell align="right" sx={{ pr: 0 }}>
-                    <Button
-                      component="label"
-                      variant={files[ex.exercise_id] ? 'contained' : 'outlined'}
-                      color={files[ex.exercise_id] ? 'success' : 'primary'}
-                      startIcon={<UploadFileIcon />}
-                      sx={{ minWidth: '140px' }}
-                    >
-                      <Typography variant="caption" noWrap sx={{ maxWidth: 120 }}>
-                        {files[ex.exercise_id] ? files[ex.exercise_id].name : 'Auswählen'}
-                      </Typography>
-                      <input
-                        type="file"
-                        accept={AUDIO_ACCEPT_ATTR}
-                        hidden
-                        onChange={(e) => {
-                          const f = e.target.files?.[0];
-                          if (f) setFiles((prev) => ({ ...prev, [ex.exercise_id]: f }));
-                        }}
-                      />
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-          {error && <Alert severity="error" sx={{ mt: 3 }}>{error}</Alert>}
-        </DialogContent>
-        <DialogActions sx={{ p: 3, pt: 1 }}>
-          <Button onClick={() => setOpen(false)} disabled={uploading} color="inherit">
+      <Modal
+        opened={open}
+        onClose={() => setOpen(false)}
+        title={`Hochladen (${phase === 'PRE_OP' ? 'Prä-OP' : 'Post-OP'})`}
+        size="xl"
+        centered
+      >
+        <Text size="sm" c="dimmed" mb="md">
+          Bitte wählen Sie für jede der folgenden Übungen die entsprechende Audiodatei aus.
+        </Text>
+        <div className="grid grid-cols-4 gap-3">
+          {EXERCISE_GROUPS.map((group) => {
+            const groupExercises = exercises.filter((ex) =>
+              'prefix' in group
+                ? ex.exercise_id.startsWith(group.prefix)
+                : group.ids.includes(ex.exercise_id),
+            );
+            if (groupExercises.length === 0) return null;
+            return (
+              <div
+                key={group.label}
+                className="rounded-lg border border-[var(--mantine-color-default-border)] p-3"
+              >
+                <Text fw={600} size="xs" c="dimmed" mb="xs" tt="uppercase">{group.label}</Text>
+                <Stack gap="xs">
+                  {groupExercises.map((ex) => (
+                    <div key={ex.exercise_id}>
+                      <Text size="xs" fw={500} mb={4}>{shortExerciseLabel(ex.title)}</Text>
+                      <Button
+                        component="label"
+                        size="xs"
+                        variant={files[ex.exercise_id] ? 'filled' : 'outline'}
+                        color={files[ex.exercise_id] ? 'green' : 'brand'}
+                        leftSection={<Upload size={10} />}
+                        fullWidth
+                      >
+                        <Text size="xs" lineClamp={1}>
+                          {files[ex.exercise_id] ? files[ex.exercise_id].name : 'Auswählen'}
+                        </Text>
+                        <input
+                          type="file"
+                          accept={AUDIO_ACCEPT_ATTR}
+                          hidden
+                          onChange={(e) => {
+                            const f = e.target.files?.[0];
+                            if (f) setFiles((prev) => ({ ...prev, [ex.exercise_id]: f }));
+                          }}
+                        />
+                      </Button>
+                    </div>
+                  ))}
+                </Stack>
+              </div>
+            );
+          })}
+        </div>
+        {error && <Alert color="red" mt="md">{error}</Alert>}
+        <Group justify="flex-end" mt="md">
+          <Button variant="default" onClick={() => setOpen(false)} disabled={uploading}>
             Abbrechen
           </Button>
-          <Button 
-            variant="contained" 
-            onClick={handleUpload} 
-            disabled={uploading} 
-            sx={{ px: 4 }}
-          >
-            {uploading ? <CircularProgress size={20} /> : 'Alle Dateien hochladen'}
+          <Button onClick={handleUpload} loading={uploading} px="xl">
+            Alle Dateien hochladen
           </Button>
-        </DialogActions>
-      </Dialog>
+        </Group>
+      </Modal>
     </>
   );
 }
 
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
 function toDatetimeLocal(iso: string | null): string {
   if (!iso) return '';
-  // Trim seconds and timezone so <input type="datetime-local"> accepts it
   return iso.slice(0, 16);
 }
 
@@ -900,35 +819,20 @@ function InfoField({
   children?: React.ReactNode;
 }) {
   return (
-    <Box
-      sx={{
-        px: 1.5,
-        py: 1.25,
-        bgcolor: 'background.default',
-        borderRadius: 1.5,
-        border: '1px solid',
-        borderColor: 'divider',
-      }}
-    >
-      <Typography
-        variant="caption"
-        color="text.secondary"
-        sx={{ textTransform: 'uppercase', letterSpacing: '0.06em', fontSize: '0.68rem', fontWeight: 600, display: 'block' }}
-      >
+    <div className="rounded-md border border-[var(--mantine-color-default-border)] bg-[var(--mantine-color-default-hover)] px-3 py-2.5">
+      <div className="text-[0.68rem] font-semibold uppercase tracking-wider text-[var(--mantine-color-dimmed)]">
         {label}
-      </Typography>
-      <Box sx={{ mt: 0.5 }}>
+      </div>
+      <div className="mt-1">
         {children ?? (
-          <Typography
-            fontWeight={600}
-            fontSize="0.9375rem"
-            color="text.primary"
-            sx={mono ? { fontFamily: 'ui-monospace, Consolas, monospace' } : {}}
+          <div
+            className="text-[0.9375rem] font-semibold"
+            style={{ fontFamily: mono ? 'ui-monospace, Consolas, monospace' : undefined }}
           >
             {value || '-'}
-          </Typography>
+          </div>
         )}
-      </Box>
-    </Box>
+      </div>
+    </div>
   );
 }

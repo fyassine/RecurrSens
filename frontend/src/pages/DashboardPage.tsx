@@ -1,19 +1,7 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
-import {
-  Box,
-  Card,
-  CardActionArea,
-  CardContent,
-  Chip,
-  Tooltip,
-  Typography,
-  useTheme,
-} from '@mui/material';
-import EventAvailableIcon from '@mui/icons-material/EventAvailable';
-import MicIcon from '@mui/icons-material/Mic';
-import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty';
-import WarningAmberIcon from '@mui/icons-material/WarningAmber';
-import TimerOffIcon from '@mui/icons-material/TimerOff';
+import { Badge, Card, Text, Title, Tooltip, useMantineTheme } from '@mantine/core';
+import { motion } from 'motion/react';
+import { CalendarCheck, Mic, Hourglass, TimerOff, X } from 'lucide-react';
 import { getPatients, exportPatients } from '../api/client';
 import type { Patient } from '../types';
 import PatientList, { type DashboardFilter } from '../components/PatientList';
@@ -21,7 +9,7 @@ import AblaufdatenPanel from '../components/AblaufdatenPanel';
 import CreatePatientDialog from '../components/CreatePatientDialog';
 import { useAppData } from '../context/AppDataContext';
 
-type PaletteColorKey = 'primary' | 'info' | 'secondary' | 'error' | 'success' | 'neutral';
+type SemColor = 'brand' | 'red' | 'cyan' | 'gray';
 
 const FILTER_LABELS: Record<DashboardFilter, string> = {
   ALL: 'Alle Patienten',
@@ -47,74 +35,63 @@ function KPICard({
   value: number;
   displayValue?: string;
   icon: React.ReactNode;
-  color: PaletteColorKey;
+  color: SemColor;
   alert?: boolean;
   active?: boolean;
   dimmed?: boolean;
   tooltip?: string;
   onClick?: () => void;
 }) {
-  const theme = useTheme();
-
-  const resolvedColor = (() => {
-    if (color === 'neutral') return theme.palette.grey[500];
-    return theme.palette[color].main;
-  })();
+  const theme = useMantineTheme();
+  const resolved = color === 'gray' ? theme.colors.gray[5] : theme.colors[color][6];
 
   const card = (
-    <Card
-      sx={{
-        display: 'flex',
-        flexDirection: 'column',
-        minHeight: 96,
-        border: active ? `2px solid ${resolvedColor}` : '2px solid transparent',
-        bgcolor: active ? `${resolvedColor}0a` : 'background.paper',
-        opacity: dimmed ? 0.45 : 1,
-        transition: 'border-color 0.2s, background-color 0.2s, box-shadow 0.2s, transform 0.2s, opacity 0.2s',
-        '&:hover': { boxShadow: '0 4px 12px rgba(26,36,53,0.10)', transform: 'translateY(-1px)', opacity: dimmed ? 0.7 : 1 },
-      }}
+    <motion.div
+      whileHover={{ y: -1, transition: { duration: 0.15 } }}
+      animate={{ opacity: dimmed ? 0.45 : 1 }}
+      transition={{ duration: 0.2 }}
     >
-      <CardActionArea onClick={onClick} sx={{ flex: 1 }}>
-        <CardContent
-          sx={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            textAlign: 'center',
-            gap: 0.75,
-            py: '14px !important',
-            px: '12px !important',
-          }}
-        >
-          <Box
-            sx={{
-              bgcolor: active ? `${resolvedColor}25` : `${resolvedColor}18`,
-              color: resolvedColor,
-              p: 1,
-              borderRadius: 1.5,
-              display: 'flex',
-              transition: 'background-color 0.15s',
+      <Card
+        withBorder
+        radius="md"
+        padding="md"
+        onClick={onClick}
+        className="flex min-h-[96px] cursor-pointer flex-col transition-colors hover:shadow-[0_4px_12px_rgba(26,36,53,0.10)]"
+        style={{
+          borderColor: active ? resolved : 'var(--mantine-color-default-border)',
+          borderWidth: 2,
+          backgroundColor: active ? `${resolved}0a` : undefined,
+        }}
+      >
+        <div className="flex flex-col items-center gap-1.5 text-center">
+          <div
+            className="flex rounded-md p-2 transition-colors"
+            style={{
+              backgroundColor: active ? `${resolved}25` : `${resolved}18`,
+              color: resolved,
             }}
           >
             {icon}
-          </Box>
-          <Typography variant="body2" color="text.secondary" fontWeight={500} lineHeight={1.2} fontSize="0.75rem">
-            {title}
-          </Typography>
-          <Typography
-            variant="h5"
-            fontWeight={700}
-            color={(alert || active) ? resolvedColor : 'text.primary'}
-            lineHeight={1}
+          </div>
+          <Text size="xs" fw={500} c="dimmed" lh={1.2}>{title}</Text>
+          <Text
+            size="xl"
+            fw={700}
+            lh={1}
+            style={{ color: alert || active ? resolved : undefined }}
           >
             {displayValue ?? value}
-          </Typography>
-        </CardContent>
-      </CardActionArea>
-    </Card>
+          </Text>
+        </div>
+      </Card>
+    </motion.div>
   );
 
-  return tooltip ? <Tooltip title={tooltip} arrow placement="bottom">{card}</Tooltip> : card;
+  return tooltip ? (
+    <Tooltip label={tooltip} position="bottom" withArrow>
+      <div>{card}</div>
+    </Tooltip>
+  ) : card;
 }
 
 export default function DashboardPage() {
@@ -153,7 +130,7 @@ export default function DashboardPage() {
   }, [fetchPatients]);
 
   const handleCardClick = (filter: DashboardFilter) => {
-    setActiveFilter((prev: DashboardFilter | null) => (prev === filter ? null : filter));
+    setActiveFilter((prev) => (prev === filter ? null : filter));
   };
 
   const stats = useMemo(() => {
@@ -165,9 +142,6 @@ export default function DashboardPage() {
       ).length,
       waitingPost: patients.filter(
         (p) => p.status === 'POST_OP_STARTED' || p.status === 'POST_OP_DONE',
-      ).length,
-      rpPredictions: patients.filter(
-        (p) => p.prediction_pre === 'INFECTED' || p.prediction_post === 'INFECTED',
       ).length,
       expired: patients.filter((p) => !p.deleted_at && new Date(p.expires_at).getTime() <= now).length,
     };
@@ -195,36 +169,29 @@ export default function DashboardPage() {
   }, [todayNotifications, setNotificationCount]);
 
   return (
-    <Box>
+    <div>
       {/* Page header */}
-      <Box sx={{ mb: 3, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 2 }}>
-        <Box>
-          <Typography variant="h5" gutterBottom sx={{ fontWeight: 700, letterSpacing: '-0.02em' }}>
+      <div className="mb-6 flex items-start justify-between gap-4">
+        <div>
+          <Title order={3} fw={700} style={{ letterSpacing: '-0.02em' }} mb={4}>
             Klinikübersicht
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
+          </Title>
+          <Text size="sm" c="dimmed">
             Verwalten Sie aktive Patienten und Aufnahmen an einem Ort.
-          </Typography>
-        </Box>
-        <Box sx={{ display: 'flex', gap: 1, pt: 0.5, flexShrink: 0 }}>
-          <CreatePatientDialog onCreated={fetchPatients} buttonSize="medium" />
-        </Box>
-      </Box>
+          </Text>
+        </div>
+        <div className="flex shrink-0 gap-2 pt-1">
+          <CreatePatientDialog onCreated={fetchPatients} buttonSize="sm" />
+        </div>
+      </div>
 
       {/* KPI strip */}
-      <Box
-        sx={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(5, minmax(0, 1fr))',
-          gap: 2,
-          mb: 2,
-        }}
-      >
+      <div className="mb-4 grid gap-4" style={{ gridTemplateColumns: 'repeat(4, minmax(0, 1fr))' }}>
         <KPICard
           title="Alle Patienten"
           value={stats.total}
-          icon={<EventAvailableIcon fontSize="small" />}
-          color="primary"
+          icon={<CalendarCheck size={18} />}
+          color="brand"
           active={activeFilter === 'ALL'}
           dimmed={!!activeFilter && activeFilter !== 'ALL'}
           tooltip="Alle aktiven Patienten in der Datenbank"
@@ -233,8 +200,8 @@ export default function DashboardPage() {
         <KPICard
           title="Prä-OP"
           value={stats.waitingPre}
-          icon={<MicIcon fontSize="small" />}
-          color="primary"
+          icon={<Mic size={18} />}
+          color="brand"
           active={activeFilter === 'PRE_OP'}
           dimmed={!!activeFilter && activeFilter !== 'PRE_OP'}
           tooltip="Patienten mit ausstehenden Prä-OP-Aufnahmen"
@@ -243,59 +210,46 @@ export default function DashboardPage() {
         <KPICard
           title="Post-OP"
           value={stats.waitingPost}
-          icon={<HourglassEmptyIcon fontSize="small" />}
-          color="primary"
+          icon={<Hourglass size={18} />}
+          color="brand"
           active={activeFilter === 'POST_OP'}
           dimmed={!!activeFilter && activeFilter !== 'POST_OP'}
           tooltip="Patienten mit abgeschlossenen Post-OP-Aufnahmen"
           onClick={() => handleCardClick('POST_OP')}
         />
         <KPICard
-          title="KI Vorhersagen"
-          value={stats.rpPredictions}
-          displayValue="..."
-          icon={<WarningAmberIcon fontSize="small" />}
-          color="error"
-          alert
-          active={activeFilter === 'RP'}
-          dimmed={!!activeFilter && activeFilter !== 'RP'}
-          tooltip="Patienten mit KI-Vorhersage für rezidivierende Parotitis – sofortige Überprüfung erforderlich"
-          onClick={() => handleCardClick('RP')}
-        />
-        <KPICard
           title="Zum Löschen"
           value={stats.expired}
-          icon={<TimerOffIcon fontSize="small" />}
-          color="error"
+          icon={<TimerOff size={18} />}
+          color="red"
           alert
           active={activeFilter === 'OVERDUE_DELETE'}
           dimmed={!!activeFilter && activeFilter !== 'OVERDUE_DELETE'}
           tooltip="Patienten mit abgelaufener Datenfrist – Löschung erforderlich"
           onClick={() => handleCardClick('OVERDUE_DELETE')}
         />
-      </Box>
+      </div>
 
-      {/* Ablaufdaten expanded panel — shown when Zum Löschen is active */}
       {activeFilter === 'OVERDUE_DELETE' && (
-        <Box sx={{ mb: 2 }}>
+        <div className="mb-4">
           <AblaufdatenPanel patients={patients} />
-        </Box>
+        </div>
       )}
 
-      {/* Active filter chip (for other filters) */}
       {activeFilter && activeFilter !== 'OVERDUE_DELETE' && (
-        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-          <Chip
-            label={`Filter: ${FILTER_LABELS[activeFilter]}`}
-            onDelete={() => setActiveFilter(null)}
-            size="small"
-            color="primary"
-            variant="outlined"
-          />
-        </Box>
+        <div className="mb-4 flex items-center">
+          <Badge
+            color="brand"
+            variant="outline"
+            rightSection={
+              <X size={12} className="cursor-pointer" onClick={() => setActiveFilter(null)} />
+            }
+          >
+            Filter: {FILTER_LABELS[activeFilter]}
+          </Badge>
+        </div>
       )}
 
-      {/* Patient table — full width */}
       <PatientList
         patients={patients}
         loading={loading}
@@ -307,6 +261,6 @@ export default function DashboardPage() {
         exporting={exporting}
         exportCount={selectedIds.size}
       />
-    </Box>
+    </div>
   );
 }
