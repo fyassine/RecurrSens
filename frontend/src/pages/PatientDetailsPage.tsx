@@ -27,6 +27,7 @@ import {
   ArrowLeftRight,
   X,
 } from 'lucide-react';
+import { DateInput } from '@mantine/dates';
 import type { PatientDetail, PatientStatus, RecordingSession } from '../types';
 import {
   getPatient,
@@ -172,7 +173,13 @@ function PatientInfoCard({
   const [saving, setSaving] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [pid, setPid] = useState(patient.patient_id);
-  const [expiresAt, setExpiresAt] = useState(patient.expires_at.slice(0, 10));
+  const [createdAt, setCreatedAt] = useState(patient.created_at.slice(0, 10));
+
+  const derivedExpiresAt = (dateStr: string) => {
+    const d = new Date(dateStr);
+    d.setDate(d.getDate() + 7);
+    return d.toISOString().slice(0, 10);
+  };
 
   const handleDownload = async () => {
     setDownloading(true);
@@ -186,7 +193,11 @@ function PatientInfoCard({
   const handleSave = async () => {
     setSaving(true);
     try {
-      await updatePatient(patient.id, { patient_id: pid, expires_at: expiresAt });
+      await updatePatient(patient.id, {
+        patient_id: pid,
+        created_at: createdAt,
+        expires_at: derivedExpiresAt(createdAt),
+      });
       setEditing(false);
       onUpdated();
     } finally {
@@ -228,8 +239,7 @@ function PatientInfoCard({
               value={pid}
               onChange={(e) => setPid(e.currentTarget.value)}
               size="xs"
-              variant="unstyled"
-              styles={{ input: { fontSize: '0.9375rem', fontWeight: 600, fontFamily: 'ui-monospace, Consolas, monospace', padding: 0 } }}
+              styles={{ input: { fontFamily: 'ui-monospace, Consolas, monospace', fontWeight: 600 } }}
             />
           ) : (
             <div className="text-[0.9375rem] font-semibold" style={{ fontFamily: 'ui-monospace, Consolas, monospace' }}>
@@ -247,34 +257,27 @@ function PatientInfoCard({
             <StatusBadge status={patient.status as PatientStatus} />
           )}
         </InfoField>
-        <InfoField label="Erstellt am" value={formatDate(patient.created_at)} />
-        <InfoField label="Ablaufdatum">
+        <InfoField label="Erstellt am">
           {editing ? (
-            <input
-              type="date"
-              value={expiresAt}
-              onChange={(e) => setExpiresAt(e.currentTarget.value)}
-              style={{
-                background: 'none',
-                border: 'none',
-                outline: 'none',
-                fontSize: '0.9375rem',
-                fontWeight: 600,
-                fontFamily: 'inherit',
-                color: 'var(--mantine-color-text)',
-                padding: 0,
-                width: '100%',
-                colorScheme: 'dark',
-              }}
+            <DateInput
+              value={createdAt ? new Date(createdAt) : null}
+              onChange={(val) => setCreatedAt(val ? val.toISOString().slice(0, 10) : createdAt)}
+              valueFormat="DD.MM.YYYY"
+              size="xs"
+              clearable={false}
             />
           ) : (
-            <div className="text-[0.9375rem] font-semibold">{formatDate(patient.expires_at)}</div>
+            <div className="text-[0.9375rem] font-semibold">{formatDate(patient.created_at)}</div>
           )}
         </InfoField>
+        <InfoField
+          label="Ablaufdatum"
+          value={editing ? formatDate(derivedExpiresAt(createdAt)) : formatDate(patient.expires_at)}
+        />
       </div>
       {editing && (
         <Group justify="flex-end" gap="sm" mt="sm">
-          <Button size="xs" variant="default" onClick={() => { setEditing(false); setPid(patient.patient_id); setExpiresAt(patient.expires_at.slice(0, 10)); }}>Abbrechen</Button>
+          <Button size="xs" variant="default" onClick={() => { setEditing(false); setPid(patient.patient_id); setCreatedAt(patient.created_at.slice(0, 10)); }}>Abbrechen</Button>
           <Button size="xs" onClick={handleSave} loading={saving}>Speichern</Button>
         </Group>
       )}
