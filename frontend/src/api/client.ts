@@ -161,13 +161,58 @@ export async function advancePublicPatient(token: string): Promise<void> {
   await publicApi.post(`/p/${token}/advance/`);
 }
 
+export const ALLOWED_AUDIO_EXTENSIONS = [
+  'webm',
+  'mp4',
+  'm4a',
+  'aac',
+  'wav',
+  'mp3',
+  'ogg',
+  'oga',
+  'flac',
+  '3gp',
+  '3gpp',
+  'amr',
+  'caf',
+  'aiff',
+  'aif',
+  'nsp',
+] as const;
+
+export const AUDIO_ACCEPT_ATTR = [
+  ...ALLOWED_AUDIO_EXTENSIONS.map((ext) => `.${ext}`),
+  'audio/webm',
+  'audio/mp4',
+  'audio/aac',
+  'audio/x-m4a',
+  'audio/wav',
+  'audio/x-wav',
+  'audio/mpeg',
+  'audio/ogg',
+  'audio/flac',
+  'audio/3gpp',
+  'audio/amr',
+  'audio/x-caf',
+  'audio/aiff',
+  'audio/x-aiff',
+].join(',');
+
+export function isAllowedAudioFile(filename: string): boolean {
+  const idx = filename.lastIndexOf('.');
+  if (idx < 0) return false;
+  const ext = filename.slice(idx + 1).toLowerCase();
+  return (ALLOWED_AUDIO_EXTENSIONS as readonly string[]).includes(ext);
+}
+
 export async function uploadAudio(
   token: string,
   file: Blob,
   exerciseId: string,
 ): Promise<void> {
   const formData = new FormData();
-  formData.append('file', file, 'recording.webm');
+  const filename = file instanceof File ? file.name : 'recording.webm';
+  formData.append('file', file, filename);
   formData.append('exercise_id', exerciseId);
   await publicApi.post(`/p/${token}/audio/upload/`, formData);
 }
@@ -204,6 +249,14 @@ export async function skipExercise(
 
 export function getAudioStreamUrl(fileId: string): string {
   return `/api/audio/${fileId}/`;
+}
+
+export async function reassignAudioFile(
+  fileId: string,
+  phase: 'PRE_OP' | 'POST_OP',
+  sessionId: string | null,
+): Promise<void> {
+  await api.patch(`/audio/${fileId}/reassign/`, { phase, session: sessionId });
 }
 
 // ---------------------------------------------------------------------------
