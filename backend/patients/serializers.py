@@ -179,7 +179,7 @@ class PatientDetailSerializer(serializers.ModelSerializer):
             # Sessions & Audio
             'sessions', 'audio_files', 'audio_files_pre', 'audio_files_post',
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at', 'deleted_at']
+        read_only_fields = ['id', 'updated_at', 'deleted_at']
 
     def get_audio_files_pre(self, obj):
         pre_files = obj.audio_files.filter(phase='PRE_OP')
