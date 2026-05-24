@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import {
   Button,
   Dialog,
@@ -20,7 +20,7 @@ export default function ConfirmDialog({
 }: {
   open: boolean;
   title: string;
-  message: string;
+  message: React.ReactNode;
   confirmLabel: string;
   confirmColor?: 'primary' | 'error' | 'warning' | 'success';
   onConfirm: () => Promise<void> | void;

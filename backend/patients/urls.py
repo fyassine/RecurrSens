@@ -67,6 +67,11 @@ urlpatterns = [
     # Audio streaming & download (public / JWT)
     # =========================================================================
     path(
+        'audio/<uuid:file_id>/reassign/',
+        views.AudioFileReassignView.as_view(),
+        name='audio-reassign',
+    ),
+    path(
         'audio/<uuid:file_id>/',
         views.AudioStreamView.as_view(),
         name='audio-stream',

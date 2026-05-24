@@ -8,6 +8,10 @@ import {
   CircularProgress,
   IconButton,
   InputAdornment,
+  ListItemIcon,
+  ListItemText,
+  Menu,
+  MenuItem,
   Table,
   TableBody,
   TableCell,
@@ -28,6 +32,7 @@ import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import LockIcon from '@mui/icons-material/Lock';
 import LockOpenIcon from '@mui/icons-material/LockOpen';
+import MoreVertIcon from '@mui/icons-material/MoreVert';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import NavigateBeforeIcon from '@mui/icons-material/NavigateBefore';
 import NavigateNextIcon from '@mui/icons-material/NavigateNext';
@@ -80,6 +85,7 @@ export default function PatientList({
   const [unlocking, setUnlocking] = useState<string | null>(null);
   const [creatingFollowUp, setCreatingFollowUp] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [menuAnchor, setMenuAnchor] = useState<{ id: string; el: HTMLElement } | null>(null);
 
   // Reset to page 0 when filter/search changes
   useEffect(() => {
@@ -436,37 +442,42 @@ export default function PatientList({
                           transition: 'opacity 0.15s',
                         }}
                       >
-                        <Tooltip title={copiedId === p.id ? 'Kopiert!' : 'Patienten-Link kopieren'}>
+                        <Tooltip title="Weitere Aktionen">
                           <IconButton
                             size="small"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              navigator.clipboard.writeText(`${window.location.origin}/p/${p.id}`);
-                              setCopiedId(p.id);
-                              setTimeout(() => setCopiedId(null), 2000);
-                            }}
+                            onClick={(e) => { e.stopPropagation(); setMenuAnchor({ id: p.id, el: e.currentTarget }); }}
                           >
-                            {copiedId === p.id
-                              ? <CheckIcon fontSize="small" sx={{ color: 'success.main' }} />
-                              : <ContentCopyIcon fontSize="small" sx={{ color: 'info.main' }} />}
+                            <MoreVertIcon fontSize="small" />
                           </IconButton>
                         </Tooltip>
-                        <Tooltip title="PDF / QR-Code öffnen">
-                          <IconButton
-                            size="small"
-                            onClick={(e) => { e.stopPropagation(); downloadPatientPdf(p.id); }}
-                          >
-                            <PictureAsPdfIcon fontSize="small" sx={{ color: 'warning.main' }} />
-                          </IconButton>
-                        </Tooltip>
-                        <Tooltip title="Daten herunterladen">
-                          <IconButton
-                            size="small"
-                            onClick={(e) => { e.stopPropagation(); exportPatients([p.id]); }}
-                          >
-                            <DownloadIcon fontSize="small" sx={{ color: 'text.secondary' }} />
-                          </IconButton>
-                        </Tooltip>
+                        <Menu
+                          anchorEl={menuAnchor?.el}
+                          open={menuAnchor?.id === p.id}
+                          onClose={() => setMenuAnchor(null)}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <MenuItem onClick={() => {
+                            navigator.clipboard.writeText(`${window.location.origin}/p/${p.id}`);
+                            setCopiedId(p.id);
+                            setTimeout(() => setCopiedId(null), 2000);
+                            setMenuAnchor(null);
+                          }}>
+                            <ListItemIcon>
+                              {copiedId === p.id
+                                ? <CheckIcon fontSize="small" sx={{ color: 'success.main' }} />
+                                : <ContentCopyIcon fontSize="small" sx={{ color: 'info.main' }} />}
+                            </ListItemIcon>
+                            <ListItemText>{copiedId === p.id ? 'Kopiert!' : 'Link kopieren'}</ListItemText>
+                          </MenuItem>
+                          <MenuItem onClick={() => { downloadPatientPdf(p.id); setMenuAnchor(null); }}>
+                            <ListItemIcon><PictureAsPdfIcon fontSize="small" sx={{ color: 'warning.main' }} /></ListItemIcon>
+                            <ListItemText>PDF öffnen</ListItemText>
+                          </MenuItem>
+                          <MenuItem onClick={() => { exportPatients([p.id]); setMenuAnchor(null); }}>
+                            <ListItemIcon><DownloadIcon fontSize="small" sx={{ color: 'text.secondary' }} /></ListItemIcon>
+                            <ListItemText>Exportieren</ListItemText>
+                          </MenuItem>
+                        </Menu>
                         <Tooltip title="Patienten-Aufnahme öffnen">
                           <IconButton
                             size="small"

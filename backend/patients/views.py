@@ -28,6 +28,7 @@ Endpoint summary:
 import logging
 from datetime import datetime
 
+from django.core.exceptions import ValidationError
 from django.http import HttpResponse, StreamingHttpResponse
 from rest_framework import viewsets, status, generics
 from rest_framework.decorators import action, api_view, permission_classes
@@ -54,6 +55,11 @@ from .serializers import (
 )
 from .permissions import IsAdminUser, IsPatientTokenValid, IsAdminOrPatientToken
 from . import services
+from .audio_validation import (
+    ALLOWED_EXTENSIONS,
+    extension_for_content_type,
+    validate_audio_upload,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -349,6 +355,14 @@ class AudioUploadView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        try:
+            extension, content_type = validate_audio_upload(file)
+        except ValidationError as e:
+            return Response(
+                {'error': e.message if hasattr(e, 'message') else str(e)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         # Determine phase from patient status
         is_post_op = patient.status in (
             Patient.Status.POST_OP_STARTED,
@@ -361,7 +375,6 @@ class AudioUploadView(APIView):
         session = services.get_active_session(patient, phase)
 
         # Build storage key (include session number if session exists)
-        extension = file.name.split('.')[-1] if '.' in file.name else 'wav'
         if session:
             key = f'{token}/{phase_folder}_{session.session_number}/{exercise_id}.{extension}'
         else:
@@ -370,13 +383,21 @@ class AudioUploadView(APIView):
         # Upload to S3
         try:
             file_data = file.read()
-            services.upload_audio_to_s3(file_data, key, file.content_type)
+            services.upload_audio_to_s3(file_data, key, content_type)
         except Exception as e:
             logger.error(f'S3 upload failed for {key}: {e}')
             return Response(
                 {'error': 'Datei-Upload fehlgeschlagen.'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
+        # Replace any existing record for this exercise/phase before creating the new one.
+        # Do not filter by session — the existing record may belong to a different (or null) session.
+        AudioFile.objects.filter(
+            patient=patient,
+            exercise_id=exercise_id,
+            phase=phase,
+        ).delete()
 
         # Create DB record
         try:
@@ -436,15 +457,12 @@ class AudioPresignView(APIView):
         phase = 'POST_OP' if is_post_op else 'PRE_OP'
         phase_folder = 'post' if is_post_op else 'pre'
 
-        # Determine extension from content type
-        ext_map = {
-            'audio/webm': 'webm',
-            'audio/wav': 'wav',
-            'audio/mpeg': 'mp3',
-            'audio/ogg': 'ogg',
-            'audio/mp4': 'm4a',
-        }
-        extension = ext_map.get(content_type, 'webm')
+        extension = extension_for_content_type(content_type)
+        if extension is None:
+            return Response(
+                {'error': 'Nicht unterstütztes Audioformat.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         key = f'{token}/{phase_folder}/{exercise_id}.{extension}'
 
         try:
@@ -490,6 +508,13 @@ class AudioPresignConfirmView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        suffix = storage_key.rsplit('.', 1)[-1].lower() if '.' in storage_key else ''
+        if suffix not in ALLOWED_EXTENSIONS:
+            return Response(
+                {'error': 'Nicht unterstütztes Audioformat.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         audio_file = AudioFile.objects.create(
             patient=patient,
             exercise_id=exercise_id,
@@ -500,6 +525,64 @@ class AudioPresignConfirmView(APIView):
         return Response(
             {'id': str(audio_file.id), 'storage_key': storage_key},
             status=status.HTTP_201_CREATED,
+        )
+
+
+# =============================================================================
+# Audio File Reassignment (admin)
+# =============================================================================
+
+class AudioFileReassignView(APIView):
+    """
+    PATCH /api/audio/<file_id>/reassign/
+    Reassign an audio recording to a different phase/session.
+    Requires JWT (admin only). The change is purely metadata — the S3 object
+    is NOT moved; only the DB record's phase and session fields are updated.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, file_id):
+        try:
+            audio_file = AudioFile.objects.select_related('patient').get(id=file_id)
+        except AudioFile.DoesNotExist:
+            return Response(
+                {'error': 'Datei nicht gefunden.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        new_phase = request.data.get('phase')
+        new_session_id = request.data.get('session')  # UUID string or null
+
+        if new_phase not in ('PRE_OP', 'POST_OP'):
+            return Response(
+                {'error': 'Phase muss PRE_OP oder POST_OP sein.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Validate the session belongs to this patient and matches the phase
+        if new_session_id:
+            try:
+                new_session = RecordingSession.objects.get(
+                    id=new_session_id,
+                    patient=audio_file.patient,
+                    phase=new_phase,
+                )
+            except RecordingSession.DoesNotExist:
+                return Response(
+                    {'error': 'Sitzung nicht gefunden oder gehört nicht zu diesem Patienten.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        else:
+            new_session = None
+
+        audio_file.phase = new_phase
+        audio_file.session = new_session
+        audio_file.save(update_fields=['phase', 'session'])
+
+        from .serializers import AudioFileCompactSerializer
+        return Response(
+            AudioFileCompactSerializer(audio_file).data,
+            status=status.HTTP_200_OK,
         )
 
 

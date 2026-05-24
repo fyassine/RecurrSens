@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Alert,
@@ -7,14 +7,19 @@ import {
   Card,
   CardContent,
   CardHeader,
+  Checkbox,
   Chip,
   CircularProgress,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
+  FormControl,
   Grid,
   IconButton,
+  InputLabel,
+  MenuItem,
+  Select,
   Table,
   TableBody,
   TableCell,
@@ -28,7 +33,8 @@ import EditIcon from '@mui/icons-material/Edit';
 import PersonIcon from '@mui/icons-material/Person';
 import AudioFileIcon from '@mui/icons-material/AudioFile';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
-import type { PatientDetail, PatientStatus } from '../types';
+import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
+import type { PatientDetail, PatientStatus, RecordingSession } from '../types';
 import {
   getPatient,
   updatePatient,
@@ -38,8 +44,13 @@ import {
   getExercises,
   advancePublicPatient,
   exportPatients,
+  reassignAudioFile,
+  createSession,
+  AUDIO_ACCEPT_ATTR,
+  isAllowedAudioFile,
 } from '../api/client';
 import { StatusBadge, PredictionBadge, FollowUpBadge } from '../components/Badges';
+import ConfirmDialog from '../components/ConfirmDialog';
 import { formatDate, formatDateTime, NO_RECORDING_DATE } from '../utils';
 import type { Exercise, AudioFile as AudioFileType } from '../types';
 
@@ -103,6 +114,7 @@ if (loading) {
                 <AudioSection
                   title="Prä-OP Aufnahmen"
                   audioFiles={patient.audio_files_pre}
+                  sessions={patient.sessions}
                   phase="PRE_OP"
                   date={patient.pre_op_date}
                   patientId={patient.id}
@@ -116,6 +128,7 @@ if (loading) {
                 <AudioSection
                   title="Post-OP Aufnahmen"
                   audioFiles={patient.audio_files_post}
+                  sessions={patient.sessions}
                   phase="POST_OP"
                   date={patient.post_op_date}
                   patientId={patient.id}
@@ -131,6 +144,7 @@ if (loading) {
               <AudioSection
                 title="Prä-OP Aufnahmen"
                 audioFiles={patient.audio_files_pre}
+                sessions={patient.sessions}
                 phase="PRE_OP"
                 date={patient.pre_op_date}
                 patientId={patient.id}
@@ -141,6 +155,7 @@ if (loading) {
               <AudioSection
                 title="Post-OP Aufnahmen"
                 audioFiles={patient.audio_files_post}
+                sessions={patient.sessions}
                 phase="POST_OP"
                 date={patient.post_op_date}
                 patientId={patient.id}
@@ -173,6 +188,8 @@ function PatientInfoCard({
   const [saving, setSaving] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [pid, setPid] = useState(patient.patient_id);
+  const [preOpDate, setPreOpDate] = useState(toDatetimeLocal(patient.pre_op_date));
+  const [postOpDate, setPostOpDate] = useState(toDatetimeLocal(patient.post_op_date));
 
   const handleDownload = async () => {
     setDownloading(true);
@@ -188,6 +205,8 @@ function PatientInfoCard({
     try {
       await updatePatient(patient.id, {
         patient_id: pid,
+        pre_op_date: preOpDate ? new Date(preOpDate).toISOString() : null,
+        post_op_date: postOpDate ? new Date(postOpDate).toISOString() : null,
       });
       setEditing(false);
       onUpdated();
@@ -237,6 +256,24 @@ function PatientInfoCard({
               size="small"
               fullWidth
             />
+            <TextField
+              label="Prä-OP Aufnahmedatum"
+              type="datetime-local"
+              value={preOpDate}
+              onChange={(e) => setPreOpDate(e.target.value)}
+              size="small"
+              fullWidth
+              slotProps={{ inputLabel: { shrink: true } }}
+            />
+            <TextField
+              label="Post-OP Aufnahmedatum"
+              type="datetime-local"
+              value={postOpDate}
+              onChange={(e) => setPostOpDate(e.target.value)}
+              size="small"
+              fullWidth
+              slotProps={{ inputLabel: { shrink: true } }}
+            />
             <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
               <Button size="small" onClick={() => setEditing(false)}>
                 Abbrechen
@@ -265,6 +302,14 @@ function PatientInfoCard({
             <InfoField
               label="Ablaufdatum"
               value={formatDate(patient.expires_at)}
+            />
+            <InfoField
+              label="Prä-OP Aufnahmedatum"
+              value={patient.pre_op_date ? formatDateTime(patient.pre_op_date) : '—'}
+            />
+            <InfoField
+              label="Post-OP Aufnahmedatum"
+              value={patient.post_op_date ? formatDateTime(patient.post_op_date) : '—'}
             />
           </Box>
         )}
@@ -334,6 +379,7 @@ function PatientInfoCard({
 function AudioSection({
   title,
   audioFiles,
+  sessions,
   phase,
   date,
   patientId,
@@ -344,6 +390,7 @@ function AudioSection({
 }: {
   title: string;
   audioFiles: AudioFileType[];
+  sessions: RecordingSession[];
   phase: 'PRE_OP' | 'POST_OP';
   date: string | null;
   patientId: string;
@@ -352,13 +399,27 @@ function AudioSection({
   onUploaded: () => void;
   compact?: boolean;
 }) {
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkOpen, setBulkOpen] = useState(false);
+
+  const toggleSelect = (id: string) => setSelectedIds((prev) => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
+
+  const handleDone = () => {
+    setSelectedIds(new Set());
+    setBulkOpen(false);
+    onUploaded();
+  };
+
   return (
     <Card sx={{ mb: compact ? 0 : 3, height: compact ? '100%' : 'auto' }}>
       <CardHeader
         title={
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1.5 }}>
             <AudioFileIcon color='primary' />
-            {/* Display the title passed to the function */}
             <Typography variant="h6" component="span">
               {title}
             </Typography>
@@ -374,20 +435,59 @@ function AudioSection({
               align: 'center',
             },
           }}
-          sx={{ 
+          sx={{
             '& .MuiCardHeader-content': { textAlign: 'center' },
-            '& .MuiCardHeader-avatar': { display: 'none' } 
+            '& .MuiCardHeader-avatar': { display: 'none' }
           }}
       />
       <CardContent>
         {showUpload && audioFiles.length > 0 && (
-          <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 1 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0 }}>
+              <Checkbox
+                size="small"
+                checked={selectedIds.size === audioFiles.length}
+                indeterminate={selectedIds.size > 0 && selectedIds.size < audioFiles.length}
+                onChange={() => {
+                  if (selectedIds.size === audioFiles.length) {
+                    setSelectedIds(new Set());
+                  } else {
+                    setSelectedIds(new Set(audioFiles.map((f) => f.id)));
+                  }
+                }}
+                sx={{ p: 0.25 }}
+              />
+              <Button
+                size="small"
+                variant="text"
+                onClick={() => {
+                  if (selectedIds.size === audioFiles.length) {
+                    setSelectedIds(new Set());
+                  } else {
+                    setSelectedIds(new Set(audioFiles.map((f) => f.id)));
+                  }
+                }}
+              >
+                {selectedIds.size === audioFiles.length ? 'Auswahl aufheben' : 'Alle auswählen'}
+              </Button>
+              {selectedIds.size > 0 && (
+                <Button
+                  size="small"
+                  variant="outlined"
+                  startIcon={<SwapHorizIcon />}
+                  onClick={() => setBulkOpen(true)}
+                >
+                  Zuordnung ändern ({selectedIds.size})
+                </Button>
+              )}
+            </Box>
             <ManualUpload
               patientId={patientId}
               phase={phase}
               patientStatus={patientStatus}
               onDone={onUploaded}
               buttonLabel="Hochladen"
+              existingFiles={audioFiles}
             />
           </Box>
         )}
@@ -414,6 +514,7 @@ function AudioSection({
                   patientStatus={patientStatus}
                   onDone={onUploaded}
                   buttonLabel="Dateien hochladen"
+                  existingFiles={audioFiles}
                 />
               </Box>
             )}
@@ -426,24 +527,180 @@ function AudioSection({
                   sx={{
                     p: 2,
                     border: '1px solid',
-                    borderColor: 'grey.200',
+                    borderColor: selectedIds.has(f.id) ? 'primary.main' : 'grey.200',
                     borderRadius: 1,
+                    transition: 'border-color 0.15s',
                   }}
                 >
-                  <Typography variant="body2" fontWeight={500} sx={{ mb: 1 }}>
-                    Aufnahme {i + 1}
-                    {f.exercise_id && (
-                      <Chip label={f.exercise_id} size="small" sx={{ ml: 1 }} />
-                    )}
-                  </Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 1 }}>
+                    <Checkbox
+                      size="small"
+                      checked={selectedIds.has(f.id)}
+                      onChange={() => toggleSelect(f.id)}
+                      sx={{ p: 0.25 }}
+                    />
+                    <Typography variant="body2" fontWeight={500} component="span">
+                      Aufnahme {i + 1}
+                      {f.exercise_id && (
+                        <Chip label={f.exercise_id} size="small" sx={{ ml: 1 }} />
+                      )}
+                    </Typography>
+                  </Box>
                   <audio controls src={getAudioStreamUrl(f.id)} style={{ width: '100%', height: 32 }} />
                 </Box>
               </Grid>
             ))}
           </Grid>
         )}
+        <BulkReassignDialog
+          open={bulkOpen}
+          fileIds={Array.from(selectedIds)}
+          sessions={sessions}
+          patientId={patientId}
+          defaultPhase={phase}
+          onClose={() => setBulkOpen(false)}
+          onDone={handleDone}
+        />
       </CardContent>
     </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Bulk reassign dialog
+// ---------------------------------------------------------------------------
+
+function sessionLabel(s: RecordingSession): string {
+  if (s.phase === 'PRE_OP') return `Prä-OP (Sitzung ${s.session_number})`;
+  if (s.session_number === 1) return 'Post-OP';
+  return `Follow-up ${s.session_number - 1} (Post-OP Sitzung ${s.session_number})`;
+}
+
+function BulkReassignDialog({
+  open,
+  fileIds,
+  sessions,
+  patientId,
+  defaultPhase,
+  onClose,
+  onDone,
+}: {
+  open: boolean;
+  fileIds: string[];
+  sessions: RecordingSession[];
+  patientId: string;
+  defaultPhase: 'PRE_OP' | 'POST_OP';
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const [selectedPhase, setSelectedPhase] = useState<'PRE_OP' | 'POST_OP'>(
+    defaultPhase === 'PRE_OP' ? 'POST_OP' : 'PRE_OP'
+  );
+  const [selectedSession, setSelectedSession] = useState<string>('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (open) {
+      // Default to the opposite phase — reassigning usually means moving to the other phase
+      setSelectedPhase(defaultPhase === 'PRE_OP' ? 'POST_OP' : 'PRE_OP');
+      setSelectedSession('');
+      setError('');
+    }
+  }, [open, defaultPhase]);
+
+  const filteredSessions = sessions.filter((s) => s.phase === selectedPhase);
+
+  const nextPostOpSessionNumber = useMemo(() => {
+    const nums = sessions.filter((s) => s.phase === 'POST_OP').map((s) => s.session_number);
+    return (nums.length > 0 ? Math.max(...nums) : 0) + 1;
+  }, [sessions]);
+
+  const nextFollowUpNumber = nextPostOpSessionNumber - 1;
+  const isNewFollowup = selectedSession === 'NEW_FOLLOWUP';
+
+  const handleSave = async () => {
+    setSaving(true);
+    setError('');
+    try {
+      let targetSessionId: string | null = null;
+      if (isNewFollowup) {
+        const s = await createSession(patientId, 'POST_OP');
+        targetSessionId = s.id;
+      } else {
+        targetSessionId = selectedSession || null;
+      }
+      for (const fileId of fileIds) {
+        await reassignAudioFile(fileId, selectedPhase, targetSessionId);
+      }
+      onDone();
+    } catch {
+      setError('Zuordnung konnte nicht gespeichert werden.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth onClick={(e) => e.stopPropagation()}>
+      <DialogTitle sx={{ pb: 1 }}>
+        Zuordnung ändern ({fileIds.length} {fileIds.length === 1 ? 'Aufnahme' : 'Aufnahmen'})
+      </DialogTitle>
+      <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1.5 }}>
+        <Typography variant="body2" color="text.secondary">
+          Wählen Sie die neue Phase und Sitzung für {fileIds.length === 1 ? 'diese Aufnahme' : 'alle ausgewählten Aufnahmen'}.
+        </Typography>
+        <FormControl size="small" fullWidth>
+          <InputLabel>Phase</InputLabel>
+          <Select
+            label="Phase"
+            value={selectedPhase}
+            onChange={(e) => {
+              setSelectedPhase(e.target.value as 'PRE_OP' | 'POST_OP');
+              setSelectedSession('');
+            }}
+          >
+            <MenuItem value="PRE_OP">Prä-OP</MenuItem>
+            <MenuItem value="POST_OP">Post-OP</MenuItem>
+          </Select>
+        </FormControl>
+        <FormControl size="small" fullWidth>
+          <InputLabel>Sitzung</InputLabel>
+          <Select
+            label="Sitzung"
+            value={selectedSession}
+            onChange={(e) => setSelectedSession(e.target.value)}
+          >
+            <MenuItem value=""><em>Keine Sitzung</em></MenuItem>
+            {filteredSessions.map((s) => (
+              <MenuItem key={s.id} value={s.id}>
+                {sessionLabel(s)}
+              </MenuItem>
+            ))}
+            {selectedPhase === 'POST_OP' && nextPostOpSessionNumber >= 2 && (
+              <MenuItem value="NEW_FOLLOWUP">
+                <em>+ Neue Follow-up Sitzung anlegen</em>
+              </MenuItem>
+            )}
+          </Select>
+        </FormControl>
+        {isNewFollowup && (
+          <Alert severity="info" sx={{ mt: 0 }}>
+            Es wird automatisch <strong>Post-OP Sitzung {nextPostOpSessionNumber}</strong>
+            {nextFollowUpNumber >= 1 ? ` (Follow-up ${nextFollowUpNumber})` : ''} angelegt.
+          </Alert>
+        )}
+        {error && <Alert severity="error">{error}</Alert>}
+      </DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2 }}>
+        <Button onClick={onClose} color="inherit" disabled={saving}>
+          Abbrechen
+        </Button>
+        <Button variant="contained" onClick={handleSave} disabled={saving}>
+          {saving ? <CircularProgress size={18} /> : 'Speichern'}
+        </Button>
+      </DialogActions>
+    </Dialog>
   );
 }
 
@@ -457,18 +714,23 @@ function ManualUpload({
   patientStatus,
   onDone,
   buttonLabel = 'Hochladen',
+  existingFiles = [],
 }: {
   patientId: string;
   phase: 'PRE_OP' | 'POST_OP';
   patientStatus: string;
   onDone: () => void;
   buttonLabel?: string;
+  existingFiles?: AudioFileType[];
 }) {
   const [open, setOpen] = useState(false);
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [files, setFiles] = useState<Record<string, File>>({});
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [pendingConflicts, setPendingConflicts] = useState<Exercise[]>([]);
+  const confirmedRef = useRef(false);
 
   const handleOpen = async () => {
     setOpen(true);
@@ -477,11 +739,29 @@ function ManualUpload({
   };
 
   const handleUpload = async () => {
-    const missing = exercises.filter((e) => !files[e.exercise_id]);
-    if (missing.length > 0) {
-      setError('Bitte für jede Übung eine Datei auswählen.');
+    const selected = Object.values(files);
+    if (selected.length === 0) {
+      setError('Bitte mindestens eine Datei auswählen.');
       return;
     }
+    const invalid = selected.find((f) => !isAllowedAudioFile(f.name));
+    if (invalid) {
+      setError(`Nicht unterstütztes Audioformat: ${invalid.name}`);
+      return;
+    }
+
+    if (!confirmedRef.current) {
+      const conflicts = exercises.filter(
+        (ex) => files[ex.exercise_id] && existingFiles.some((f) => f.exercise_id === ex.exercise_id),
+      );
+      if (conflicts.length > 0) {
+        setPendingConflicts(conflicts);
+        setConfirmOpen(true);
+        return;
+      }
+    }
+    confirmedRef.current = false;
+
     setError('');
     setUploading(true);
     try {
@@ -496,12 +776,18 @@ function ManualUpload({
         await uploadAudio(patientId, file, exercise.exercise_id);
       }
 
-      // Advance after all uploads
-      await advancePublicPatient(patientId);
+      // Only advance if the patient hasn't already completed this phase
+      const shouldAdvance =
+        (phase === 'PRE_OP' && patientStatus === 'CONSENT_GIVEN') ||
+        (phase === 'POST_OP' && patientStatus === 'POST_OP_STARTED');
+      if (shouldAdvance) {
+        await advancePublicPatient(patientId);
+      }
       setOpen(false);
       onDone();
     } catch {
       setError('Hochladen fehlgeschlagen.');
+      confirmedRef.current = false;
     } finally {
       setUploading(false);
     }
@@ -512,6 +798,26 @@ function ManualUpload({
       <Button size="small" startIcon={<UploadFileIcon />} onClick={handleOpen}>
         {buttonLabel}
       </Button>
+      <ConfirmDialog
+        open={confirmOpen}
+        title="Aufnahmen ersetzen?"
+        message={
+          <>
+            <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 0.5 }}>
+              Für folgende Übungen existiert bereits eine Aufnahme:
+            </Typography>
+            {pendingConflicts.map((e) => e.title).join(', ')}. Möchten Sie diese ersetzen?
+          </>
+        }
+        confirmLabel="Ersetzen"
+        confirmColor="warning"
+        onConfirm={() => {
+          confirmedRef.current = true;
+          setConfirmOpen(false);
+          handleUpload();
+        }}
+        onCancel={() => setConfirmOpen(false)}
+      />
       <Dialog open={open} onClose={() => setOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle sx={{ pb: 1 }}>
           Hochladen ({phase === 'PRE_OP' ? 'Prä-OP' : 'Post-OP'})
@@ -538,7 +844,7 @@ function ManualUpload({
                       </Typography>
                       <input
                         type="file"
-                        accept="audio/*"
+                        accept={AUDIO_ACCEPT_ATTR}
                         hidden
                         onChange={(e) => {
                           const f = e.target.files?.[0];
@@ -573,8 +879,14 @@ function ManualUpload({
 
 
 // ---------------------------------------------------------------------------
-// Helper
+// Helpers
 // ---------------------------------------------------------------------------
+
+function toDatetimeLocal(iso: string | null): string {
+  if (!iso) return '';
+  // Trim seconds and timezone so <input type="datetime-local"> accepts it
+  return iso.slice(0, 16);
+}
 
 function InfoField({
   label,
