@@ -1,14 +1,6 @@
 import { useState } from 'react';
-import {
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  Button,
-  IconButton,
-  Tooltip,
-} from '@mui/material';
-import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import { ActionIcon, Button, Group, Modal, Tooltip } from '@mantine/core';
+import { ExternalLink } from 'lucide-react';
 import type { Patient } from '../types';
 import PatientAccessOptions from './PatientAccessOptions';
 
@@ -17,21 +9,18 @@ export default function PatientAccessDialog({ patient }: { patient: Patient }) {
 
   return (
     <>
-      <Tooltip title="Zugangsoptionen">
-        <IconButton size="small" onClick={() => setOpen(true)}>
-          <OpenInNewIcon fontSize="small" color="primary" />
-        </IconButton>
+      <Tooltip label="Zugangsoptionen">
+        <ActionIcon variant="subtle" color="brand" size="sm" onClick={() => setOpen(true)}>
+          <ExternalLink size={16} />
+        </ActionIcon>
       </Tooltip>
 
-      <Dialog open={open} onClose={() => setOpen(false)} maxWidth="xs" fullWidth>
-        <DialogTitle>Patienten-Zugang</DialogTitle>
-        <DialogContent>
-          <PatientAccessOptions patientId={patient.id} patientLabel={patient.patient_id} />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setOpen(false)}>Schließen</Button>
-        </DialogActions>
-      </Dialog>
+      <Modal opened={open} onClose={() => setOpen(false)} title="Patienten-Zugang" size="sm" centered>
+        <PatientAccessOptions patientId={patient.id} patientLabel={patient.patient_id} />
+        <Group justify="flex-end" mt="md">
+          <Button variant="default" onClick={() => setOpen(false)}>Schließen</Button>
+        </Group>
+      </Modal>
     </>
   );
 }

@@ -1,18 +1,7 @@
 import { useState } from 'react';
-import {
-  Button,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  TextField,
-  Typography,
-  CircularProgress,
-  Alert,
-} from '@mui/material';
-import type { SxProps, Theme } from '@mui/material/styles';
-import AddIcon from '@mui/icons-material/Add';
-import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import { Alert, Button, Group, Modal, Stack, Text, TextInput } from '@mantine/core';
+import { Plus, CheckCircle2 } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 import { createPatient } from '../api/client';
 import PatientAccessOptions from './PatientAccessOptions';
 
@@ -27,12 +16,10 @@ type ApiError = {
 
 export default function CreatePatientDialog({
   onCreated,
-  buttonSx,
-  buttonSize = 'small',
+  buttonSize = 'sm',
 }: {
   onCreated: () => void;
-  buttonSx?: SxProps<Theme>;
-  buttonSize?: 'small' | 'medium' | 'large';
+  buttonSize?: 'xs' | 'sm' | 'md' | 'lg';
 }) {
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState<1 | 2>(1);
@@ -72,65 +59,75 @@ export default function CreatePatientDialog({
   return (
     <>
       <Button
-        variant="contained"
         size={buttonSize}
-        startIcon={<AddIcon />}
+        leftSection={<Plus size={16} />}
         onClick={() => setOpen(true)}
-        sx={buttonSx}
       >
         Patient anlegen
       </Button>
 
-      <Dialog open={open} onClose={handleClose} maxWidth="xs" fullWidth>
-        {step === 1 ? (
-          <form onSubmit={handleSubmit}>
-            <DialogTitle>Patient erstellen</DialogTitle>
-            <DialogContent>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                Geben Sie die interne Patienten-ID ein, um einen neuen sicheren Token zu generieren.
-              </Typography>
-              {error && (
-                <Alert severity="error" sx={{ mb: 2 }}>
-                  {error}
-                </Alert>
-              )}
-              <TextField
-                label="Patienten-ID"
-                placeholder="z.B. P-1234"
-                fullWidth
-                required
-                value={patientId}
-                onChange={(e) => setPatientId(e.target.value)}
-                autoFocus
-              />
-            </DialogContent>
-            <DialogActions>
-              <Button onClick={handleClose}>Abbrechen</Button>
-              <Button type="submit" variant="contained" disabled={loading}>
-                {loading ? <CircularProgress size={20} /> : 'Weiter'}
-              </Button>
-            </DialogActions>
-          </form>
-        ) : (
-          <>
-            <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'success.main' }}>
-              <CheckCircleIcon />
-              Patient erstellt
-            </DialogTitle>
-            <DialogContent>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                Patient <strong>{created?.patient_id}</strong> ist bereit.
-              </Typography>
-              {created && <PatientAccessOptions patientId={created.id} patientLabel={created.patient_id} />}
-            </DialogContent>
-            <DialogActions>
-              <Button onClick={handleClose} variant="contained">
-                Fertig
-              </Button>
-            </DialogActions>
-          </>
-        )}
-      </Dialog>
+      <Modal
+        opened={open}
+        onClose={handleClose}
+        title={step === 1 ? 'Patient erstellen' : undefined}
+        size="sm"
+        centered
+        withCloseButton={step === 1}
+      >
+        <AnimatePresence mode="wait" initial={false}>
+          {step === 1 ? (
+            <motion.form
+              key="step1"
+              onSubmit={handleSubmit}
+              initial={{ opacity: 0, x: -10 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -10 }}
+              transition={{ duration: 0.15 }}
+            >
+              <Stack gap="md">
+                <Text size="sm" c="dimmed">
+                  Geben Sie die interne Patienten-ID ein, um einen neuen sicheren Token zu generieren.
+                </Text>
+                {error && <Alert color="red" variant="light">{error}</Alert>}
+                <TextInput
+                  label="Patienten-ID"
+                  placeholder="z.B. P-1234"
+                  required
+                  autoFocus
+                  value={patientId}
+                  onChange={(e) => setPatientId(e.currentTarget.value)}
+                />
+                <Group justify="flex-end">
+                  <Button variant="default" onClick={handleClose}>Abbrechen</Button>
+                  <Button type="submit" loading={loading}>Weiter</Button>
+                </Group>
+              </Stack>
+            </motion.form>
+          ) : (
+            <motion.div
+              key="step2"
+              initial={{ opacity: 0, x: 10 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 10 }}
+              transition={{ duration: 0.15 }}
+            >
+              <Stack gap="md">
+                <Group gap="xs">
+                  <CheckCircle2 size={20} className="text-green-600" />
+                  <Text fw={700}>Patient erstellt</Text>
+                </Group>
+                <Text size="sm" c="dimmed">
+                  Patient <strong>{created?.patient_id}</strong> ist bereit.
+                </Text>
+                {created && <PatientAccessOptions patientId={created.id} patientLabel={created.patient_id} />}
+                <Group justify="flex-end">
+                  <Button onClick={handleClose}>Fertig</Button>
+                </Group>
+              </Stack>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </Modal>
     </>
   );
 }

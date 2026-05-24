@@ -1,20 +1,12 @@
-import React, { useState } from 'react';
-import {
-  Button,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogContentText,
-  DialogTitle,
-  CircularProgress,
-} from '@mui/material';
+import { useState } from 'react';
+import { Button, Group, Modal, Stack, Text } from '@mantine/core';
 
 export default function ConfirmDialog({
   open,
   title,
   message,
   confirmLabel,
-  confirmColor = 'primary',
+  confirmColor = 'brand',
   onConfirm,
   onCancel,
 }: {
@@ -22,7 +14,7 @@ export default function ConfirmDialog({
   title: string;
   message: React.ReactNode;
   confirmLabel: string;
-  confirmColor?: 'primary' | 'error' | 'warning' | 'success';
+  confirmColor?: 'brand' | 'red' | 'yellow' | 'green';
   onConfirm: () => Promise<void> | void;
   onCancel: () => void;
 }) {
@@ -38,24 +30,18 @@ export default function ConfirmDialog({
   };
 
   return (
-    <Dialog open={open} onClose={onCancel} maxWidth="xs" fullWidth>
-      <DialogTitle>{title}</DialogTitle>
-      <DialogContent>
-        <DialogContentText>{message}</DialogContentText>
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={onCancel} disabled={loading}>
-          Abbrechen
-        </Button>
-        <Button
-          onClick={handleConfirm}
-          variant="contained"
-          color={confirmColor}
-          disabled={loading}
-        >
-          {loading ? <CircularProgress size={20} /> : confirmLabel}
-        </Button>
-      </DialogActions>
-    </Dialog>
+    <Modal opened={open} onClose={onCancel} title={title} size="sm" centered>
+      <Stack gap="md">
+        <Text size="sm">{message}</Text>
+        <Group justify="flex-end" gap="sm">
+          <Button variant="default" onClick={onCancel} disabled={loading}>
+            Abbrechen
+          </Button>
+          <Button color={confirmColor} onClick={handleConfirm} loading={loading}>
+            {confirmLabel}
+          </Button>
+        </Group>
+      </Stack>
+    </Modal>
   );
 }

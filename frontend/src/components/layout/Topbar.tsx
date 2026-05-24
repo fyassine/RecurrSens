@@ -1,18 +1,15 @@
-import { useState, useMemo } from 'react';
+import { useMemo } from 'react';
 import {
-  Badge,
-  Box,
-  IconButton,
+  ActionIcon,
+  Indicator,
   Popover,
-  Typography,
-  useTheme,
-} from '@mui/material';
-import NotificationsNoneIcon from '@mui/icons-material/NotificationsNone';
-import LightModeIcon from '@mui/icons-material/LightMode';
-import DarkModeIcon from '@mui/icons-material/DarkMode';
-import ShowChartIcon from '@mui/icons-material/ShowChart';
+  ScrollArea,
+  Text,
+  useMantineColorScheme,
+  useMantineTheme,
+} from '@mantine/core';
+import { Bell, Sun, Moon, Activity } from 'lucide-react';
 import { useLocation, useParams } from 'react-router-dom';
-import { useColorMode } from '../../context/ColorModeContext';
 import { useAppData } from '../../context/AppDataContext';
 
 function getBreadcrumb(pathname: string, patientLabel?: string, token?: string): string {
@@ -41,116 +38,136 @@ function formatTime(dateStr: string): string {
 }
 
 export default function Topbar() {
-  const theme = useTheme();
-  const { toggleMode } = useColorMode();
+  const theme = useMantineTheme();
+  const { colorScheme, toggleColorScheme } = useMantineColorScheme();
+  const isDark = colorScheme === 'dark';
   const { patients, notificationCount } = useAppData();
   const location = useLocation();
   const { token } = useParams<{ token?: string }>();
-  const [bellAnchor, setBellAnchor] = useState<null | HTMLElement>(null);
 
   const patientLabel = (location.state as { patientLabel?: string } | null)?.patientLabel;
   const crumb = getBreadcrumb(location.pathname, patientLabel, token);
-  const isDark = theme.palette.mode === 'dark';
   const parts = crumb.split(' / ');
-  const p = theme.palette;
+
+  const successColor = theme.colors.green[6];
+  const errorColor = theme.colors.red[6];
+  const infoColor = theme.colors.cyan[6];
 
   const activities = useMemo(() => {
     const nowMs = Date.now();
     const events: { text: React.ReactNode; time: string; dotColor: string; sort: number }[] = [];
     for (const pt of patients) {
       if (pt.status === 'POST_OP_DONE') {
-        events.push({ text: <>Patient <strong>{pt.patient_id}</strong> Post-OP abgeschlossen</>, time: formatTime(pt.updated_at), dotColor: p.success.main, sort: new Date(pt.updated_at).getTime() });
+        events.push({
+          text: <>Patient <strong>{pt.patient_id}</strong> Post-OP abgeschlossen</>,
+          time: formatTime(pt.updated_at),
+          dotColor: successColor,
+          sort: new Date(pt.updated_at).getTime(),
+        });
       }
       if (pt.prediction_pre !== 'TODO') {
-        events.push({ text: <>KI-Prä-OP Vorhersage <strong>{pt.patient_id}</strong> bereit</>, time: formatTime(pt.updated_at), dotColor: p.info.main, sort: new Date(pt.updated_at).getTime() });
+        events.push({
+          text: <>KI-Prä-OP Vorhersage <strong>{pt.patient_id}</strong> bereit</>,
+          time: formatTime(pt.updated_at),
+          dotColor: infoColor,
+          sort: new Date(pt.updated_at).getTime(),
+        });
       }
       if (pt.deleted_at) {
-        events.push({ text: <>Patient <strong>{pt.patient_id}</strong> gelöscht</>, time: formatTime(pt.deleted_at), dotColor: p.error.main, sort: new Date(pt.deleted_at).getTime() });
+        events.push({
+          text: <>Patient <strong>{pt.patient_id}</strong> gelöscht</>,
+          time: formatTime(pt.deleted_at),
+          dotColor: errorColor,
+          sort: new Date(pt.deleted_at).getTime(),
+        });
       } else if (new Date(pt.expires_at).getTime() <= nowMs) {
-        events.push({ text: <>Ablaufdatum <strong>{pt.patient_id}</strong> überschritten</>, time: formatTime(pt.expires_at), dotColor: p.error.main, sort: new Date(pt.expires_at).getTime() });
+        events.push({
+          text: <>Ablaufdatum <strong>{pt.patient_id}</strong> überschritten</>,
+          time: formatTime(pt.expires_at),
+          dotColor: errorColor,
+          sort: new Date(pt.expires_at).getTime(),
+        });
       }
-      events.push({ text: <>Patient <strong>{pt.patient_id}</strong> angelegt</>, time: formatTime(pt.created_at), dotColor: p.info.main, sort: new Date(pt.created_at).getTime() });
+      events.push({
+        text: <>Patient <strong>{pt.patient_id}</strong> angelegt</>,
+        time: formatTime(pt.created_at),
+        dotColor: infoColor,
+        sort: new Date(pt.created_at).getTime(),
+      });
     }
     return events.sort((a, b) => b.sort - a.sort).slice(0, 15);
-  }, [patients, p]);
+  }, [patients, successColor, errorColor, infoColor]);
 
   return (
-    <Box
-      sx={{
-        gridArea: 'topbar',
-        height: 56,
-        bgcolor: 'background.paper',
-        borderBottom: '1px solid',
-        borderColor: 'divider',
-        display: 'flex',
-        alignItems: 'center',
-        px: 3,
-        gap: 2,
-        position: 'sticky',
-        top: 0,
-        zIndex: 20,
-        boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
-      }}
+    <header
+      className="sticky top-0 z-20 flex h-14 items-center gap-4 border-b border-[var(--mantine-color-default-border)] bg-[var(--mantine-color-body)] px-6 shadow-[0_1px_2px_rgba(0,0,0,0.04)]"
+      style={{ gridArea: 'topbar' }}
     >
       {/* Breadcrumb */}
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flex: 1 }}>
-        <Typography variant="body2" color="text.secondary" fontSize="0.875rem">MRI</Typography>
+      <div className="flex flex-1 items-center gap-1.5">
+        <Text size="sm" c="dimmed">MRI</Text>
         {parts.map((part, i) => (
-          <Box key={i} sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-            <Typography color="text.disabled" fontSize="0.875rem">/</Typography>
-            <Typography variant="body2" fontSize="0.875rem" fontWeight={i === parts.length - 1 ? 600 : 400} color={i === parts.length - 1 ? 'text.primary' : 'text.secondary'}>
+          <div key={i} className="flex items-center gap-1.5">
+            <Text size="sm" c="dimmed">/</Text>
+            <Text size="sm" fw={i === parts.length - 1 ? 600 : 400} c={i === parts.length - 1 ? undefined : 'dimmed'}>
               {part}
-            </Typography>
-          </Box>
+            </Text>
+          </div>
         ))}
-      </Box>
+      </div>
 
-      {/* Notification bell */}
-      <IconButton
-        size="small"
-        onClick={(e) => setBellAnchor(e.currentTarget)}
-        sx={{ width: 36, height: 36, borderRadius: 1, color: 'text.secondary' }}
-        title="Letzte Aktivität"
-      >
-        <Badge badgeContent={notificationCount > 0 ? notificationCount : undefined} color="error" max={9}
-          sx={{ '& .MuiBadge-badge': { fontSize: '0.6rem', minWidth: 16, height: 16, p: '0 4px' } }}>
-          <NotificationsNoneIcon sx={{ fontSize: 20 }} />
-        </Badge>
-      </IconButton>
-
-      {/* Activity popover */}
-      <Popover
-        open={!!bellAnchor}
-        anchorEl={bellAnchor}
-        onClose={() => setBellAnchor(null)}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-        transformOrigin={{ vertical: 'top', horizontal: 'right' }}
-        slotProps={{ paper: { sx: { width: 400, borderRadius: 2, boxShadow: '0 8px 24px rgba(0,0,0,0.12)', mt: 0.5, border: '1px solid', borderColor: 'divider' } } }}
-      >
-        <Box sx={{ px: 2, py: 1.25, borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 1 }}>
-          <ShowChartIcon sx={{ fontSize: 15, color: 'info.main' }} />
-          <Typography fontWeight={700} fontSize="0.875rem">Letzte Aktivität</Typography>
-        </Box>
-        <Box sx={{ maxHeight: 480, overflowY: 'auto', p: 0.75 }}>
-          {activities.length === 0 ? (
-            <Typography fontSize="0.8125rem" color="text.secondary" sx={{ p: 1.5 }}>Keine Aktivitäten vorhanden.</Typography>
-          ) : activities.map((ev, i) => (
-            <Box key={i} sx={{ display: 'flex', gap: 1.5, p: 1, borderRadius: 1, '&:hover': { bgcolor: 'action.hover' } }}>
-              <Box sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: ev.dotColor, flexShrink: 0, mt: '5px' }} />
-              <Box sx={{ flex: 1, minWidth: 0 }}>
-                <Typography fontSize="0.78rem" color="text.primary" lineHeight={1.4}>{ev.text}</Typography>
-                <Typography fontSize="0.68rem" color="text.disabled" mt="1px">{ev.time}</Typography>
-              </Box>
-            </Box>
-          ))}
-        </Box>
+      {/* Notification bell with popover */}
+      <Popover position="bottom-end" shadow="lg" width={400} withArrow={false}>
+        <Popover.Target>
+          <ActionIcon variant="subtle" color="gray" size="lg" title="Letzte Aktivität" style={{ overflow: 'visible' }}>
+            <Indicator
+              label={notificationCount > 0 ? notificationCount : undefined}
+              color="red"
+              size={16}
+              disabled={notificationCount === 0}
+            >
+              <Bell size={20} />
+            </Indicator>
+          </ActionIcon>
+        </Popover.Target>
+        <Popover.Dropdown p={0}>
+          <div className="flex items-center gap-2 border-b border-[var(--mantine-color-default-border)] px-4 py-2.5">
+            <Activity size={15} color={infoColor} />
+            <Text fw={700} size="sm">Letzte Aktivität</Text>
+          </div>
+          <ScrollArea.Autosize mah={480} type="hover">
+            <div className="p-1.5">
+              {activities.length === 0 ? (
+                <Text size="sm" c="dimmed" p="sm">Keine Aktivitäten vorhanden.</Text>
+              ) : (
+                activities.map((ev, i) => (
+                  <div key={i} className="flex gap-3 rounded p-2 hover:bg-[var(--mantine-color-default-hover)]">
+                    <div
+                      className="mt-[5px] h-[7px] w-[7px] shrink-0 rounded-full"
+                      style={{ backgroundColor: ev.dotColor }}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <Text size="xs" lh={1.4}>{ev.text}</Text>
+                      <Text size="xs" c="dimmed" mt={1}>{ev.time}</Text>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </ScrollArea.Autosize>
+        </Popover.Dropdown>
       </Popover>
 
       {/* Dark / light toggle */}
-      <IconButton size="small" onClick={toggleMode} title={isDark ? 'Hellmodus' : 'Dunkelmodus'}
-        sx={{ width: 36, height: 36, borderRadius: 1, color: 'text.secondary' }}>
-        {isDark ? <LightModeIcon sx={{ fontSize: 20 }} /> : <DarkModeIcon sx={{ fontSize: 20 }} />}
-      </IconButton>
-    </Box>
+      <ActionIcon
+        variant="subtle"
+        color="gray"
+        size="lg"
+        onClick={() => toggleColorScheme()}
+        title={isDark ? 'Hellmodus' : 'Dunkelmodus'}
+      >
+        {isDark ? <Sun size={20} /> : <Moon size={20} />}
+      </ActionIcon>
+    </header>
   );
 }

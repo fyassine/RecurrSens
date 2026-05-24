@@ -1,17 +1,12 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Box, IconButton, Typography, Button, LinearProgress } from '@mui/material';
-import PlayArrowIcon from '@mui/icons-material/PlayArrow';
-import StopIcon from '@mui/icons-material/Stop';
-import MicIcon from '@mui/icons-material/Mic';
-import ReplayIcon from '@mui/icons-material/Replay';
+import { ActionIcon, Button, Progress, Text } from '@mantine/core';
+import { Play, Square, Mic, RotateCcw } from 'lucide-react';
 import AudioVisualizer from './AudioVisualizer';
 import { formatTime } from '../utils';
 
 interface AudioRecorderProps {
   exampleAudioUrl?: string;
-  /** Pre-warmed mic stream — if provided, getUserMedia is skipped on press. */
   micStream?: MediaStream | null;
-  /** When true, overrides the "Aufnahme bereit" label and promotes "Neu aufnehmen" to primary. */
   hasQualityError?: boolean;
   onRecordingComplete: (blob: Blob) => void;
   onRecordingReset?: () => void;
@@ -32,7 +27,6 @@ export default function AudioRecorder({
   const streamRef = useRef<MediaStream | null>(null);
   const [recordingDuration, setRecordingDuration] = useState(0);
 
-  // Playback
   const [isPlaying, setIsPlaying] = useState(false);
   const [playbackProgress, setPlaybackProgress] = useState(0);
   const [playbackTime, setPlaybackTime] = useState(0);
@@ -46,34 +40,31 @@ export default function AudioRecorder({
   const isPressingRef = useRef(false);
   const playbackAudioRef = useRef<HTMLAudioElement | null>(null);
 
-  // Ref to the button DOM element for setPointerCapture
   const buttonRef = useRef<HTMLButtonElement | null>(null);
-  // Track the captured pointerId so we can release it
   const capturedPointerIdRef = useRef<number | null>(null);
 
-  // Example playback
   const [examplePlaying, setExamplePlaying] = useState(false);
   const exampleRef = useRef<HTMLAudioElement | null>(null);
 
-  /** Clean up MediaRecorder and optionally the stream (only if we own it). */
-  const cleanupRecording = useCallback((ownedStream?: MediaStream | null) => {
-    if (recordingTimerRef.current) {
-      clearInterval(recordingTimerRef.current);
-      recordingTimerRef.current = null;
-    }
-    // Only stop tracks if we created the stream ourselves (no external stream).
-    // If an external stream was provided, the parent owns its lifecycle.
-    if (ownedStream) {
-      ownedStream.getTracks().forEach((t) => t.stop());
-    } else if (!externalStream && streamRef.current) {
-      streamRef.current.getTracks().forEach((t) => t.stop());
-    }
-    streamRef.current = null;
-    mediaRecorderRef.current = null;
-    isStartingRef.current = false;
-    setIsRecording(false);
-    setVisualizerStream(null);
-  }, [externalStream]);
+  const cleanupRecording = useCallback(
+    (ownedStream?: MediaStream | null) => {
+      if (recordingTimerRef.current) {
+        clearInterval(recordingTimerRef.current);
+        recordingTimerRef.current = null;
+      }
+      if (ownedStream) {
+        ownedStream.getTracks().forEach((t) => t.stop());
+      } else if (!externalStream && streamRef.current) {
+        streamRef.current.getTracks().forEach((t) => t.stop());
+      }
+      streamRef.current = null;
+      mediaRecorderRef.current = null;
+      isStartingRef.current = false;
+      setIsRecording(false);
+      setVisualizerStream(null);
+    },
+    [externalStream],
+  );
 
   useEffect(() => {
     return () => {
@@ -82,7 +73,6 @@ export default function AudioRecorder({
     };
   }, [cleanupRecording]);
 
-  // ---- Example playback ----
   const playExample = () => {
     if (!exampleAudioUrl) return;
     if (!exampleRef.current) {
@@ -94,19 +84,16 @@ export default function AudioRecorder({
     exampleRef.current.play().catch(() => setExamplePlaying(false));
   };
 
-  // ---- Recording ----
   const startRecording = async () => {
     if (isRecording || isStartingRef.current) return;
     isStartingRef.current = true;
     isPressingRef.current = true;
 
     try {
-      // Use the pre-warmed external stream if available; otherwise acquire one.
-      const mediaStream = externalStream ?? await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaStream =
+        externalStream ?? (await navigator.mediaDevices.getUserMedia({ audio: true }));
 
-      // User released before mic was ready — silently abort, not an error
       if (!isPressingRef.current) {
-        // Only stop tracks if we created them ourselves
         if (!externalStream) mediaStream.getTracks().forEach((t) => t.stop());
         isStartingRef.current = false;
         return;
@@ -201,13 +188,11 @@ export default function AudioRecorder({
       setIsRecording(false);
       return;
     }
-
     if (isStartingRef.current || streamRef.current) {
       cleanupRecording();
     }
   }, [cleanupRecording]);
 
-  // Stop recording if the tab becomes hidden
   useEffect(() => {
     const handleVisibility = () => {
       if (document.hidden && isRecording) stopRecording();
@@ -216,25 +201,18 @@ export default function AudioRecorder({
     return () => document.removeEventListener('visibilitychange', handleVisibility);
   }, [isRecording, stopRecording]);
 
-  // ---- Pointer Event handlers (unified mouse + touch) ----
-  //
-  // Using Pointer Events + setPointerCapture guarantees that `pointerup`
-  // fires on the SAME element even if:
-  //  - the finger/cursor moves off the button
-  //  - the DOM is modified mid-touch (React re-render changing icon/color)
-  //  - iOS would otherwise silently swallow touchend
-  //
-  const handlePointerDown = useCallback((e: React.PointerEvent<HTMLButtonElement>) => {
-    // Capture this pointer so pointerup is guaranteed to fire on this element
-    const btn = buttonRef.current;
-    if (btn) {
-      btn.setPointerCapture(e.pointerId);
-      capturedPointerIdRef.current = e.pointerId;
-    }
-
-    void startRecording();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isRecording, externalStream]);
+  const handlePointerDown = useCallback(
+    (e: React.PointerEvent<HTMLButtonElement>) => {
+      const btn = buttonRef.current;
+      if (btn) {
+        btn.setPointerCapture(e.pointerId);
+        capturedPointerIdRef.current = e.pointerId;
+      }
+      void startRecording();
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [isRecording, externalStream],
+  );
 
   const handlePointerUp = useCallback(() => {
     capturedPointerIdRef.current = null;
@@ -242,12 +220,10 @@ export default function AudioRecorder({
   }, [stopRecording]);
 
   const handlePointerCancel = useCallback(() => {
-    // Pointer was interrupted (e.g. incoming call, OS gesture, etc.)
     capturedPointerIdRef.current = null;
     stopRecording();
   }, [stopRecording]);
 
-  // Safety: also stop on window blur (e.g. iOS app switcher)
   useEffect(() => {
     const onBlur = () => {
       if (isRecording) stopRecording();
@@ -256,7 +232,6 @@ export default function AudioRecorder({
     return () => window.removeEventListener('blur', onBlur);
   }, [isRecording, stopRecording]);
 
-  // ---- Playback ----
   const playRecording = () => {
     if (!audioBlob) return;
     if (playbackAudioRef.current) {
@@ -267,8 +242,6 @@ export default function AudioRecorder({
     const audio = new Audio(url);
     playbackAudioRef.current = audio;
     setIsPlaying(true);
-    // ontimeupdate fires ~4x/sec — smooth for a progress bar without the
-    // 60fps re-render storm that requestAnimationFrame caused.
     audio.ontimeupdate = () => {
       const dur = Number.isFinite(audio.duration) ? audio.duration : recordingDuration;
       if (dur > 0) {
@@ -298,105 +271,98 @@ export default function AudioRecorder({
   };
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
+    <div className="flex flex-col items-center gap-6">
       {/* Example */}
       {exampleAudioUrl && !audioBlob && (
-        <Box
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 2,
-            p: 2,
-            bgcolor: 'grey.100',
-            borderRadius: 2,
-            width: '100%',
-            maxWidth: 320,
-          }}
-        >
-          <IconButton onClick={playExample} disabled={examplePlaying || isRecording}>
-            {examplePlaying ? <StopIcon /> : <PlayArrowIcon />}
-          </IconButton>
-          <Typography variant="body2">Beispiel anhören</Typography>
-        </Box>
+        <div className="flex w-full max-w-[320px] items-center gap-4 rounded-lg bg-[var(--mantine-color-default-hover)] p-3">
+          <ActionIcon
+            variant="subtle"
+            color="brand"
+            size="lg"
+            onClick={playExample}
+            disabled={examplePlaying || isRecording}
+          >
+            {examplePlaying ? <Square size={20} /> : <Play size={20} />}
+          </ActionIcon>
+          <Text size="sm">Beispiel anhören</Text>
+        </div>
       )}
 
-      {/* Visualizer — fixed-height slot so button never shifts */}
+      {/* Visualizer */}
       {!audioBlob && (
-        <Box sx={{ height: 76, width: '100%', maxWidth: 320, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div className="flex h-[76px] w-full max-w-[320px] items-center justify-center">
           {visualizerStream && <AudioVisualizer stream={visualizerStream} />}
-        </Box>
+        </div>
       )}
 
-      {/* Record button – press and hold to record */}
+      {/* Record button */}
       {!audioBlob && (
         <>
-          <IconButton
+          <button
             ref={buttonRef}
+            type="button"
             onPointerDown={handlePointerDown}
             onPointerUp={handlePointerUp}
             onPointerCancel={handlePointerCancel}
             onContextMenu={(e) => e.preventDefault()}
-            color={isRecording ? 'error' : 'primary'}
-            sx={{
-              width: 96,
-              height: 96,
-              bgcolor: isRecording ? 'error.light' : 'primary.light',
-              '&:hover': { bgcolor: isRecording ? 'error.main' : 'primary.main' },
+            className="flex h-24 w-24 cursor-pointer items-center justify-center rounded-full border-0 transition-colors"
+            style={{
+              backgroundColor: isRecording
+                ? 'var(--mantine-color-red-3)'
+                : 'var(--mantine-color-brand-1)',
+              color: isRecording ? 'var(--mantine-color-red-9)' : 'var(--mantine-color-brand-9)',
               userSelect: 'none',
               WebkitUserSelect: 'none',
-              // Prevent iOS long-press callout & magnifying glass
               WebkitTouchCallout: 'none',
-              // Prevent browser from hijacking the touch for scroll/zoom.
-              // Critical for setPointerCapture to work correctly on mobile.
               touchAction: 'none',
             }}
           >
-            {isRecording ? <StopIcon sx={{ fontSize: 40 }} /> : <MicIcon sx={{ fontSize: 40 }} />}
-          </IconButton>
-          <Typography variant="body2" color="text.secondary" textAlign="center">
+            {isRecording ? <Square size={40} /> : <Mic size={40} />}
+          </button>
+          <Text size="sm" c="dimmed" ta="center">
             {isRecording
               ? `Aufnahme läuft… (${formatTime(recordingDuration)})`
               : 'Gedrückt halten zum Aufnehmen'}
-          </Typography>
+          </Text>
         </>
       )}
 
       {/* Playback */}
       {audioBlob && (
-        <Box sx={{ width: '100%', maxWidth: 320, display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <LinearProgress variant="determinate" value={playbackProgress} />
-          <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-            <Typography variant="caption">{formatTime(playbackTime)}</Typography>
-            <Typography variant="caption">{formatTime(recordingDuration)}</Typography>
-          </Box>
-          <Box sx={{ display: 'flex', justifyContent: 'center', gap: 2 }}>
+        <div className="flex w-full max-w-[320px] flex-col gap-3">
+          <Progress value={playbackProgress} />
+          <div className="flex justify-between">
+            <Text size="xs">{formatTime(playbackTime)}</Text>
+            <Text size="xs">{formatTime(recordingDuration)}</Text>
+          </div>
+          <div className="flex justify-center gap-3">
             <Button
-              variant="outlined"
-              startIcon={isPlaying ? <StopIcon /> : <PlayArrowIcon />}
+              variant="outline"
+              leftSection={isPlaying ? <Square size={16} /> : <Play size={16} />}
               onClick={playRecording}
               disabled={isPlaying}
             >
               Anhören
             </Button>
             <Button
-              variant={hasQualityError ? 'contained' : 'outlined'}
-              color={hasQualityError ? 'primary' : 'inherit'}
-              startIcon={<ReplayIcon />}
+              variant={hasQualityError ? 'filled' : 'outline'}
+              color={hasQualityError ? 'brand' : 'gray'}
+              leftSection={<RotateCcw size={16} />}
               onClick={resetRecording}
             >
               Neu aufnehmen
             </Button>
-          </Box>
-          <Typography
-            variant="body2"
-            color={hasQualityError ? 'error.main' : 'text.secondary'}
-            fontWeight={hasQualityError ? 600 : 400}
-            textAlign="center"
+          </div>
+          <Text
+            size="sm"
+            ta="center"
+            fw={hasQualityError ? 600 : 400}
+            c={hasQualityError ? 'red' : 'dimmed'}
           >
             {hasQualityError ? 'Aufnahme fehlgeschlagen' : 'Aufnahme bereit'}
-          </Typography>
-        </Box>
+          </Text>
+        </div>
       )}
-    </Box>
+    </div>
   );
 }

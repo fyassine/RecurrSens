@@ -1,5 +1,4 @@
 import { useRef, useEffect } from 'react';
-import { Box } from '@mui/material';
 
 export default function AudioVisualizer({ stream }: { stream: MediaStream }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -41,7 +40,7 @@ export default function AudioVisualizer({ stream }: { stream: MediaStream }) {
       for (let i = 0; i < bufferLength; i++) {
         smoothedArray[i] += (dataArray[i] - smoothedArray[i]) * smoothingFactor;
         const v = (smoothedArray[i] - 128) / 128.0;
-        const y = (v * 0.5 + 1) * canvas.height / 2;
+        const y = ((v * 0.5 + 1) * canvas.height) / 2;
 
         if (i === 0) canvasCtx.moveTo(x, y);
         else canvasCtx.lineTo(x, y);
@@ -61,13 +60,14 @@ export default function AudioVisualizer({ stream }: { stream: MediaStream }) {
   }, [stream]);
 
   return (
-    <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+    <div className="flex justify-center">
       <canvas
         ref={canvasRef}
         width={300}
         height={60}
-        style={{ width: 300, height: 60, borderRadius: 8, background: '#f5f5f5' }}
+        className="rounded-lg bg-gray-100 dark:bg-gray-800"
+        style={{ width: 300, height: 60 }}
       />
-    </Box>
+    </div>
   );
 }

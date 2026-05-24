@@ -1,43 +1,39 @@
 import { useState, useMemo, useEffect, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
+  ActionIcon,
   Alert,
-  Box,
   Button,
   Checkbox,
-  CircularProgress,
-  IconButton,
-  InputAdornment,
-  ListItemIcon,
-  ListItemText,
+  Loader,
   Menu,
-  MenuItem,
+  Paper,
   Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  TableSortLabel,
-  TextField,
+  Text,
+  TextInput,
   Tooltip,
-  Typography,
-} from '@mui/material';
-import SearchIcon from '@mui/icons-material/Search';
-import DownloadIcon from '@mui/icons-material/Download';
-import DeleteIcon from '@mui/icons-material/Delete';
-import ContentCopyIcon from '@mui/icons-material/ContentCopy';
-import CheckIcon from '@mui/icons-material/Check';
-import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
-import OpenInNewIcon from '@mui/icons-material/OpenInNew';
-import LockIcon from '@mui/icons-material/Lock';
-import LockOpenIcon from '@mui/icons-material/LockOpen';
-import MoreVertIcon from '@mui/icons-material/MoreVert';
-import WarningAmberIcon from '@mui/icons-material/WarningAmber';
-import NavigateBeforeIcon from '@mui/icons-material/NavigateBefore';
-import NavigateNextIcon from '@mui/icons-material/NavigateNext';
+  UnstyledButton,
+} from '@mantine/core';
+import { motion, AnimatePresence } from 'motion/react';
+import {
+  Search,
+  Download,
+  Trash2,
+  Copy,
+  Check,
+  FileText,
+  ExternalLink,
+  Lock,
+  Unlock,
+  MoreVertical,
+  AlertTriangle,
+  ChevronLeft,
+  ChevronRight,
+  ChevronUp,
+  ChevronDown,
+} from 'lucide-react';
 import type { Patient, PatientStatus } from '../types';
-import { StatusBadge, PredictionBadge, FollowUpBadge } from './Badges';
+import { StatusBadge, FollowUpBadge } from './Badges';
 import { deletePatient, advancePatient, createSession, downloadPatientPdf, exportPatients } from '../api/client';
 import { formatDate, formatDateTime, NO_RECORDING_DATE } from '../utils';
 import ConfirmDialog from './ConfirmDialog';
@@ -85,9 +81,8 @@ export default function PatientList({
   const [unlocking, setUnlocking] = useState<string | null>(null);
   const [creatingFollowUp, setCreatingFollowUp] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [menuAnchor, setMenuAnchor] = useState<{ id: string; el: HTMLElement } | null>(null);
+  const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
 
-  // Reset to page 0 when filter/search changes
   useEffect(() => {
     setPage(0);
   }, [search, activeFilter]);
@@ -197,13 +192,12 @@ export default function PatientList({
 
   if (loading) {
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
-        <CircularProgress />
-      </Box>
+      <div className="flex justify-center py-16">
+        <Loader />
+      </div>
     );
   }
 
-  // Numbered pagination buttons (show up to 5)
   const pageButtons: (number | '…')[] = [];
   if (totalPages <= 5) {
     for (let i = 0; i < totalPages; i++) pageButtons.push(i);
@@ -219,452 +213,377 @@ export default function PatientList({
 
   return (
     <>
-      <Box
-        sx={{
-          bgcolor: 'background.paper',
-          borderRadius: 2,
-          overflow: 'clip',
-          border: '1px solid',
-          borderColor: 'divider',
-        }}
-      >
+      <Paper withBorder radius="md" className="overflow-clip">
         {/* Toolbar */}
-        <Box
-          sx={{
-            bgcolor: 'background.paper',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 1.5,
-            px: 2,
-            py: 1.5,
-            borderBottom: '1px solid',
-            borderColor: 'divider',
-            flexWrap: 'wrap',
-          }}
-        >
-          <TextField
-            size="small"
+        <div className="flex flex-wrap items-center gap-3 border-b border-[var(--mantine-color-default-border)] px-4 py-3">
+          <TextInput
+            size="xs"
             placeholder="Patienten-ID suchen…"
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            sx={{
-              flex: 1,
-              maxWidth: 280,
-              '& .MuiOutlinedInput-root': { height: 32, fontSize: '0.8125rem' },
-              '& .MuiOutlinedInput-input': { py: 0 },
-            }}
-            slotProps={{
-              input: {
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <SearchIcon sx={{ color: 'text.secondary', fontSize: 16 }} />
-                  </InputAdornment>
-                ),
-              },
-            }}
+            onChange={(e) => setSearch(e.currentTarget.value)}
+            leftSection={<Search size={14} />}
+            className="max-w-[280px] flex-1"
           />
-          <Box sx={{ flex: 1 }} />
-          {selectedIds.size > 0 && (
-            <Button
-              variant="outlined"
-              color="error"
-              size="small"
-              startIcon={<DeleteIcon />}
-              onClick={() => setBulkDeleteOpen(true)}
-              sx={{ height: 32, minWidth: 160 }}
-            >
-              {selectedIds.size === 1 ? 'Löschen' : `Löschen (${selectedIds.size})`}
-            </Button>
-          )}
+          <div className="flex-1" />
+          <AnimatePresence>
+            {selectedIds.size > 0 && (
+              <motion.div
+                initial={{ opacity: 0, y: -4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
+                transition={{ duration: 0.15 }}
+              >
+                <Button
+                  variant="outline"
+                  color="red"
+                  size="xs"
+                  leftSection={<Trash2 size={14} />}
+                  onClick={() => setBulkDeleteOpen(true)}
+                  className="min-w-[160px]"
+                >
+                  {selectedIds.size === 1 ? 'Löschen' : `Löschen (${selectedIds.size})`}
+                </Button>
+              </motion.div>
+            )}
+          </AnimatePresence>
           {onExport && (
             <Button
-              variant="outlined"
-              size="small"
-              startIcon={<DownloadIcon />}
+              variant="outline"
+              size="sm"
+              leftSection={<Download size={14} />}
               onClick={onExport}
-              disabled={exporting}
-              sx={{ height: 32 }}
+              loading={exporting}
             >
               {exporting ? 'Exportiere…' : exportCount > 1 ? `Exportieren (${exportCount})` : 'Exportieren'}
             </Button>
           )}
-        </Box>
+        </div>
 
         {/* RP alert banner */}
         {rpCount > 0 && activeFilter !== 'RP' && (
-          <Alert
-            severity="error"
-            icon={<WarningAmberIcon fontSize="small" />}
-            sx={{ borderRadius: 0, borderBottom: '1px solid', borderColor: 'divider' }}
-          >
+          <Alert color="red" radius={0} icon={<AlertTriangle size={16} />}>
             {rpCount} Patient{rpCount !== 1 ? 'en' : ''} mit RP-Vorhersage in dieser Ansicht
           </Alert>
         )}
 
         {/* Table */}
-        <TableContainer>
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell padding="checkbox" align="center">
-                  <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+        <Table.ScrollContainer minWidth={0}>
+          <Table
+            verticalSpacing="xs"
+            horizontalSpacing="sm"
+            striped={false}
+            highlightOnHover
+            stickyHeader={false}
+            style={{ fontVariantNumeric: 'tabular-nums' }}
+          >
+            <Table.Thead bg="var(--mantine-color-body)">
+              <Table.Tr>
+                <Table.Th style={{ width: 44, textAlign: 'center' }}>
+                  <div className="flex justify-center">
                     <Checkbox
-                      size="small"
+                      size="xs"
                       checked={allVisibleSelected}
                       indeterminate={someVisibleSelected}
                       onChange={handleToggleAll}
-                      slotProps={{ input: { 'aria-label': 'Alle sichtbaren Patienten auswählen' } }}
+                      aria-label="Alle sichtbaren Patienten auswählen"
                     />
-                  </Box>
-                </TableCell>
-                <SortCell label="Patienten-ID" field="patient_id" orderBy={orderBy} order={order} onSort={handleSort} />
-                <SortCell label="Erstellt am" field="created_at" orderBy={orderBy} order={order} onSort={handleSort} />
-                <SortCell label="Status" field="status" orderBy={orderBy} order={order} onSort={handleSort} />
-                <TableCell sx={{ whiteSpace: 'nowrap' }} align="center">
-                  <Tooltip title="FiLM-Modell Vorhersage — wird automatisch nach Eingang der Prä-OP Aufnahmen berechnet">
-                    <Box
-                      component="span"
-                      sx={{ borderBottom: '1px dashed', borderColor: 'text.secondary', cursor: 'help' }}
-                    >
-                      Prä-OP KI
-                    </Box>
-                  </Tooltip>
-                </TableCell>
-                <TableCell sx={{ whiteSpace: 'nowrap' }} align="center">
-                  <Tooltip title="FiLM-Modell Vorhersage — wird automatisch nach Eingang der Post-OP Aufnahmen berechnet">
-                    <Box
-                      component="span"
-                      sx={{ borderBottom: '1px dashed', borderColor: 'text.secondary', cursor: 'help' }}
-                    >
-                      Post-OP KI
-                    </Box>
-                  </Tooltip>
-                </TableCell>
-                <SortCell label="Löschdatum" field="expires_at" orderBy={orderBy} order={order} onSort={handleSort} />
-                <SortCell label="Aufnahmedatum" field="pre_op_date" orderBy={orderBy} order={order} onSort={handleSort} />
-                <TableCell sx={{ padding: 0 }} />
-              </TableRow>
-            </TableHead>
-            <TableBody>
+                  </div>
+                </Table.Th>
+                <SortHeader label="Patienten-ID" field="patient_id" orderBy={orderBy} order={order} onSort={handleSort} />
+                <SortHeader label="Erstellt am" field="created_at" orderBy={orderBy} order={order} onSort={handleSort} />
+                <SortHeader label="Status" field="status" orderBy={orderBy} order={order} onSort={handleSort} />
+                <SortHeader label="Löschdatum" field="expires_at" orderBy={orderBy} order={order} onSort={handleSort} />
+                <SortHeader label="Aufnahmedatum" field="pre_op_date" orderBy={orderBy} order={order} onSort={handleSort} />
+                <Table.Th style={{ width: 140, textAlign: 'center' }} />
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
               {paginated.map((p) => {
                 const isRP = p.prediction_pre === 'INFECTED' || p.prediction_post === 'INFECTED';
                 const expiresAtMs = new Date(p.expires_at).getTime();
                 const isExpired = !p.deleted_at && expiresAtMs <= nowMs;
                 const isExpiringSoon = !isExpired && expiresAtMs <= warningThresholdMs;
+                const expColor = p.deleted_at
+                  ? 'var(--mantine-color-green-6)'
+                  : isExpired || isExpiringSoon
+                    ? 'var(--mantine-color-red-6)'
+                    : undefined;
+                const isMenuOpen = menuOpenId === p.id;
                 return (
-                  <TableRow
+                  <Table.Tr
                     key={p.id}
-                    hover
-                    selected={selectedIds.has(p.id)}
                     onClick={() => navigate(`/details/${p.id}`, { state: { patientLabel: p.patient_id } })}
-                    sx={{
-                      cursor: 'pointer',
-                      '&:hover': {
-                        bgcolor: 'rgba(0,0,0,0.06)',
-                        '& .row-actions': { opacity: 1 },
-                      },
-                    }}
+                    className="group cursor-pointer"
+                    bg={selectedIds.has(p.id) || isMenuOpen ? 'var(--mantine-color-brand-light)' : undefined}
                   >
-                    <TableCell padding="checkbox" align="center" onClick={(e) => e.stopPropagation()}>
-                      <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+                    <Table.Td onClick={(e) => e.stopPropagation()} style={{ textAlign: 'center' }}>
+                      <div className="flex justify-center">
                         <Checkbox
-                          size="small"
+                          size="xs"
                           checked={selectedIds.has(p.id)}
                           onChange={() => handleToggleRow(p.id)}
-                          slotProps={{ input: { 'aria-label': `Patient ${p.patient_id} auswählen` } }}
+                          aria-label={`Patient ${p.patient_id} auswählen`}
                         />
-                      </Box>
-                    </TableCell>
-                    <TableCell
-                      sx={{
-                        fontFamily: 'ui-monospace, Consolas, monospace',
-                        fontWeight: 700,
-                        fontVariantNumeric: 'tabular-nums',
-                        color: 'primary.main',
-                      }}
-                      align="center"
-                    >
-                      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 0.75, width: '100%' }}>
-                        <Box
-                          sx={{
-                            width: 7,
-                            height: 7,
-                            borderRadius: '50%',
-                            bgcolor: isRP ? 'error.main' : 'transparent',
-                            flexShrink: 0,
+                      </div>
+                    </Table.Td>
+                    <Table.Td align="center">
+                      <div
+                        className="flex items-center justify-center gap-2 font-mono font-bold"
+                        style={{
+                          color: 'var(--mantine-color-brand-7)',
+                          fontVariantNumeric: 'tabular-nums',
+                        }}
+                      >
+                        <span
+                          className="h-[7px] w-[7px] shrink-0 rounded-full"
+                          style={{
+                            backgroundColor: isRP ? 'var(--mantine-color-red-6)' : 'transparent',
                           }}
                         />
                         {p.patient_id}
-                      </Box>
-                    </TableCell>
-                    <TableCell align="center">
-                      {formatDate(p.created_at)}
-                    </TableCell>
-                    <TableCell align="center">
+                      </div>
+                    </Table.Td>
+                    <Table.Td align="center">{formatDate(p.created_at)}</Table.Td>
+                    <Table.Td align="center">
                       <PatientStatusCell patient={p} />
-                    </TableCell>
-                    <TableCell align="center">
-                      <PredictionBadge value={p.prediction_pre} />
-                    </TableCell>
-                    <TableCell align="center">
-                      <PredictionBadge value={p.prediction_post} />
-                    </TableCell>
-                    <TableCell
-                      sx={{
-                        color: p.deleted_at ? 'success.main' : isExpired || isExpiringSoon ? 'error.main' : 'text.primary',
-                        fontWeight: p.deleted_at || isExpired ? 700 : 400,
-                      }}
-                      align="center"
-                    >
+                    </Table.Td>
+                    <Table.Td align="center" style={{ color: expColor, fontWeight: p.deleted_at || isExpired ? 700 : 400 }}>
                       {p.deleted_at ? (
-                        <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
-                          Gelöscht <CheckIcon sx={{ fontSize: 14 }} />
-                        </Box>
+                        <span className="inline-flex items-center gap-1">
+                          Gelöscht <Check size={14} />
+                        </span>
                       ) : (
-                        <Box sx={{ display: 'inline-flex', justifyContent: 'center', alignItems: 'center', gap: 0.5 }}>
+                        <span className="inline-flex items-center justify-center gap-1">
                           {formatDate(p.expires_at)}
-                          {isExpired && <WarningAmberIcon sx={{ fontSize: 16, color: 'error.main' }} />}
-                        </Box>
+                          {isExpired && <AlertTriangle size={14} color="var(--mantine-color-red-6)" />}
+                        </span>
                       )}
-                    </TableCell>
-                    <TableCell align="center" sx={{ color: p.pre_op_date ? 'text.primary' : 'text.disabled', fontSize: '0.8rem', whiteSpace: 'nowrap' }}>
+                    </Table.Td>
+                    <Table.Td
+                      align="center"
+                      style={{
+                        whiteSpace: 'nowrap',
+                        fontSize: '0.8rem',
+                        color: p.pre_op_date ? undefined : 'var(--mantine-color-dimmed)',
+                      }}
+                    >
                       {p.pre_op_date ? formatDateTime(p.pre_op_date) : NO_RECORDING_DATE}
-                    </TableCell>
-                    <TableCell align="center" onClick={(e) => e.stopPropagation()}>
-                      <Box
-                        className="row-actions"
-                        sx={{
-                          display: 'flex',
-                          justifyContent: 'center',
-                          alignItems: 'center',
-                          gap: 0.25,
-                          opacity: 0,
-                          transition: 'opacity 0.15s',
-                        }}
-                      >
-                        <Tooltip title="Weitere Aktionen">
-                          <IconButton
-                            size="small"
-                            onClick={(e) => { e.stopPropagation(); setMenuAnchor({ id: p.id, el: e.currentTarget }); }}
-                          >
-                            <MoreVertIcon fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
-                        <Menu
-                          anchorEl={menuAnchor?.el}
-                          open={menuAnchor?.id === p.id}
-                          onClose={() => setMenuAnchor(null)}
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <MenuItem onClick={() => {
-                            navigator.clipboard.writeText(`${window.location.origin}/p/${p.id}`);
-                            setCopiedId(p.id);
-                            setTimeout(() => setCopiedId(null), 2000);
-                            setMenuAnchor(null);
-                          }}>
-                            <ListItemIcon>
-                              {copiedId === p.id
-                                ? <CheckIcon fontSize="small" sx={{ color: 'success.main' }} />
-                                : <ContentCopyIcon fontSize="small" sx={{ color: 'info.main' }} />}
-                            </ListItemIcon>
-                            <ListItemText>{copiedId === p.id ? 'Kopiert!' : 'Link kopieren'}</ListItemText>
-                          </MenuItem>
-                          <MenuItem onClick={() => { downloadPatientPdf(p.id); setMenuAnchor(null); }}>
-                            <ListItemIcon><PictureAsPdfIcon fontSize="small" sx={{ color: 'warning.main' }} /></ListItemIcon>
-                            <ListItemText>PDF öffnen</ListItemText>
-                          </MenuItem>
-                          <MenuItem onClick={() => { exportPatients([p.id]); setMenuAnchor(null); }}>
-                            <ListItemIcon><DownloadIcon fontSize="small" sx={{ color: 'text.secondary' }} /></ListItemIcon>
-                            <ListItemText>Exportieren</ListItemText>
-                          </MenuItem>
+                    </Table.Td>
+                    <Table.Td align="center" style={{ width: 140 }} onClick={(e) => e.stopPropagation()}>
+                      <div className={`flex items-center justify-center gap-0.5 transition-opacity ${isMenuOpen ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+                        <Menu position="bottom-end" withinPortal onOpen={() => setMenuOpenId(p.id)} onClose={() => setMenuOpenId(null)}>
+                          <Menu.Target>
+                            <ActionIcon
+                              size="sm"
+                              variant="subtle"
+                              color="gray"
+                              onClick={(e) => e.stopPropagation()}
+                              title="Weitere Aktionen"
+                            >
+                              <MoreVertical size={14} />
+                            </ActionIcon>
+                          </Menu.Target>
+                          <Menu.Dropdown onClick={(e) => e.stopPropagation()}>
+                            <Menu.Item
+                              leftSection={
+                                copiedId === p.id ? (
+                                  <Check size={14} color="var(--mantine-color-green-6)" />
+                                ) : (
+                                  <Copy size={14} color="var(--mantine-color-cyan-6)" />
+                                )
+                              }
+                              onClick={() => {
+                                navigator.clipboard.writeText(`${window.location.origin}/p/${p.id}`);
+                                setCopiedId(p.id);
+                                setTimeout(() => setCopiedId(null), 2000);
+                              }}
+                            >
+                              {copiedId === p.id ? 'Kopiert!' : 'Link kopieren'}
+                            </Menu.Item>
+                            <Menu.Item
+                              leftSection={<FileText size={14} color="var(--mantine-color-yellow-6)" />}
+                              onClick={() => downloadPatientPdf(p.id)}
+                            >
+                              PDF öffnen
+                            </Menu.Item>
+                            <Menu.Item
+                              leftSection={<Download size={14} />}
+                              onClick={() => exportPatients([p.id])}
+                            >
+                              Exportieren
+                            </Menu.Item>
+                          </Menu.Dropdown>
                         </Menu>
-                        <Tooltip title="Patienten-Aufnahme öffnen">
-                          <IconButton
-                            size="small"
+                        <Tooltip label="Patienten-Aufnahme öffnen">
+                          <ActionIcon
+                            size="sm"
+                            variant="subtle"
+                            color="brand"
                             component="a"
                             href={`/p/${p.id}`}
                             target="_blank"
                             rel="noopener noreferrer"
                             onClick={(e: React.MouseEvent) => e.stopPropagation()}
                           >
-                            <OpenInNewIcon fontSize="small" color="primary" />
-                          </IconButton>
+                            <ExternalLink size={14} />
+                          </ActionIcon>
                         </Tooltip>
                         {p.status === 'PRE_OP_DONE' && (
-                          <Tooltip title="Für Post-OP freischalten">
-                            <IconButton
-                              size="small"
-                              disabled={unlocking === p.id}
-                              onClick={(e) => { e.stopPropagation(); handleUnlock(p); }}
+                          <Tooltip label="Für Post-OP freischalten">
+                            <ActionIcon
+                              size="sm"
+                              variant="subtle"
+                              color="green"
+                              loading={unlocking === p.id}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleUnlock(p);
+                              }}
                             >
-                              {unlocking === p.id
-                                ? <CircularProgress size={14} />
-                                : <LockOpenIcon fontSize="small" sx={{ color: 'success.main' }} />}
-                            </IconButton>
+                              <Unlock size={14} />
+                            </ActionIcon>
                           </Tooltip>
                         )}
                         {p.status === 'POST_OP_DONE' && (
-                          <Tooltip title="Neue Follow-Up Sitzung starten">
-                            <IconButton
-                              size="small"
-                              disabled={creatingFollowUp === p.id}
-                              onClick={(e) => { e.stopPropagation(); handleCreateFollowUp(p); }}
+                          <Tooltip label="Neue Follow-Up Sitzung starten">
+                            <ActionIcon
+                              size="sm"
+                              variant="subtle"
+                              color="cyan"
+                              loading={creatingFollowUp === p.id}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleCreateFollowUp(p);
+                              }}
                             >
-                              {creatingFollowUp === p.id
-                                ? <CircularProgress size={14} />
-                                : <LockOpenIcon fontSize="small" sx={{ color: 'info.main' }} />}
-                            </IconButton>
+                              <Unlock size={14} />
+                            </ActionIcon>
                           </Tooltip>
                         )}
-                        <Tooltip title="Löschen">
-                          <IconButton
-                            size="small"
-                            onClick={() => { setDeleteTarget(p); setDeleteOpen(true); }}
+                        <Tooltip label="Löschen">
+                          <ActionIcon
+                            size="sm"
+                            variant="subtle"
+                            color="red"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setDeleteTarget(p);
+                              setDeleteOpen(true);
+                            }}
                           >
-                            <DeleteIcon fontSize="small" color="error" />
-                          </IconButton>
+                            <Trash2 size={14} />
+                          </ActionIcon>
                         </Tooltip>
-                      </Box>
-                    </TableCell>
-                  </TableRow>
+                      </div>
+                    </Table.Td>
+                  </Table.Tr>
                 );
               })}
               {paginated.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={9} align="center" sx={{ py: 6, color: 'text.secondary' }}>
-                    {search
-                      ? `Kein Patient mit ID „${search}" gefunden.`
-                      : activeFilter
-                        ? 'Keine Patienten in dieser Kategorie.'
-                        : 'Noch keine Patienten angelegt.'}
-                  </TableCell>
-                </TableRow>
+                <Table.Tr>
+                  <Table.Td colSpan={9} align="center" py="xl">
+                    <Text size="sm" c="dimmed">
+                      {search
+                        ? `Kein Patient mit ID „${search}" gefunden.`
+                        : activeFilter
+                          ? 'Keine Patienten in dieser Kategorie.'
+                          : 'Noch keine Patienten angelegt.'}
+                    </Text>
+                  </Table.Td>
+                </Table.Tr>
               )}
-            </TableBody>
+            </Table.Tbody>
           </Table>
-        </TableContainer>
+        </Table.ScrollContainer>
 
-        {/* Table footer: count + page size + pagination */}
-        <Box
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            px: 2,
-            py: 1.25,
-            borderTop: '1px solid',
-            borderColor: 'divider',
-            bgcolor: 'action.hover',
-            flexWrap: 'wrap',
-            gap: 1,
-          }}
-        >
-          {/* Left: count + page size */}
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            <Typography fontSize="0.8rem" color="text.secondary">
+        {/* Footer */}
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[var(--mantine-color-default-border)] bg-[var(--mantine-color-default-hover)] px-4 py-2.5">
+          <div className="flex items-center gap-4">
+            <Text size="sm" c="dimmed" style={{ fontVariantNumeric: 'tabular-nums' }}>
               {sorted.length} Patient{sorted.length !== 1 ? 'en' : ''}
-            </Typography>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-              <Typography fontSize="0.75rem" color="text.secondary">
-                Zeige:
-              </Typography>
+            </Text>
+            <div className="flex items-center gap-1">
+              <Text size="sm" c="dimmed">Zeige:</Text>
               {PAGE_SIZE_OPTIONS.map((size) => (
-                <Box
+                <UnstyledButton
                   key={size}
-                  component="button"
-                  onClick={() => { setRowsPerPage(size); setPage(0); }}
-                  sx={{
-                    width: 28,
-                    height: 24,
-                    borderRadius: 0.75,
+                  onClick={() => {
+                    setRowsPerPage(size);
+                    setPage(0);
+                  }}
+                  className="flex h-7 w-8 items-center justify-center rounded text-sm transition-colors"
+                  style={{
                     border: '1px solid',
-                    borderColor: rowsPerPage === size ? 'primary.main' : 'divider',
-                    bgcolor: rowsPerPage === size ? 'primary.main' : 'transparent',
-                    color: rowsPerPage === size ? '#fff' : 'text.secondary',
-                    fontSize: '0.75rem',
+                    borderColor: rowsPerPage === size ? 'var(--mantine-color-brand-6)' : 'var(--mantine-color-default-border)',
+                    backgroundColor: rowsPerPage === size ? 'var(--mantine-color-brand-6)' : 'transparent',
+                    color: rowsPerPage === size ? '#fff' : 'var(--mantine-color-dimmed)',
                     fontWeight: rowsPerPage === size ? 700 : 400,
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontFamily: 'inherit',
-                    transition: 'all 0.15s',
-                    '&:hover': !( rowsPerPage === size) ? { borderColor: 'primary.main', color: 'primary.main' } : {},
+                    fontVariantNumeric: 'tabular-nums',
                   }}
                 >
                   {size}
-                </Box>
+                </UnstyledButton>
               ))}
-            </Box>
-          </Box>
+            </div>
+          </div>
 
-          {/* Right: pagination */}
           {totalPages > 1 && (
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-              <IconButton
-                size="small"
+            <div className="flex items-center gap-1">
+              <ActionIcon
+                size="sm"
+                variant="subtle"
+                color="gray"
                 disabled={page === 0}
                 onClick={() => setPage((p) => p - 1)}
-                sx={{ width: 28, height: 28, borderRadius: 0.75 }}
               >
-                <NavigateBeforeIcon fontSize="small" />
-              </IconButton>
-
+                <ChevronLeft size={14} />
+              </ActionIcon>
               {pageButtons.map((btn, i) =>
                 btn === '…' ? (
-                  <Typography key={`ellipsis-${i}`} fontSize="0.75rem" color="text.secondary" sx={{ px: 0.5 }}>
-                    …
-                  </Typography>
+                  <Text key={`ellipsis-${i}`} size="sm" c="dimmed" px={4}>…</Text>
                 ) : (
-                  <Box
+                  <UnstyledButton
                     key={btn}
-                    component="button"
                     onClick={() => setPage(btn)}
-                    sx={{
-                      width: 28,
-                      height: 28,
-                      borderRadius: 0.75,
+                    className="flex h-7 w-8 items-center justify-center rounded text-sm transition-colors"
+                    style={{
                       border: '1px solid',
-                      borderColor: page === btn ? 'primary.main' : 'transparent',
-                      bgcolor: page === btn ? 'primary.main' : 'transparent',
-                      color: page === btn ? '#fff' : 'text.secondary',
-                      fontSize: '0.75rem',
+                      borderColor: page === btn ? 'var(--mantine-color-brand-6)' : 'transparent',
+                      backgroundColor: page === btn ? 'var(--mantine-color-brand-6)' : 'transparent',
+                      color: page === btn ? '#fff' : 'var(--mantine-color-dimmed)',
                       fontWeight: page === btn ? 700 : 400,
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontFamily: 'inherit',
-                      transition: 'all 0.15s',
-                      '&:hover': !(page === btn) ? { borderColor: 'divider', color: 'text.primary' } : {},
+                      fontVariantNumeric: 'tabular-nums',
                     }}
                   >
                     {(btn as number) + 1}
-                  </Box>
+                  </UnstyledButton>
                 ),
               )}
-
-              <IconButton
-                size="small"
+              <ActionIcon
+                size="sm"
+                variant="subtle"
+                color="gray"
                 disabled={page >= totalPages - 1}
                 onClick={() => setPage((p) => p + 1)}
-                sx={{ width: 28, height: 28, borderRadius: 0.75 }}
               >
-                <NavigateNextIcon fontSize="small" />
-              </IconButton>
-            </Box>
+                <ChevronRight size={14} />
+              </ActionIcon>
+            </div>
           )}
-        </Box>
-      </Box>
+        </div>
+      </Paper>
 
       <ConfirmDialog
         open={deleteOpen}
         title="Patient löschen?"
         message={`Sind Sie sicher, dass Sie den Patienten "${deleteTarget?.patient_id}" löschen möchten? Die Daten werden gelöscht — stellen Sie sicher, dass alle Audiodateien bereits auf den verschlüsselten lokalen Server übertragen wurden.`}
         confirmLabel="Löschen"
-        confirmColor="error"
+        confirmColor="red"
         onConfirm={handleDelete}
-        onCancel={() => { setDeleteOpen(false); setDeleteTarget(null); }}
+        onCancel={() => {
+          setDeleteOpen(false);
+          setDeleteTarget(null);
+        }}
       />
 
       <ConfirmDialog
@@ -672,39 +591,41 @@ export default function PatientList({
         title={selectedIds.size > 1 ? 'Ausgewählte Patienten löschen?' : 'Ausgewählten Patienten löschen?'}
         message={`Möchten Sie ${selectedIds.size > 1 ? `die ${selectedIds.size} ausgewählten Patienten` : 'den ausgewählten Patienten'} löschen? Die Daten werden gelöscht — stellen Sie sicher, dass alle Audiodateien bereits auf den verschlüsselten lokalen Server übertragen wurden.`}
         confirmLabel={selectedIds.size > 1 ? `Alle (${selectedIds.size}) löschen` : 'Löschen'}
-        confirmColor="error"
+        confirmColor="red"
         onConfirm={handleBulkDelete}
         onCancel={() => setBulkDeleteOpen(false)}
       />
-
     </>
   );
 }
-
 
 function PatientStatusCell({ patient }: { patient: Patient }) {
   const { status, current_post_op_session_number: sessionNum } = patient;
   const showLock = status === 'PRE_OP_DONE' || status === 'POST_OP_DONE';
 
   let badge: ReactNode;
-  if (sessionNum != null && status === 'POST_OP_STARTED') {
-    badge = <FollowUpBadge sessionNumber={sessionNum} complete={false} />;
-  } else if (sessionNum != null && status === 'POST_OP_DONE') {
-    badge = <FollowUpBadge sessionNumber={sessionNum} complete />;
+  if (sessionNum != null && sessionNum >= 2 && status === 'POST_OP_STARTED') {
+    badge = <FollowUpBadge sessionNumber={sessionNum - 1} complete={false} />;
+  } else if (sessionNum != null && sessionNum >= 2 && status === 'POST_OP_DONE') {
+    badge = <FollowUpBadge sessionNumber={sessionNum - 1} complete />;
   } else {
     badge = <StatusBadge status={status as PatientStatus} />;
   }
 
   return (
-    <Box sx={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 0.75 }}>
+    <span className="inline-flex items-center justify-center gap-2">
       {badge}
-      {showLock && <LockIcon sx={{ fontSize: 13, color: 'warning.main' }} />}
-    </Box>
+      {showLock && <Lock size={13} color="var(--mantine-color-yellow-6)" />}
+    </span>
   );
 }
 
-function SortCell({
-  label, field, orderBy, order, onSort,
+function SortHeader({
+  label,
+  field,
+  orderBy,
+  order,
+  onSort,
 }: {
   label: string;
   field: SortKey;
@@ -712,18 +633,18 @@ function SortCell({
   order: Order;
   onSort: (k: SortKey) => void;
 }) {
+  const active = orderBy === field;
   return (
-    <TableCell sx={{ whiteSpace: 'nowrap' }} align="center">
-      <Box sx={{ width: '100%', display: 'flex', justifyContent: 'center' }}>
-        <TableSortLabel
-          active={orderBy === field}
-          direction={orderBy === field ? order : 'asc'}
-          onClick={() => onSort(field)}
-          sx={{ display: 'flex', justifyContent: 'center' }}
-        >
-          {label}
-        </TableSortLabel>
-      </Box>
-    </TableCell>
+    <Table.Th style={{ whiteSpace: 'nowrap', textAlign: 'center' }}>
+      <UnstyledButton
+        onClick={() => onSort(field)}
+        className="mx-auto flex items-center gap-1 text-xs font-semibold uppercase tracking-wider"
+        style={{ color: active ? 'var(--mantine-color-text)' : 'var(--mantine-color-dimmed)' }}
+      >
+        {label}
+        {active &&
+          (order === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />)}
+      </UnstyledButton>
+    </Table.Th>
   );
 }
