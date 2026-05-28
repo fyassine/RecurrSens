@@ -255,9 +255,15 @@ class PatientPublicSerializer(serializers.ModelSerializer):
 class PatientCreateSerializer(serializers.ModelSerializer):
     """Serializer for creating a new patient. Only requires patient_id."""
 
+    start_post_op = serializers.BooleanField(
+        default=False,
+        write_only=True,
+        help_text='When true, the patient is initialised directly as POST_OP_STARTED.',
+    )
+
     class Meta:
         model = Patient
-        fields = ['id', 'patient_id', 'center']
+        fields = ['id', 'patient_id', 'center', 'start_post_op']
         read_only_fields = ['id', 'center']
 
     def validate_patient_id(self, value):
