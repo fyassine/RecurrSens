@@ -112,6 +112,39 @@ def delete_audio_from_s3(key: str) -> None:
         logger.error(f'Failed to delete S3 file {key}: {e}')
 
 
+def move_audio_in_s3(old_key: str, new_key: str) -> bool:
+    """
+    Move (copy + delete) an audio file within S3/MinIO.
+
+    Copies the object from *old_key* to *new_key* inside the same bucket,
+    then deletes the source.  Returns True on success, False if the copy
+    failed (the source object is left untouched in that case so no data is
+    lost).
+    """
+    if old_key == new_key:
+        return True  # Nothing to do
+
+    s3 = get_s3_client()
+    try:
+        s3.copy_object(
+            Bucket=settings.S3_BUCKET,
+            CopySource={'Bucket': settings.S3_BUCKET, 'Key': old_key},
+            Key=new_key,
+        )
+    except Exception as e:
+        logger.error(f'Failed to copy S3 file {old_key} → {new_key}: {e}')
+        return False
+
+    # Source copied successfully — remove old object
+    try:
+        s3.delete_object(Bucket=settings.S3_BUCKET, Key=old_key)
+    except Exception as e:
+        # Non-fatal: the copy succeeded, only cleanup failed
+        logger.warning(f'Failed to delete old S3 file {old_key} after copy: {e}')
+
+    return True
+
+
 def get_audio_from_s3(key: str) -> Optional[bytes]:
     """Download audio file data from S3/MinIO."""
     s3 = get_s3_client()

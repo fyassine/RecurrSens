@@ -562,8 +562,12 @@ class AudioFileReassignView(APIView):
     """
     PATCH /api/audio/<file_id>/reassign/
     Reassign an audio recording to a different phase/session.
-    Requires JWT (admin only). The change is purely metadata — the S3 object
-    is NOT moved; only the DB record's phase and session fields are updated.
+    Requires JWT (admin only).
+
+    The S3 object is physically moved (copy + delete) to a new key that
+    reflects the new phase/session, and the DB record's storage_key, phase,
+    and session fields are all updated atomically so that future exports and
+    streaming always resolve to the correct file location.
     """
     permission_classes = [IsAuthenticated]
 
@@ -601,9 +605,41 @@ class AudioFileReassignView(APIView):
         else:
             new_session = None
 
+        # ------------------------------------------------------------------
+        # Derive the new S3 storage key so the object location always matches
+        # the phase/session stored in the DB.
+        #
+        # Key format (mirrors AudioUploadView):
+        #   {patient_uuid}/pre/{exercise}.{ext}          ← PRE_OP, no session
+        #   {patient_uuid}/pre_{n}/{exercise}.{ext}      ← PRE_OP, session n
+        #   {patient_uuid}/post/{exercise}.{ext}         ← POST_OP, no session
+        #   {patient_uuid}/post_{n}/{exercise}.{ext}     ← POST_OP, session n
+        # ------------------------------------------------------------------
+        old_key = audio_file.storage_key
+        patient_uuid = str(audio_file.patient.id)
+        ext = old_key.rsplit('.', 1)[-1] if '.' in old_key else 'webm'
+        phase_prefix = 'pre' if new_phase == 'PRE_OP' else 'post'
+
+        if new_session is not None:
+            phase_folder = f'{phase_prefix}_{new_session.session_number}'
+        else:
+            phase_folder = phase_prefix
+
+        new_key = f'{patient_uuid}/{phase_folder}/{audio_file.exercise_id}.{ext}'
+
+        # Move the S3 object when the key changes
+        if new_key != old_key:
+            moved = services.move_audio_in_s3(old_key, new_key)
+            if not moved:
+                return Response(
+                    {'error': 'Datei konnte nicht in S3 verschoben werden.'},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                )
+
+        audio_file.storage_key = new_key
         audio_file.phase = new_phase
         audio_file.session = new_session
-        audio_file.save(update_fields=['phase', 'session'])
+        audio_file.save(update_fields=['storage_key', 'phase', 'session'])
 
         from .serializers import AudioFileCompactSerializer
         return Response(
