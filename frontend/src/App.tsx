@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AppDataContext } from './context/AppDataContext';
 import type { Patient } from './types';
@@ -10,7 +10,7 @@ import PatientWizardPage from './pages/PatientWizardPage';
 import AnalytikPage from './pages/AnalytikPage';
 import EinstellungenPage from './pages/EinstellungenPage';
 import AppShell from './components/layout/AppShell';
-import { isLoggedIn } from './api/client';
+import { isLoggedIn, getMe, getUserRole, type UserRole } from './api/client';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   if (!isLoggedIn()) {
@@ -24,10 +24,47 @@ export default function App() {
 
   const [notificationCount, setNotificationCount] = useState(0);
   const [patients, setPatients] = useState<Patient[]>([]);
+  const [userRole, setUserRole] = useState<UserRole>(() => getUserRole());
+  const [centerName, setCenterName] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadMe = async () => {
+      if (!isLoggedIn()) {
+        setCenterName(null);
+        return;
+      }
+      try {
+        const data = await getMe();
+        if (cancelled) return;
+        setUserRole(data.role);
+        setCenterName(data.center_name);
+      } catch {
+        if (cancelled) return;
+        setUserRole(getUserRole());
+        setCenterName(null);
+      }
+    };
+
+    loadMe();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
     <AppDataContext.Provider
-      value={{ notificationCount, setNotificationCount, patients, setPatients }}
+      value={{
+        notificationCount,
+        setNotificationCount,
+        patients,
+        setPatients,
+        userRole,
+        setUserRole,
+        centerName,
+        setCenterName,
+      }}
     >
       <BrowserRouter>
         <Routes>

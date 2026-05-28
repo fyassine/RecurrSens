@@ -1,6 +1,7 @@
 export interface Patient {
   id: string;
   patient_id: string;
+  center: string | null;
   status: PatientStatus;
   prediction_pre: PredictionStatus;
   prediction_post: PredictionStatus;

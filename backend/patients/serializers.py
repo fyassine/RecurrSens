@@ -130,7 +130,7 @@ class PatientListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Patient
         fields = [
-            'id', 'patient_id', 'status',
+            'id', 'patient_id', 'center', 'status',
             'prediction_pre', 'prediction_post',
             'audio_count_pre', 'audio_count_post',
             'current_post_op_session_number',
@@ -257,8 +257,8 @@ class PatientCreateSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Patient
-        fields = ['id', 'patient_id']
-        read_only_fields = ['id']
+        fields = ['id', 'patient_id', 'center']
+        read_only_fields = ['id', 'center']
 
     def validate_patient_id(self, value):
         if not value or not value.strip():

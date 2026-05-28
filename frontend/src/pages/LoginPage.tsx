@@ -12,10 +12,12 @@ import {
 } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { motion } from 'motion/react';
-import { login } from '../api/client';
+import { getMe, getUserRole, login } from '../api/client';
+import { useAppData } from '../context/AppDataContext';
 
 export default function LoginPage() {
   const navigate = useNavigate();
+  const { setUserRole, setCenterName } = useAppData();
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -32,6 +34,14 @@ export default function LoginPage() {
     setLoading(true);
     try {
       await login(values.username, values.password);
+      try {
+        const me = await getMe();
+        setUserRole(me.role);
+        setCenterName(me.center_name);
+      } catch {
+        setUserRole(getUserRole());
+        setCenterName(null);
+      }
       navigate('/', { replace: true });
     } catch {
       setError('Anmeldung fehlgeschlagen. Bitte überprüfen Sie Ihre Zugangsdaten.');

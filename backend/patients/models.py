@@ -2,6 +2,8 @@
 Data models for the Recurrensparese Diagnose application.
 
 Models:
+- Center: Clinical center (Zentrum) for multi-tenant patient isolation.
+- UserProfile: Extends Django's User with role and center assignment.
 - Patient: Core entity with pseudonym, AI predictions, and workflow status.
 - RecordingSession: Groups audio recordings for a single recording visit.
 - AudioFile: Audio recordings linked to a patient, session, exercise, and phase.
@@ -13,6 +15,55 @@ from django.db import models
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.utils import timezone
 from django.conf import settings
+
+
+class Center(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField(max_length=200, unique=True, verbose_name='Zentrum')
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Erstellt am')
+
+    class Meta:
+        ordering = ['name']
+        verbose_name = 'Zentrum'
+        verbose_name_plural = 'Zentren'
+
+    def __str__(self):
+        return self.name
+
+
+class UserProfile(models.Model):
+    class Role(models.TextChoices):
+        SUPER_ADMIN = 'SUPER_ADMIN', 'Super Admin'
+        CENTER_USER = 'CENTER_USER', 'Zentrum-Benutzer'
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='profile',
+        verbose_name='Benutzer',
+    )
+    role = models.CharField(
+        max_length=20,
+        choices=Role.choices,
+        default=Role.SUPER_ADMIN,
+        verbose_name='Rolle',
+    )
+    center = models.ForeignKey(
+        Center,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='users',
+        verbose_name='Zentrum',
+        help_text='Pflichtfeld für CENTER_USER; leer für SUPER_ADMIN',
+    )
+
+    class Meta:
+        verbose_name = 'Benutzerprofil'
+        verbose_name_plural = 'Benutzerprofile'
+
+    def __str__(self):
+        return f'{self.user.username} ({self.get_role_display()})'  # type: ignore[attr-defined]
 
 
 class Exercise(models.Model):
@@ -74,6 +125,16 @@ class Patient(models.Model):
         max_length=100, unique=True,
         verbose_name='Pseudonym',
         help_text='Pseudonym des Patienten (kein echter Name)'
+    )
+
+    # Center assignment (null = legacy patient with no center restriction)
+    center = models.ForeignKey(
+        Center,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='patients',
+        verbose_name='Zentrum',
     )
 
     # Workflow

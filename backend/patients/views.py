@@ -53,7 +53,7 @@ from .serializers import (
     ExerciseSkipSerializer,
     ExerciseSkipCreateSerializer,
 )
-from .permissions import IsAdminUser, IsPatientTokenValid, IsAdminOrPatientToken
+from .permissions import IsAdminUser, IsPatientTokenValid, IsAdminOrPatientToken, IsSuperAdmin, _get_role, _get_center
 from . import services
 from .audio_validation import (
     ALLOWED_EXTENSIONS,
@@ -78,7 +78,27 @@ class PatientViewSet(viewsets.ModelViewSet):
     lookup_field = 'pk'
 
     def get_queryset(self):
-        return Patient.objects.prefetch_related('audio_files').all()
+        qs = Patient.objects.prefetch_related('audio_files').all()
+        if _get_role(self.request.user) == 'CENTER_USER':
+            center = _get_center(self.request.user)
+            if center is None:
+                return Patient.objects.none()
+            return qs.filter(center=center)
+        return qs
+
+    def perform_create(self, serializer):
+        if _get_role(self.request.user) == 'CENTER_USER':
+            serializer.save(center=_get_center(self.request.user))
+        else:
+            serializer.save()
+
+    def destroy(self, request, *args, **kwargs):
+        if _get_role(request.user) != 'SUPER_ADMIN':
+            return Response(
+                {'error': 'Nur Super-Admins dürfen Patienten löschen.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        return super().destroy(request, *args, **kwargs)
 
     def get_serializer_class(self):
         if self.action == 'list':
@@ -669,6 +689,21 @@ class ExerciseListView(generics.ListAPIView):
 # Data Export
 # =============================================================================
 
+class MeView(APIView):
+    """Return the current user's role and center info."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        role = _get_role(request.user)
+        center = _get_center(request.user)
+        return Response({
+            'username': request.user.username,
+            'role': role,
+            'center_id': str(center.id) if center else None,
+            'center_name': center.name if center else None,
+        })
+
+
 class ExportView(APIView):
     """Export patient data as a ZIP file.
 
@@ -676,7 +711,7 @@ class ExportView(APIView):
         ids: Optional comma-separated list of patient UUIDs to export.
              When omitted, exports all completed patients.
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsSuperAdmin]
 
     def get(self, request):
         import uuid as _uuid

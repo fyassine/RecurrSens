@@ -4,7 +4,7 @@ Provides a rich admin interface for managing patients, audio files, exercises, a
 """
 from django.contrib import admin
 from django.utils import timezone
-from .models import Patient, AudioFile, Exercise, RecordingSession, PatientFeedback, ExerciseSkip
+from .models import Patient, AudioFile, Exercise, RecordingSession, PatientFeedback, ExerciseSkip, Center, UserProfile
 from . import services
 
 
@@ -42,14 +42,14 @@ def create_postop_session(modeladmin, request, queryset):
 class PatientAdmin(admin.ModelAdmin):
     """Admin configuration for Patient model."""
     list_display = (
-        'patient_id', 'status',
+        'patient_id', 'center', 'status',
         'prediction_pre', 'prediction_post',
         'audio_count_pre', 'audio_count_post',
         'session_count',
         'is_soft_deleted',
         'expires_at', 'created_at',
     )
-    list_filter = ('status', 'prediction_pre', 'prediction_post', 'deleted_at')
+    list_filter = ('status', 'prediction_pre', 'prediction_post', 'deleted_at', 'center')
     search_fields = ('patient_id',)
     readonly_fields = ('id', 'created_at', 'updated_at', 'notification_sent_at', 'deleted_at')
     ordering = ('-created_at',)
@@ -57,7 +57,7 @@ class PatientAdmin(admin.ModelAdmin):
 
     fieldsets = (
         ('Identifikation', {
-            'fields': ('id', 'patient_id', 'status')
+            'fields': ('id', 'patient_id', 'center', 'status')
         }),
         ('Datenschutz', {
             'fields': ('expires_at', 'notification_sent_at', 'deleted_at'),
@@ -153,6 +153,20 @@ class ExerciseSkipAdmin(admin.ModelAdmin):
     readonly_fields = ('id', 'created_at')
     ordering = ('-created_at',)
     raw_id_fields = ('patient',)
+
+
+@admin.register(Center)
+class CenterAdmin(admin.ModelAdmin):
+    list_display = ('name', 'created_at')
+    search_fields = ('name',)
+    readonly_fields = ('id', 'created_at')
+
+
+@admin.register(UserProfile)
+class UserProfileAdmin(admin.ModelAdmin):
+    list_display = ('user', 'role', 'center')
+    list_filter = ('role', 'center')
+    search_fields = ('user__username',)
 
 
 # Customize admin site branding
