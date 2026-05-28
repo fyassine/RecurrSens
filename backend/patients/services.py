@@ -242,6 +242,30 @@ def advance_patient_step(patient: Patient) -> Patient:
     return patient
 
 
+def init_post_op_patient(patient: Patient) -> Patient:
+    """
+    Initialise a newly created patient directly as post-operative.
+
+    Used when a patient presents for their first visit after surgery and has no
+    pre-operative recordings.  The function:
+        - Sets status to POST_OP_STARTED
+        - Records post_op_date as now()
+        - Creates the first POST_OP recording session
+
+    Returns the updated patient instance.
+    """
+    patient.status = Patient.Status.POST_OP_STARTED
+    patient.post_op_date = timezone.now()
+    patient.save(update_fields=['status', 'post_op_date', 'updated_at'])
+
+    create_recording_session(patient, RecordingSession.Phase.POST_OP)
+
+    logger.info(
+        f'Patient {patient.patient_id} initialised directly as POST_OP_STARTED'
+    )
+    return patient
+
+
 # =============================================================================
 # Completeness Check
 # =============================================================================

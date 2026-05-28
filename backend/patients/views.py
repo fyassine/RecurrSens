@@ -87,10 +87,16 @@ class PatientViewSet(viewsets.ModelViewSet):
         return qs
 
     def perform_create(self, serializer):
+        # Pop write-only flag before passing validated data to save()
+        start_post_op = serializer.validated_data.pop('start_post_op', False)
+
         if _get_role(self.request.user) == 'CENTER_USER':
-            serializer.save(center=_get_center(self.request.user))
+            patient = serializer.save(center=_get_center(self.request.user))
         else:
-            serializer.save()
+            patient = serializer.save()
+
+        if start_post_op:
+            services.init_post_op_patient(patient)
 
     def destroy(self, request, *args, **kwargs):
         if _get_role(request.user) != 'SUPER_ADMIN':

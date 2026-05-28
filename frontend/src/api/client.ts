@@ -139,8 +139,14 @@ export async function getPatient(id: string): Promise<PatientDetail> {
   return data;
 }
 
-export async function createPatient(patientId: string): Promise<PatientDetail> {
-  const { data } = await api.post('/patients/', { patient_id: patientId });
+export async function createPatient(
+  patientId: string,
+  startPostOp = false,
+): Promise<PatientDetail> {
+  const { data } = await api.post('/patients/', {
+    patient_id: patientId,
+    start_post_op: startPostOp,
+  });
   return data;
 }
 

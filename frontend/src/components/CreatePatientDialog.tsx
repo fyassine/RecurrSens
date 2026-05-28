@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Alert, Button, Group, Modal, Stack, Text, TextInput } from '@mantine/core';
+import { Alert, Button, Checkbox, Group, Modal, Stack, Text, TextInput } from '@mantine/core';
 import { Plus, CheckCircle2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { createPatient } from '../api/client';
@@ -24,6 +24,7 @@ export default function CreatePatientDialog({
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState<1 | 2>(1);
   const [patientId, setPatientId] = useState('');
+  const [startPostOp, setStartPostOp] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [created, setCreated] = useState<{ id: string; patient_id: string } | null>(null);
@@ -33,6 +34,7 @@ export default function CreatePatientDialog({
     setTimeout(() => {
       setStep(1);
       setPatientId('');
+      setStartPostOp(false);
       setError('');
       setCreated(null);
     }, 300);
@@ -43,7 +45,7 @@ export default function CreatePatientDialog({
     setError('');
     setLoading(true);
     try {
-      const patient = await createPatient(patientId);
+      const patient = await createPatient(patientId, startPostOp);
       setCreated({ id: patient.id, patient_id: patient.patient_id });
       setStep(2);
       onCreated();
@@ -97,6 +99,13 @@ export default function CreatePatientDialog({
                   value={patientId}
                   onChange={(e) => setPatientId(e.currentTarget.value)}
                 />
+                <Checkbox
+                  id="start-post-op-checkbox"
+                  label="Patient ist bereits postoperativ"
+                  description="Erstvorstellung nach OP"
+                  checked={startPostOp}
+                  onChange={(e) => setStartPostOp(e.currentTarget.checked)}
+                />
                 <Group justify="flex-end">
                   <Button variant="default" onClick={handleClose}>Abbrechen</Button>
                   <Button type="submit" loading={loading}>Weiter</Button>
@@ -118,6 +127,9 @@ export default function CreatePatientDialog({
                 </Group>
                 <Text size="sm" c="dimmed">
                   Patient <strong>{created?.patient_id}</strong> ist bereit.
+                  {startPostOp && (
+                    <> Der Patient wurde direkt als <strong>postoperativ</strong> eingestuft.</>
+                  )}
                 </Text>
                 {created && <PatientAccessOptions patientId={created.id} patientLabel={created.patient_id} />}
                 <Group justify="flex-end">
