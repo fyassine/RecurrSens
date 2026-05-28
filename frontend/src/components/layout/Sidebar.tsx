@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { Tooltip } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
 import { clearTokens } from '../../api/client';
+import { useAppData } from '../../context/AppDataContext';
 
 function WaveLogo({ size = 36 }: { size?: number }) {
   return (
@@ -84,6 +85,8 @@ export default function Sidebar() {
   const location = useLocation();
   const navigate = useNavigate();
   const collapsed = !useMediaQuery('(min-width: 768px)', true);
+  const { centerName, userRole, setCenterName, setUserRole } = useAppData();
+  const centerLabel = centerName ?? (userRole === 'SUPER_ADMIN' ? 'Alle Zentren' : '');
 
   const isActive = (prefixes: string[]) =>
     prefixes.some((prefix) =>
@@ -96,6 +99,8 @@ export default function Sidebar() {
 
   const handleLogout = () => {
     clearTokens();
+    setUserRole('SUPER_ADMIN');
+    setCenterName(null);
     navigate('/login', { replace: true });
   };
 
@@ -112,7 +117,7 @@ export default function Sidebar() {
             <div className="text-[0.9375rem] font-bold leading-tight tracking-tight text-white">
               RecurrSens
             </div>
-            <div className="-mt-px text-[0.7rem] text-white/50">MRI</div>
+            <div className="-mt-px text-[0.7rem] text-white/50">{centerLabel}</div>
           </div>
         )}
       </div>

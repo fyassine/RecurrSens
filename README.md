@@ -139,6 +139,43 @@ docker compose up -d
 | Django Admin | http://localhost:8000/admin/ |
 | MinIO Console | http://localhost:9001 |
 
+## Center & User Management (Admin)
+
+Order matters: create the center before you create the UserProfile.
+
+### Step 0 - Create the Center
+
+Admin -> Zentren -> Zentrum hinzufuegen -> set a name (e.g. `Klinik A`) -> save.
+
+The Zentrum dropdown in the UserProfile form only shows centers that already exist.
+
+### Step 1 - Create the Django user
+
+Go to `http://localhost:8000/admin/` -> Benutzer -> Benutzer hinzufuegen.
+
+Set a username and password, save. On the next screen you do not need to assign Django permissions or superuser status; the `UserProfile` handles role access.
+
+### Step 2 - Create the UserProfile
+
+Still in admin -> Benutzerprofile -> Benutzerprofil hinzufuegen.
+
+- **Benutzer**: the user you just created
+- **Rolle**: `CENTER_USER`
+- **Zentrum**: pick the center you created
+
+Save.
+
+### Step 3 - Log in as that user
+
+Open the frontend at `http://localhost:5173`, log in with the new credentials. The backend will:
+
+- Filter `GET /api/patients/` to only return that center's patients
+- Auto-assign `center=` on `POST /api/patients/` when they create a new patient
+- Block `DELETE` entirely (only `SUPER_ADMIN` can delete)
+
+The `GET /api/me/` endpoint returns `role` and `center_name` so the frontend can determine the logged-in role.
+No code changes are needed; the access control layer is already wired up.
+
 ---
 
 ## Documentation
@@ -147,3 +184,4 @@ docker compose up -d
 - [API Endpoints](docs/endpoints.md)
 - [Development Guide](docs/development.md)
 - [Deployment](docs/deployment.md)
+- [Center & User Management](docs/center-management.md) — how to create clinics, assign users, and migrate legacy patients

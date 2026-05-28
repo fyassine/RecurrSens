@@ -1,11 +1,16 @@
 import { createContext, useContext } from 'react';
 import type { Patient } from '../types';
+import type { UserRole } from '../api/client';
 
 interface AppDataContextValue {
   notificationCount: number;
   setNotificationCount: (count: number) => void;
   patients: Patient[];
   setPatients: (patients: Patient[]) => void;
+  userRole: UserRole;
+  setUserRole: (role: UserRole) => void;
+  centerName: string | null;
+  setCenterName: (name: string | null) => void;
 }
 
 export const AppDataContext = createContext<AppDataContextValue>({
@@ -13,6 +18,10 @@ export const AppDataContext = createContext<AppDataContextValue>({
   setNotificationCount: () => {},
   patients: [],
   setPatients: () => {},
+  userRole: 'SUPER_ADMIN',
+  setUserRole: () => {},
+  centerName: null,
+  setCenterName: () => {},
 });
 
 export function useAppData() {

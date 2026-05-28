@@ -41,13 +41,14 @@ export default function Topbar() {
   const theme = useMantineTheme();
   const { colorScheme, toggleColorScheme } = useMantineColorScheme();
   const isDark = colorScheme === 'dark';
-  const { patients, notificationCount } = useAppData();
+  const { patients, notificationCount, centerName, userRole } = useAppData();
   const location = useLocation();
   const { token } = useParams<{ token?: string }>();
 
   const patientLabel = (location.state as { patientLabel?: string } | null)?.patientLabel;
   const crumb = getBreadcrumb(location.pathname, patientLabel, token);
   const parts = crumb.split(' / ');
+  const centerLabel = centerName ?? (userRole === 'SUPER_ADMIN' ? 'Alle Zentren' : '');
 
   const successColor = theme.colors.green[6];
   const errorColor = theme.colors.red[6];
@@ -105,7 +106,7 @@ export default function Topbar() {
     >
       {/* Breadcrumb */}
       <div className="flex flex-1 items-center gap-1.5">
-        <Text size="sm" c="dimmed">MRI</Text>
+        <Text size="sm" c="dimmed">{centerLabel}</Text>
         {parts.map((part, i) => (
           <div key={i} className="flex items-center gap-1.5">
             <Text size="sm" c="dimmed">/</Text>

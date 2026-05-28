@@ -72,6 +72,45 @@ api.interceptors.response.use(
 );
 
 // ---------------------------------------------------------------------------
+// Role helpers — decode JWT payload without a library
+// ---------------------------------------------------------------------------
+
+export type UserRole = 'SUPER_ADMIN' | 'CENTER_USER';
+
+export type MeResponse = {
+  username: string;
+  role: UserRole;
+  center_id: string | null;
+  center_name: string | null;
+};
+
+function decodeJwtPayload(token: string): Record<string, unknown> | null {
+  try {
+    const base64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    const json = decodeURIComponent(
+      atob(base64)
+        .split('')
+        .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+        .join(''),
+    );
+    return JSON.parse(json) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+export function getUserRole(): UserRole {
+  const token = localStorage.getItem('access_token');
+  if (!token) return 'SUPER_ADMIN';
+  const payload = decodeJwtPayload(token);
+  return (payload?.role as UserRole) ?? 'SUPER_ADMIN';
+}
+
+export function isSuperAdmin(): boolean {
+  return getUserRole() === 'SUPER_ADMIN';
+}
+
+// ---------------------------------------------------------------------------
 // Auth
 // ---------------------------------------------------------------------------
 
@@ -79,6 +118,11 @@ export async function login(username: string, password: string) {
   const { data } = await axios.post('/api/auth/token/', { username, password });
   setTokens(data.access, data.refresh);
   return data;
+}
+
+export async function getMe(): Promise<MeResponse> {
+  const { data } = await api.get('/me/');
+  return data as MeResponse;
 }
 
 // ---------------------------------------------------------------------------

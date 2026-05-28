@@ -37,6 +37,7 @@ import { StatusBadge, FollowUpBadge } from './Badges';
 import { deletePatient, advancePatient, createSession, downloadPatientPdf, exportPatients } from '../api/client';
 import { formatDate, formatDateTime, NO_RECORDING_DATE } from '../utils';
 import ConfirmDialog from './ConfirmDialog';
+import { useAppData } from '../context/AppDataContext';
 
 export type DashboardFilter = 'ALL' | 'PRE_OP' | 'POST_OP' | 'RP' | 'OVERDUE_DELETE';
 
@@ -67,6 +68,9 @@ export default function PatientList({
   exportCount?: number;
 }) {
   const navigate = useNavigate();
+  const { userRole } = useAppData();
+  const canDelete = userRole === 'SUPER_ADMIN';
+  const canExport = userRole === 'SUPER_ADMIN';
   const [search, setSearch] = useState('');
   const [orderBy, setOrderBy] = useState<SortKey>('created_at');
   const [order, setOrder] = useState<Order>('desc');
@@ -225,28 +229,30 @@ export default function PatientList({
             className="max-w-[280px] flex-1"
           />
           <div className="flex-1" />
-          <AnimatePresence>
-            {selectedIds.size > 0 && (
-              <motion.div
-                initial={{ opacity: 0, y: -4 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -4 }}
-                transition={{ duration: 0.15 }}
-              >
-                <Button
-                  variant="outline"
-                  color="red"
-                  size="xs"
-                  leftSection={<Trash2 size={14} />}
-                  onClick={() => setBulkDeleteOpen(true)}
-                  className="min-w-[160px]"
+          {canDelete && (
+            <AnimatePresence>
+              {selectedIds.size > 0 && (
+                <motion.div
+                  initial={{ opacity: 0, y: -4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -4 }}
+                  transition={{ duration: 0.15 }}
                 >
-                  {selectedIds.size === 1 ? 'Löschen' : `Löschen (${selectedIds.size})`}
-                </Button>
-              </motion.div>
-            )}
-          </AnimatePresence>
-          {onExport && (
+                  <Button
+                    variant="outline"
+                    color="red"
+                    size="xs"
+                    leftSection={<Trash2 size={14} />}
+                    onClick={() => setBulkDeleteOpen(true)}
+                    className="min-w-[160px]"
+                  >
+                    {selectedIds.size === 1 ? 'Löschen' : `Löschen (${selectedIds.size})`}
+                  </Button>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          )}
+          {canExport && onExport && (
             <Button
               variant="outline"
               size="sm"
@@ -278,17 +284,20 @@ export default function PatientList({
           >
             <Table.Thead bg="var(--mantine-color-body)">
               <Table.Tr>
-                <Table.Th style={{ width: 44, textAlign: 'center' }}>
-                  <div className="flex justify-center">
-                    <Checkbox
-                      size="xs"
-                      checked={allVisibleSelected}
-                      indeterminate={someVisibleSelected}
-                      onChange={handleToggleAll}
-                      aria-label="Alle sichtbaren Patienten auswählen"
-                    />
-                  </div>
-                </Table.Th>
+                {canDelete && (
+                  <Table.Th style={{ width: 44, textAlign: 'center' }}>
+                    <div className="flex justify-center">
+                      <Checkbox
+                        size="xs"
+                        checked={allVisibleSelected}
+                        indeterminate={someVisibleSelected}
+                        onChange={handleToggleAll}
+                        aria-label="Alle sichtbaren Patienten auswählen"
+                      />
+                    </div>
+                  </Table.Th>
+                )}
+                {!canDelete && <Table.Th style={{ width: 44 }} />}
                 <SortHeader label="Patienten-ID" field="patient_id" orderBy={orderBy} order={order} onSort={handleSort} />
                 <SortHeader label="Erstellt am" field="created_at" orderBy={orderBy} order={order} onSort={handleSort} />
                 <SortHeader label="Status" field="status" orderBy={orderBy} order={order} onSort={handleSort} />
@@ -317,14 +326,16 @@ export default function PatientList({
                     bg={selectedIds.has(p.id) || isMenuOpen ? 'var(--mantine-color-brand-light)' : undefined}
                   >
                     <Table.Td onClick={(e) => e.stopPropagation()} style={{ textAlign: 'center' }}>
-                      <div className="flex justify-center">
-                        <Checkbox
-                          size="xs"
-                          checked={selectedIds.has(p.id)}
-                          onChange={() => handleToggleRow(p.id)}
-                          aria-label={`Patient ${p.patient_id} auswählen`}
-                        />
-                      </div>
+                      {canDelete && (
+                        <div className="flex justify-center">
+                          <Checkbox
+                            size="xs"
+                            checked={selectedIds.has(p.id)}
+                            onChange={() => handleToggleRow(p.id)}
+                            aria-label={`Patient ${p.patient_id} auswählen`}
+                          />
+                        </div>
+                      )}
                     </Table.Td>
                     <Table.Td align="center">
                       <div
@@ -406,12 +417,14 @@ export default function PatientList({
                             >
                               PDF öffnen
                             </Menu.Item>
-                            <Menu.Item
-                              leftSection={<Download size={14} />}
-                              onClick={() => exportPatients([p.id])}
-                            >
-                              Exportieren
-                            </Menu.Item>
+                            {canExport && (
+                              <Menu.Item
+                                leftSection={<Download size={14} />}
+                                onClick={() => exportPatients([p.id])}
+                              >
+                                Exportieren
+                              </Menu.Item>
+                            )}
                           </Menu.Dropdown>
                         </Menu>
                         <Tooltip label="Patienten-Aufnahme öffnen">
@@ -460,20 +473,22 @@ export default function PatientList({
                             </ActionIcon>
                           </Tooltip>
                         )}
-                        <Tooltip label="Löschen">
-                          <ActionIcon
-                            size="sm"
-                            variant="subtle"
-                            color="red"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setDeleteTarget(p);
-                              setDeleteOpen(true);
-                            }}
-                          >
-                            <Trash2 size={14} />
-                          </ActionIcon>
-                        </Tooltip>
+                        {canDelete && (
+                          <Tooltip label="Löschen">
+                            <ActionIcon
+                              size="sm"
+                              variant="subtle"
+                              color="red"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setDeleteTarget(p);
+                                setDeleteOpen(true);
+                              }}
+                            >
+                              <Trash2 size={14} />
+                            </ActionIcon>
+                          </Tooltip>
+                        )}
                       </div>
                     </Table.Td>
                   </Table.Tr>
