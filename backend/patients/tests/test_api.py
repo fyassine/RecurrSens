@@ -396,3 +396,129 @@ class ExerciseSerializerTest(BaseAPITest):
         response = client.get('/api/exercises/')
         self.assertEqual(len(response.data), 1)
         self.assertEqual(response.data[0]['example_audio_url'], '/examples/i_h.flac')
+
+
+class AudioFileReassignTest(BaseAPITest):
+    """
+    Tests for PATCH /api/audio/<file_id>/reassign/.
+
+    Verifies that reassigning an audio file between phases/sessions:
+    - Updates the DB phase, session, AND storage_key fields.
+    - Calls move_audio_in_s3 with the correct old/new S3 keys.
+    - Returns 404 for unknown files and 400 for invalid phase values.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.patient = self.create_test_patient('RSG-001')
+        self.pre_op_session = RecordingSession.objects.create(
+            patient=self.patient, phase='PRE_OP', session_number=1,
+        )
+        self.post_op_session = RecordingSession.objects.create(
+            patient=self.patient, phase='POST_OP', session_number=1,
+        )
+        # Create an audio file that is currently in PRE_OP
+        self.audio = AudioFile.objects.create(
+            patient=self.patient,
+            session=self.pre_op_session,
+            exercise_id='a_n',
+            phase='PRE_OP',
+            storage_key=f'{self.patient.id}/pre_1/a_n.webm',
+        )
+
+    def _patch_reassign(self, file_id, phase, session_id):
+        return self.client.patch(
+            f'/api/audio/{file_id}/reassign/',
+            {'phase': phase, 'session': session_id},
+            format='json',
+        )
+
+    def test_reassign_updates_db_and_storage_key(self):
+        """Reassigning PRE_OP → POST_OP must update phase, session, AND storage_key."""
+        from unittest.mock import patch as mock_patch
+
+        with mock_patch('patients.services.move_audio_in_s3', return_value=True) as mock_move:
+            response = self._patch_reassign(
+                self.audio.id, 'POST_OP', str(self.post_op_session.id)
+            )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        self.audio.refresh_from_db()
+        self.assertEqual(self.audio.phase, 'POST_OP')
+        self.assertEqual(self.audio.session_id, self.post_op_session.id)
+
+        expected_new_key = f'{self.patient.id}/post_1/a_n.webm'
+        self.assertEqual(self.audio.storage_key, expected_new_key)
+
+        # Confirm move was called with old → new key
+        mock_move.assert_called_once_with(
+            f'{self.patient.id}/pre_1/a_n.webm',
+            expected_new_key,
+        )
+
+    def test_reassign_without_session(self):
+        """Reassigning without a session should use bare phase folder (no session suffix)."""
+        from unittest.mock import patch as mock_patch
+
+        with mock_patch('patients.services.move_audio_in_s3', return_value=True) as mock_move:
+            response = self._patch_reassign(self.audio.id, 'POST_OP', None)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        self.audio.refresh_from_db()
+        expected_new_key = f'{self.patient.id}/post/a_n.webm'
+        self.assertEqual(self.audio.storage_key, expected_new_key)
+        mock_move.assert_called_once_with(
+            f'{self.patient.id}/pre_1/a_n.webm',
+            expected_new_key,
+        )
+
+    def test_reassign_same_key_skips_s3_move(self):
+        """If old_key == new_key, move_audio_in_s3 should not be called."""
+        from unittest.mock import patch as mock_patch
+
+        # Set up audio already at the target path
+        self.audio.storage_key = f'{self.patient.id}/pre/a_n.webm'
+        self.audio.session = None
+        self.audio.save()
+
+        with mock_patch('patients.services.move_audio_in_s3', return_value=True) as mock_move:
+            response = self._patch_reassign(self.audio.id, 'PRE_OP', None)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        mock_move.assert_not_called()
+
+    def test_reassign_s3_failure_returns_500(self):
+        """If move_audio_in_s3 returns False, the endpoint should return 500."""
+        from unittest.mock import patch as mock_patch
+
+        with mock_patch('patients.services.move_audio_in_s3', return_value=False):
+            response = self._patch_reassign(
+                self.audio.id, 'POST_OP', str(self.post_op_session.id)
+            )
+
+        self.assertEqual(response.status_code, status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        # DB must NOT have been changed
+        self.audio.refresh_from_db()
+        self.assertEqual(self.audio.phase, 'PRE_OP')
+        self.assertEqual(self.audio.storage_key, f'{self.patient.id}/pre_1/a_n.webm')
+
+    def test_reassign_unknown_file_returns_404(self):
+        import uuid
+        response = self._patch_reassign(str(uuid.uuid4()), 'POST_OP', None)
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_reassign_invalid_phase_returns_400(self):
+        response = self._patch_reassign(self.audio.id, 'INVALID_PHASE', None)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_reassign_requires_auth(self):
+        client = APIClient()
+        response = client.patch(
+            f'/api/audio/{self.audio.id}/reassign/',
+            {'phase': 'POST_OP', 'session': None},
+            format='json',
+        )
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
