@@ -1,0 +1,20 @@
+%% AI inference sequence (run_inference_task)
+sequenceDiagram
+    participant P as Patient/Admin
+    participant D as Django (advance_patient_step)
+    participant R as Redis broker
+    participant C as Celery worker
+    participant S as MinIO/S3
+    participant I as Inference Service
+
+    P->>D: advance -> PRE_OP_DONE / POST_OP_DONE
+    D->>R: run_inference_task.delay(patient_id, phase)
+    D-->>P: 200 (status updated, prediction = TODO)
+    R->>C: deliver task
+    C->>D: load Patient + AudioFile storage_keys (phase)
+    C->>I: POST /predict {bucket, keys}
+    I-->>C: {film_classifier:{prediction,percentage}, gradcam_pro:{prediction,percentage}}
+    C->>I: POST /reasoning {bucket, keys}
+    I-->>C: {text}
+    C->>D: write prediction_*, ai_percentage_rp_*, gradcam_*, ai_reasoning_*
+    Note over C,I: requests fail -> retry up to 3x, 30s delay
