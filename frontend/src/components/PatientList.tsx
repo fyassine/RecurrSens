@@ -122,7 +122,11 @@ export default function PatientList({
   }, [filtered, orderBy, order]);
 
   const totalPages = Math.max(1, Math.ceil(sorted.length / rowsPerPage));
-  const paginated = sorted.slice(page * rowsPerPage, (page + 1) * rowsPerPage);
+  const safePage = Math.min(page, totalPages - 1);
+  const paginated = sorted.slice(safePage * rowsPerPage, (safePage + 1) * rowsPerPage);
+  // page 1 = oldest, page N = newest; internal page 0 (newest slice) → displayed as totalPages
+  const displayPage    = totalPages - safePage;
+  const toInternalPage = (d: number) => totalPages - d;
 
   const rpCount = useMemo(
     () => sorted.filter((p) => p.prediction_pre === 'INFECTED' || p.prediction_post === 'INFECTED').length,
@@ -204,15 +208,15 @@ export default function PatientList({
 
   const pageButtons: (number | '…')[] = [];
   if (totalPages <= 5) {
-    for (let i = 0; i < totalPages; i++) pageButtons.push(i);
+    for (let i = 1; i <= totalPages; i++) pageButtons.push(i);
   } else {
-    pageButtons.push(0);
-    if (page > 2) pageButtons.push('…');
-    for (let i = Math.max(1, page - 1); i <= Math.min(totalPages - 2, page + 1); i++) {
-      pageButtons.push(i);
+    pageButtons.push(1);
+    if (displayPage > 3) pageButtons.push('…');
+    for (let d = Math.max(2, displayPage - 1); d <= Math.min(totalPages - 1, displayPage + 1); d++) {
+      pageButtons.push(d);
     }
-    if (page < totalPages - 3) pageButtons.push('…');
-    pageButtons.push(totalPages - 1);
+    if (displayPage < totalPages - 2) pageButtons.push('…');
+    pageButtons.push(totalPages);
   }
 
   return (
@@ -523,8 +527,9 @@ export default function PatientList({
                 <UnstyledButton
                   key={size}
                   onClick={() => {
+                    const newTotal = Math.max(1, Math.ceil(sorted.length / size));
                     setRowsPerPage(size);
-                    setPage(0);
+                    setPage((p) => Math.min(p, newTotal - 1));
                   }}
                   className="flex h-7 w-8 items-center justify-center rounded text-sm transition-colors"
                   style={{
@@ -548,8 +553,8 @@ export default function PatientList({
                 size="sm"
                 variant="subtle"
                 color="gray"
-                disabled={page === 0}
-                onClick={() => setPage((p) => p - 1)}
+                disabled={displayPage >= totalPages}
+                onClick={() => setPage(toInternalPage(displayPage + 1))}
               >
                 <ChevronLeft size={14} />
               </ActionIcon>
@@ -559,18 +564,18 @@ export default function PatientList({
                 ) : (
                   <UnstyledButton
                     key={btn}
-                    onClick={() => setPage(btn)}
+                    onClick={() => setPage(toInternalPage(btn as number))}
                     className="flex h-7 w-8 items-center justify-center rounded text-sm transition-colors"
                     style={{
                       border: '1px solid',
-                      borderColor: page === btn ? 'var(--mantine-color-brand-6)' : 'transparent',
-                      backgroundColor: page === btn ? 'var(--mantine-color-brand-6)' : 'transparent',
-                      color: page === btn ? '#fff' : 'var(--mantine-color-dimmed)',
-                      fontWeight: page === btn ? 700 : 400,
+                      borderColor: displayPage === btn ? 'var(--mantine-color-brand-6)' : 'transparent',
+                      backgroundColor: displayPage === btn ? 'var(--mantine-color-brand-6)' : 'transparent',
+                      color: displayPage === btn ? '#fff' : 'var(--mantine-color-dimmed)',
+                      fontWeight: displayPage === btn ? 700 : 400,
                       fontVariantNumeric: 'tabular-nums',
                     }}
                   >
-                    {(btn as number) + 1}
+                    {btn as number}
                   </UnstyledButton>
                 ),
               )}
@@ -578,8 +583,8 @@ export default function PatientList({
                 size="sm"
                 variant="subtle"
                 color="gray"
-                disabled={page >= totalPages - 1}
-                onClick={() => setPage((p) => p + 1)}
+                disabled={displayPage <= 1}
+                onClick={() => setPage(toInternalPage(displayPage - 1))}
               >
                 <ChevronRight size={14} />
               </ActionIcon>
