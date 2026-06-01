@@ -81,6 +81,11 @@ urlpatterns = [
         views.AudioDownloadUrlView.as_view(),
         name='audio-download-url',
     ),
+    path(
+        'audio/<uuid:file_id>/stream-url/',
+        views.AudioStreamUrlView.as_view(),
+        name='audio-stream-url',
+    ),
 
     # =========================================================================
     # Exercises (public)

@@ -278,22 +278,20 @@ class PatientCreateSerializer(serializers.ModelSerializer):
 
 class PatientUpdateSerializer(serializers.ModelSerializer):
     """
-    Serializer for updating patient data.
-    Allows partial updates of demographics, diagnosis, and status.
+    Serializer for updating patient demographics (admin only).
+
+    Deliberately excludes ``status`` and the AI prediction fields:
+      - ``status`` transitions must go through ``advance_patient_step`` (the
+        ``/advance/`` action) so the state machine and its side effects run.
+      - AI fields are written exclusively by the inference task via the ORM
+        (see ``tasks.run_inference_task``) and must not be client-writable.
     """
 
     class Meta:
         model = Patient
         fields = [
-            'patient_id', 'status',
+            'patient_id',
             'pre_op_date', 'post_op_date',
-            # AI fields (set by inference service, but allowed via API too)
-            'prediction_pre', 'ai_percentage_rp_pre',
-            'gradcam_prediction_pre', 'gradcam_percentage_pre',
-            'ai_reasoning_pre',
-            'prediction_post', 'ai_percentage_rp_post',
-            'gradcam_prediction_post', 'gradcam_percentage_post',
-            'ai_reasoning_post',
         ]
 
     def validate_patient_id(self, value):
