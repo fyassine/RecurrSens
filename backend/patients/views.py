@@ -732,6 +732,14 @@ class AudioStreamView(APIView):
         return response
 
 
+class AccountInfoView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        info = services.get_account_info(request.user, request)
+        return Response(info)
+
+
 class AudioDownloadUrlView(APIView):
     """Get a pre-signed download URL for an audio file."""
     permission_classes = [IsAuthenticated]

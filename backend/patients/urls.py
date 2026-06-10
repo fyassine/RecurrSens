@@ -113,4 +113,9 @@ urlpatterns = [
         views.MeView.as_view(),
         name='me',
     ),
+    path(
+        'me/account/',
+        views.AccountInfoView.as_view(),
+        name='me-account',
+    ),
 ]

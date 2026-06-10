@@ -32,3 +32,6 @@ requests>=2.32,<3.0
 
 # Utilities
 python-dateutil>=2.9,<3.0
+
+# User-agent parsing (login history device/browser detection)
+user-agents>=2.2,<3.0
