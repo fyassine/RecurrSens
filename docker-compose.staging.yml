@@ -42,6 +42,8 @@ services:
       INFERENCE_SERVICE_URL: ${INFERENCE_SERVICE_URL:-http://inference:8001}
       APP_URL: ${APP_URL:-https://staging.recurrsens.eu}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://staging.recurrsens.eu}
+      DJANGO_SUPERUSER_USERNAME: ${DJANGO_SUPERUSER_USERNAME:-admin}
+      DJANGO_SUPERUSER_PASSWORD: ${DJANGO_SUPERUSER_PASSWORD:-stimmbandlaesion}
     networks:
       - default
       - recurrsens_default     # Join production's network for db/redis/minio access
