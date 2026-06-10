@@ -409,3 +409,99 @@ class ExerciseSkip(models.Model):
             f'{self.get_phase_display()} - {self.exercise_id} '
             f'({self.patient.patient_id})'
         )
+
+
+
+class PatientAuditLog(models.Model):
+    """
+    Append-only audit log for patient-level events.
+
+    Records every meaningful action taken on or by a patient:
+    - Administrative actions (create, edit, export, delete)
+    - Patient-initiated uploads
+    - System-generated events (expiry scheduling)
+
+    This model is intentionally write-once: entries should never be
+    updated or deleted (they are the authoritative audit trail).
+    """
+
+    class EventType(models.TextChoices):
+        CREATE = 'create', 'Erstellt'
+        UPLOAD = 'upload', 'Upload'
+        DELETE = 'delete', 'Löschung'
+        EXPORT = 'export', 'Export'
+        EDIT = 'edit', 'Bearbeitet'
+        EXPIRY = 'expiry', 'Ablauf'
+        VIEW = 'view', 'Zugriff'
+
+    class Actor(models.TextChoices):
+        ADMIN = 'admin', 'Admin'
+        PATIENT = 'patient', 'Patient'
+        SYSTEM = 'system', 'System'
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    patient = models.ForeignKey(
+        Patient,
+        on_delete=models.CASCADE,
+        related_name='audit_logs',
+        verbose_name='Patient',
+    )
+
+    event_type = models.CharField(
+        max_length=20,
+        choices=EventType.choices,
+        verbose_name='Ereignistyp',
+    )
+
+    # German display label shown in the timeline
+    event = models.CharField(
+        max_length=200,
+        verbose_name='Ereignis',
+        help_text='Short German label shown in the UI timeline',
+    )
+
+    # Optional sub-text / description shown below the event label
+    detail = models.CharField(
+        max_length=500,
+        blank=True,
+        default='',
+        verbose_name='Details',
+    )
+
+    # List of affected file names (exercise labels for uploads/deletes)
+    files = models.JSONField(
+        default=list,
+        blank=True,
+        verbose_name='Betroffene Dateien',
+        help_text='List of file name strings, e.g. ["Aufnahme 1 [A_N]", "Aufnahme 2 [I_H]"]',
+    )
+
+    actor = models.CharField(
+        max_length=10,
+        choices=Actor.choices,
+        verbose_name='Akteur',
+    )
+
+    actor_name = models.CharField(
+        max_length=200,
+        verbose_name='Akteur-Name',
+        help_text='Username, patient pseudonym, or "System"',
+    )
+
+    # Immutable creation timestamp — never use auto_now
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name='Zeitpunkt',
+    )
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Audit-Eintrag'
+        verbose_name_plural = 'Audit-Einträge'
+        indexes = [
+            models.Index(fields=['patient', '-created_at']),
+        ]
+
+    def __str__(self):
+        return f'{self.get_event_type_display()} — {self.patient.patient_id} @ {self.created_at:%Y-%m-%d %H:%M}'

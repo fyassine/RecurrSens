@@ -47,6 +47,7 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import { AudioPlayer } from '../components/AudioPlayer';
 import { formatDate, formatDateTime, NO_RECORDING_DATE } from '../utils';
 import type { Exercise, AudioFile as AudioFileType } from '../types';
+import PatientHistorySidebar from '../components/PatientHistorySidebar';
 
 export default function PatientDetailsPage() {
   const { token } = useParams<{ token: string }>();
@@ -100,61 +101,67 @@ export default function PatientDetailsPage() {
         Zurück zur Übersicht
       </Button>
 
-      <div className="mx-auto" style={{ maxWidth: noRecordings ? 1100 : 980 }}>
-        <PatientInfoCard patient={patient} onUpdated={fetchPatient} compact={noRecordings} />
-        {noRecordings ? (
-          <div className="grid gap-4 md:grid-cols-2">
-            <AudioSection
-              title="Prä-OP Aufnahmen"
-              audioFiles={patient.audio_files_pre}
-              sessions={patient.sessions}
-              phase="PRE_OP"
-              date={patient.pre_op_date}
-              patientId={patient.id}
-              patientStatus={patient.status}
-              showUpload
-              onUploaded={fetchPatient}
-              compact
-            />
-            <AudioSection
-              title="Post-OP Aufnahmen"
-              audioFiles={patient.audio_files_post}
-              sessions={patient.sessions}
-              phase="POST_OP"
-              date={patient.post_op_date}
-              patientId={patient.id}
-              patientStatus={patient.status}
-              showUpload
-              onUploaded={fetchPatient}
-              compact
-            />
-          </div>
-        ) : (
-          <>
-            <AudioSection
-              title="Prä-OP Aufnahmen"
-              audioFiles={patient.audio_files_pre}
-              sessions={patient.sessions}
-              phase="PRE_OP"
-              date={patient.pre_op_date}
-              patientId={patient.id}
-              patientStatus={patient.status}
-              showUpload
-              onUploaded={fetchPatient}
-            />
-            <AudioSection
-              title="Post-OP Aufnahmen"
-              audioFiles={patient.audio_files_post}
-              sessions={patient.sessions}
-              phase="POST_OP"
-              date={patient.post_op_date}
-              patientId={patient.id}
-              patientStatus={patient.status}
-              showUpload
-              onUploaded={fetchPatient}
-            />
-          </>
-        )}
+      <div
+        className="mx-auto flex flex-col md:flex-row gap-6 items-start"
+        style={{ maxWidth: noRecordings ? 1440 : 1320 }}
+      >
+        <div className="flex-1 w-full min-w-0">
+          <PatientInfoCard patient={patient} onUpdated={fetchPatient} compact={noRecordings} />
+          {noRecordings ? (
+            <div className="grid gap-4 md:grid-cols-2">
+              <AudioSection
+                title="Prä-OP Aufnahmen"
+                audioFiles={patient.audio_files_pre}
+                sessions={patient.sessions}
+                phase="PRE_OP"
+                date={patient.pre_op_date}
+                patientId={patient.id}
+                patientStatus={patient.status}
+                showUpload
+                onUploaded={fetchPatient}
+                compact
+              />
+              <AudioSection
+                title="Post-OP Aufnahmen"
+                audioFiles={patient.audio_files_post}
+                sessions={patient.sessions}
+                phase="POST_OP"
+                date={patient.post_op_date}
+                patientId={patient.id}
+                patientStatus={patient.status}
+                showUpload
+                onUploaded={fetchPatient}
+                compact
+              />
+            </div>
+          ) : (
+            <>
+              <AudioSection
+                title="Prä-OP Aufnahmen"
+                audioFiles={patient.audio_files_pre}
+                sessions={patient.sessions}
+                phase="PRE_OP"
+                date={patient.pre_op_date}
+                patientId={patient.id}
+                patientStatus={patient.status}
+                showUpload
+                onUploaded={fetchPatient}
+              />
+              <AudioSection
+                title="Post-OP Aufnahmen"
+                audioFiles={patient.audio_files_post}
+                sessions={patient.sessions}
+                phase="POST_OP"
+                date={patient.post_op_date}
+                patientId={patient.id}
+                patientStatus={patient.status}
+                showUpload
+                onUploaded={fetchPatient}
+              />
+            </>
+          )}
+        </div>
+        <PatientHistorySidebar patientId={patient.id} refreshTrigger={patient.updated_at} />
       </div>
     </div>
   );
@@ -174,6 +181,13 @@ function PatientInfoCard({
   const [downloading, setDownloading] = useState(false);
   const [pid, setPid] = useState(patient.patient_id);
   const [createdAt, setCreatedAt] = useState(patient.created_at.slice(0, 10));
+  const [status, setStatus] = useState<PatientStatus>(patient.status);
+
+  useEffect(() => {
+    setPid(patient.patient_id);
+    setCreatedAt(patient.created_at.slice(0, 10));
+    setStatus(patient.status);
+  }, [patient]);
 
   const derivedExpiresAt = (dateStr: string) => {
     const d = new Date(dateStr);
@@ -195,6 +209,7 @@ function PatientInfoCard({
     try {
       await updatePatient(patient.id, {
         patient_id: pid,
+        status: status,
         created_at: createdAt,
         expires_at: derivedExpiresAt(createdAt),
       });
@@ -248,7 +263,21 @@ function PatientInfoCard({
           )}
         </InfoField>
         <InfoField label="Status">
-          {patient.current_post_op_session_number != null && patient.current_post_op_session_number >= 2 ? (
+          {editing ? (
+            <Select
+              value={status}
+              onChange={(val) => setStatus(val as PatientStatus)}
+              data={[
+                { value: 'NEW', label: 'Neu (Prä-OP unvollständig)' },
+                { value: 'CONSENT_GIVEN', label: 'Einwilligung erteilt (Prä-OP unvollständig)' },
+                { value: 'PRE_OP_DONE', label: 'Prä-OP abgeschlossen (Prä-OP vollständig)' },
+                { value: 'POST_OP_STARTED', label: 'Post-OP begonnen (Post-OP unvollständig)' },
+                { value: 'POST_OP_DONE', label: 'Post-OP abgeschlossen (Post-OP vollständig)' },
+              ]}
+              size="xs"
+              allowDeselect={false}
+            />
+          ) : patient.current_post_op_session_number != null && patient.current_post_op_session_number >= 2 ? (
             <FollowUpBadge
               sessionNumber={patient.current_post_op_session_number - 1}
               complete={patient.status === 'POST_OP_DONE'}
@@ -277,7 +306,7 @@ function PatientInfoCard({
       </div>
       {editing && (
         <Group justify="flex-end" gap="sm" mt="sm">
-          <Button size="xs" variant="default" onClick={() => { setEditing(false); setPid(patient.patient_id); setCreatedAt(patient.created_at.slice(0, 10)); }}>Abbrechen</Button>
+          <Button size="xs" variant="default" onClick={() => { setEditing(false); setPid(patient.patient_id); setCreatedAt(patient.created_at.slice(0, 10)); setStatus(patient.status); }}>Abbrechen</Button>
           <Button size="xs" onClick={handleSave} loading={saving}>Speichern</Button>
         </Group>
       )}

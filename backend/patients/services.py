@@ -27,10 +27,10 @@ from django.conf import settings
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import cm
 from reportlab.pdfgen import canvas
+from user_agents import parse as parse_ua
 
 from .models import Patient, AudioFile, Exercise, RecordingSession, LoginHistory
 from .permissions import _get_role, _get_center
-from user_agents import parse as parse_ua
 
 logger = logging.getLogger(__name__)
 
@@ -298,6 +298,30 @@ def advance_patient_step(patient: Patient) -> Patient:
         patient.post_op_date = timezone.now()
 
     patient.save()
+
+    # Log status change in PatientAuditLog
+    try:
+        from .models import PatientAuditLog
+        status_labels = {
+            'NEW': 'Neu',
+            'CONSENT_GIVEN': 'Einwilligung erteilt',
+            'PRE_OP_DONE': 'Prä-OP abgeschlossen',
+            'POST_OP_STARTED': 'Post-OP begonnen',
+            'POST_OP_DONE': 'Post-OP abgeschlossen',
+        }
+        old_label = status_labels.get(current, current)
+        new_label = status_labels.get(next_status, next_status)
+        PatientAuditLog.objects.create(
+            patient=patient,
+            event_type=PatientAuditLog.EventType.EDIT,
+            event='Status geändert',
+            detail=f'{old_label} → {new_label}',
+            files=[],
+            actor=PatientAuditLog.Actor.PATIENT,
+            actor_name=f'{patient.patient_id} (Patient)',
+        )
+    except Exception:
+        logger.exception('Failed to write advance audit log for patient %s', patient.id)
 
     # Auto-create first PRE_OP session when patient starts.
     # get_or_create is race-safe: the unique_together (patient, phase,

@@ -1,11 +1,18 @@
+import { useMediaQuery } from '@mantine/hooks';
 import Sidebar from './Sidebar';
 import Topbar from './Topbar';
+import { useAppData } from '../../context/AppDataContext';
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
+  const isDesktop = useMediaQuery('(min-width: 768px)', true);
+  const { sidebarCollapsed } = useAppData();
+  const sidebarWidth = isDesktop && !sidebarCollapsed ? '240px' : '60px';
+
   return (
     <div
-      className="grid h-dvh [grid-template-columns:60px_1fr] md:[grid-template-columns:240px_1fr]"
+      className="grid h-dvh transition-[grid-template-columns] duration-200 ease-in-out"
       style={{
+        gridTemplateColumns: `${sidebarWidth} 1fr`,
         gridTemplateRows: '56px 1fr',
         gridTemplateAreas: '"sidebar topbar" "sidebar main"',
       }}

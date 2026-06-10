@@ -14,6 +14,7 @@ export interface Patient {
   expires_at: string;
   created_at: string;
   updated_at: string;
+  last_activity: string;
 }
 
 export interface PatientDetail extends Patient {
@@ -83,3 +84,16 @@ export type PatientStatus =
   | 'POST_OP_DONE';
 
 export type PredictionStatus = 'TODO' | 'INFECTED' | 'HEALTHY';
+
+export type ActivityEventType = 'create' | 'upload' | 'export' | 'expiry' | 'delete' | 'edit' | 'view';
+
+export interface PatientActivityEvent {
+  id: string;
+  type: ActivityEventType;
+  event: string;
+  detail?: string;
+  files?: string[];
+  actor: 'admin' | 'patient' | 'system';
+  actor_name: string;
+  timestamp: string;
+}
