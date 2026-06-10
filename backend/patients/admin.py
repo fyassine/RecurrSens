@@ -4,7 +4,7 @@ Provides a rich admin interface for managing patients, audio files, exercises, a
 """
 from django.contrib import admin
 from django.utils import timezone
-from .models import Patient, AudioFile, Exercise, RecordingSession, PatientFeedback, ExerciseSkip, Center, UserProfile
+from .models import Patient, AudioFile, Exercise, RecordingSession, PatientFeedback, ExerciseSkip, Center, UserProfile, LoginHistory
 from . import services
 
 
@@ -173,3 +173,17 @@ class UserProfileAdmin(admin.ModelAdmin):
 admin.site.site_header = 'Recurrensparese Diagnose — Administration'
 admin.site.site_title = 'Recurrensparese Admin'
 admin.site.index_title = 'Verwaltung'
+
+
+@admin.register(LoginHistory)
+class LoginHistoryAdmin(admin.ModelAdmin):
+    list_display = ('user', 'ip_address', 'created_at')
+    list_filter = ('created_at',)
+    search_fields = ('user__username', 'ip_address')
+    readonly_fields = ('user', 'ip_address', 'user_agent', 'created_at')
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False

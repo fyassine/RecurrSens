@@ -315,3 +315,23 @@ class CompletenessSerializer(serializers.Serializer):
     complete = serializers.BooleanField()
     missing = serializers.ListField(child=serializers.CharField())
     warnings = serializers.ListField(child=serializers.CharField())
+
+
+class LoginHistorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = LoginHistory
+        fields = ['created_at', 'ip_address', 'user_agent']
+
+
+class UserAccountInfoSerializer(serializers.Serializer):
+    username = serializers.CharField()
+    email = serializers.EmailField()
+    first_name = serializers.CharField()
+    last_name = serializers.CharField()
+    date_joined = serializers.DateTimeField()
+    role = serializers.CharField()
+    center_id = serializers.UUIDField(allow_null=True)
+    center_name = serializers.CharField(allow_null=True)
+    last_login = serializers.DateTimeField(allow_null=True)
+    current_session = serializers.DictField()
+    login_history = serializers.ListField()
