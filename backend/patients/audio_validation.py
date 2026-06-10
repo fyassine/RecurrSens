@@ -4,10 +4,15 @@ Single source of truth for which audio formats this app accepts. Used by all
 three upload views in views.py (server-side upload, pre-sign URL generation,
 pre-sign confirm).
 
-Strategy: extension + MIME whitelist for every format; magic-byte sniff on top
-for formats with a reliable signature. Formats without a universal signature
-(.nsp KayPENTAX, .caf, .3gp, .amr, .aiff) are accepted on extension + MIME
-alone — rejecting them would block real clinical and mobile uploads.
+Strategy: sniff the format from the file's magic bytes first and trust that
+over the (client-controlled) filename. This makes mislabeled uploads
+self-correct — e.g. iOS WebKit records audio/mp4 but a client may name the part
+`recording.webm`; we detect the MP4 `ftyp` box and store it as `.mp4` instead of
+rejecting it. Formats without a reliable universal signature (.nsp KayPENTAX,
+.caf, .3gp, .amr, .aiff) cannot be sniffed, so they fall back to the
+extension + MIME whitelist — rejecting them would block real clinical and mobile
+uploads. A file whose extension claims a *signed* format but whose bytes match no
+known signature is rejected as corrupt/mismatched.
 """
 from dataclasses import dataclass
 
@@ -124,11 +129,27 @@ def canonical_extension(filename: str) -> str | None:
     return ext if ext in ALLOWED_EXTENSIONS else None
 
 
+def _detect_format_by_magic(head: bytes) -> AudioFormat | None:
+    """Return the AudioFormat whose magic signature matches *head*, or None."""
+    for fmt in ALLOWED_AUDIO_FORMATS:
+        if fmt.magic_signatures is None:
+            continue
+        if any(
+            head[offset:offset + len(prefix)] == prefix
+            for offset, prefix in fmt.magic_signatures
+        ):
+            return fmt
+    return None
+
+
 def validate_audio_upload(file_obj) -> tuple[str, str]:
     """Validate an uploaded file. Returns (canonical_extension, canonical_mime).
 
-    Raises django.core.exceptions.ValidationError if the file is rejected.
-    Leaves the file pointer at position 0 so callers can read it afterwards.
+    Sniffs the format from the file's magic bytes and trusts that over the
+    client-supplied filename, so a mislabeled upload self-corrects to the format
+    its bytes actually are. Falls back to the filename extension only for
+    signature-less formats. Raises django.core.exceptions.ValidationError if the
+    file is rejected. Leaves the file pointer at position 0 for callers.
     """
     size = getattr(file_obj, 'size', None)
     if size is not None and size > MAX_AUDIO_BYTES:
@@ -136,19 +157,27 @@ def validate_audio_upload(file_obj) -> tuple[str, str]:
             f'Datei zu groß (max. {MAX_AUDIO_BYTES // (1024 * 1024)} MB).'
         )
 
-    ext = canonical_extension(getattr(file_obj, 'name', '') or '')
-    if ext is None:
+    head = file_obj.read(16)
+    file_obj.seek(0)
+
+    name_ext = canonical_extension(getattr(file_obj, 'name', '') or '')
+
+    detected = _detect_format_by_magic(head)
+    if detected is not None:
+        # Trust the bytes over the filename. Keep the client's extension when it
+        # already belongs to the detected format; otherwise use the format's
+        # canonical extension so the stored key reflects the real content.
+        ext = name_ext if name_ext in detected.extensions else detected.extensions[0]
+        return ext, detected.mimes[0]
+
+    # No recognisable signature. Fall back to the filename extension, but only
+    # for formats we never had a way to verify. A file whose extension claims a
+    # signed format yet whose bytes match no signature is rejected.
+    if name_ext is None:
         raise ValidationError('Nicht unterstütztes Audioformat.')
 
-    fmt = _EXT_TO_FORMAT[ext]
-
+    fmt = _EXT_TO_FORMAT[name_ext]
     if fmt.magic_signatures is not None:
-        head = file_obj.read(16)
-        file_obj.seek(0)
-        if not any(
-            head[offset:offset + len(prefix)] == prefix
-            for offset, prefix in fmt.magic_signatures
-        ):
-            raise ValidationError('Dateiinhalt entspricht nicht dem Audioformat.')
+        raise ValidationError('Dateiinhalt entspricht nicht dem Audioformat.')
 
-    return ext, fmt.mimes[0]
+    return name_ext, fmt.mimes[0]
