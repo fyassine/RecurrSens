@@ -30,8 +30,10 @@ export default function PatientWizardPage() {
 
   useEffect(() => {
     if (!token) return;
+    let cancelled = false;
     getPublicPatient(token)
       .then((data) => {
+        if (cancelled) return;
         setCompletedExerciseIdsPre(data.completed_exercise_ids_pre);
         setCompletedExerciseIdsPost(data.completed_exercise_ids_post);
         setSkippedExerciseIdsPre(data.skipped_exercise_ids_pre);
@@ -48,8 +50,15 @@ export default function PatientWizardPage() {
           setStatus(data.status);
         }
       })
-      .catch(() => setError('Patient nicht gefunden.'))
-      .finally(() => setLoading(false));
+      .catch(() => {
+        if (!cancelled) setError('Patient nicht gefunden.');
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [token]);
 
   useEffect(() => {

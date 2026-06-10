@@ -25,6 +25,7 @@ export default function RecordingScreen({
     currentBlob,
     audioQualityError,
     skipError,
+    uploadError,
     qualityFailCount,
     completedCount,
     handleRecordingComplete,
@@ -98,6 +99,7 @@ export default function RecordingScreen({
           </Alert>
         )}
         {skipError && <Alert color="yellow">{skipError}</Alert>}
+        {uploadError && <Alert color="red">{uploadError}</Alert>}
         {currentBlob && !audioQualityError && (
           <Alert color="green">Aufnahme in Ordnung</Alert>
         )}

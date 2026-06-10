@@ -26,6 +26,7 @@ export function useExerciseSession(
   const [isLoading, setIsLoading] = useState(true);
   const [audioQualityError, setAudioQualityError] = useState<string | null>(null);
   const [skipError, setSkipError] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const [completedIds, setCompletedIds] = useState<string[]>(completedExerciseIds);
   const [qualityFailCount, setQualityFailCount] = useState(0);
 
@@ -114,6 +115,7 @@ export function useExerciseSession(
     if (!currentBlob || audioQualityError || exercises.length === 0) return;
 
     setSkipError(null);
+    setUploadError(null);
     setIsUploading(true);
     try {
       const exerciseId = exercises[currentIndex].exercise_id;
@@ -124,7 +126,7 @@ export function useExerciseSession(
       setCompletedIds(Array.from(nextCompleted));
       await moveToNextIncomplete(nextCompleted);
     } catch {
-      alert('Fehler beim Hochladen. Bitte versuchen Sie es erneut.');
+      setUploadError('Fehler beim Hochladen. Bitte versuchen Sie es erneut.');
     } finally {
       setIsUploading(false);
     }
@@ -161,6 +163,7 @@ export function useExerciseSession(
     currentBlob,
     audioQualityError,
     skipError,
+    uploadError,
     qualityFailCount,
     completedCount: completedIds.length,
     handleRecordingComplete,
