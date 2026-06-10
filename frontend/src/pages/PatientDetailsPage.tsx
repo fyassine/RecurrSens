@@ -161,7 +161,7 @@ export default function PatientDetailsPage() {
             </>
           )}
         </div>
-        <PatientHistorySidebar patientId={patient.id} refreshTrigger={patient.updated_at} />
+        <PatientHistorySidebar patientId={patient.id} refreshTrigger={patient.last_activity} />
       </div>
     </div>
   );
