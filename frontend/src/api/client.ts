@@ -261,13 +261,42 @@ export function isAllowedAudioFile(filename: string): boolean {
   return (ALLOWED_AUDIO_EXTENSIONS as readonly string[]).includes(ext);
 }
 
+// Maps a recording's MIME type to a filename extension the backend whitelist
+// accepts. Keep aligned with `_MIME_TO_EXT` in backend audio_validation.py.
+// Critical on iOS, where WebKit's MediaRecorder produces audio/mp4 (not webm):
+// the backend picks its magic-byte check from the filename extension, so a
+// hardcoded `.webm` name on MP4 bytes is rejected with a 400.
+const AUDIO_MIME_TO_EXT: Record<string, string> = {
+  'audio/webm': 'webm',
+  'audio/mp4': 'mp4',
+  'audio/aac': 'aac',
+  'audio/x-m4a': 'm4a',
+  'audio/wav': 'wav',
+  'audio/x-wav': 'wav',
+  'audio/mpeg': 'mp3',
+  'audio/ogg': 'ogg',
+  'audio/flac': 'flac',
+  'audio/3gpp': '3gp',
+  'audio/amr': 'amr',
+  'audio/x-caf': 'caf',
+  'audio/aiff': 'aiff',
+  'audio/x-aiff': 'aiff',
+};
+
 export async function uploadAudio(
   token: string,
   file: Blob,
   exerciseId: string,
 ): Promise<void> {
   const formData = new FormData();
-  const filename = file instanceof File ? file.name : 'recording.webm';
+  let filename: string;
+  if (file instanceof File) {
+    filename = file.name;
+  } else {
+    const baseType = file.type.split(';')[0].trim().toLowerCase();
+    const ext = AUDIO_MIME_TO_EXT[baseType] ?? 'webm';
+    filename = `recording.${ext}`;
+  }
   formData.append('file', file, filename);
   formData.append('exercise_id', exerciseId);
   await publicApi.post(`/p/${token}/audio/upload/`, formData);
