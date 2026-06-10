@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { ActionIcon, Button, Progress, Text } from '@mantine/core';
 import { Play, Square, Mic, RotateCcw } from 'lucide-react';
 import AudioVisualizer from './AudioVisualizer';
-import { formatTime } from '../utils';
+import { formatTime, getAudioDuration } from '../utils';
 
 interface AudioRecorderProps {
   exampleAudioUrl?: string;
@@ -125,9 +125,6 @@ export default function AudioRecorder({
       };
 
       mediaRecorder.onstop = () => {
-        const duration = (Date.now() - recordingStartTimeRef.current) / 1000;
-        setRecordingDuration(duration);
-
         if (chunksRef.current.length === 0) {
           cleanupRecording(externalStream ? undefined : mediaStream);
           onRecordingError?.('Die Aufnahme ist zu leise. Bitte sprechen Sie lauter oder näher am Mikrofon.');
@@ -146,6 +143,15 @@ export default function AudioRecorder({
         setAudioBlob(blob);
         onRecordingComplete(blob);
         cleanupRecording(externalStream ? undefined : mediaStream);
+
+        getAudioDuration(blob)
+          .then((duration) => {
+            setRecordingDuration(duration);
+          })
+          .catch(() => {
+            const wallClockDuration = (Date.now() - recordingStartTimeRef.current) / 1000;
+            setRecordingDuration(wallClockDuration);
+          });
       };
 
       mediaRecorder.start();
