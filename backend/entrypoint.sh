@@ -1,14 +1,15 @@
 #!/bin/bash
 set -e
 
-echo "=== Running database migrations ==="
-python manage.py migrate --noinput
+if [ "$1" != "celery" ]; then
+    echo "=== Running database migrations ==="
+    python manage.py migrate --noinput
 
-echo "=== Loading exercise fixtures ==="
-python manage.py loaddata exercises || echo "Fixtures already loaded or not found"
+    echo "=== Loading exercise fixtures ==="
+    python manage.py loaddata exercises || echo "Fixtures already loaded or not found"
 
-echo "=== Creating superuser if not exists ==="
-python manage.py shell -c "
+    echo "=== Creating superuser if not exists ==="
+    python manage.py shell -c "
 from django.contrib.auth import get_user_model
 import os
 User = get_user_model()
@@ -22,8 +23,9 @@ else:
     print('Superuser already exists')
 "
 
-echo "=== Collecting static files ==="
-python manage.py collectstatic --noinput
+    echo "=== Collecting static files ==="
+    python manage.py collectstatic --noinput
+fi
 
 echo "=== Starting application ==="
 exec "$@"

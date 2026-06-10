@@ -58,6 +58,7 @@ services:
     environment:
       DJANGO_SETTINGS_MODULE: config.settings.production
       DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-change-me-in-staging}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-staging.recurrsens.eu}
       DB_NAME: ${DB_NAME:-stimmbandlaesion_staging}
       DB_USER: ${DB_USER:-postgres}
       DB_PASSWORD: ${DB_PASSWORD:-postgres}
@@ -88,6 +89,9 @@ services:
       - staging_static_files:/app/staticfiles:ro
     depends_on:
       - backend
+    networks:
+      - default
+      - recurrsens_default
     deploy:
       resources:
         limits:
