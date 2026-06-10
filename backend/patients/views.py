@@ -64,6 +64,25 @@ from .audio_validation import (
 logger = logging.getLogger(__name__)
 
 
+def _audio_for_user(user, file_id):
+    """Return the AudioFile if *user* may access it, else None.
+
+    SUPER_ADMIN may access every file; a CENTER_USER is restricted to files
+    belonging to patients in their own center. Returning None lets callers
+    respond with 404 without leaking whether the file exists in another center.
+    """
+    qs = AudioFile.objects.select_related('patient')
+    if _get_role(user) == 'CENTER_USER':
+        center = _get_center(user)
+        if center is None:
+            return None
+        qs = qs.filter(patient__center=center)
+    try:
+        return qs.get(id=file_id)
+    except AudioFile.DoesNotExist:
+        return None
+
+
 # =============================================================================
 # Admin Patient ViewSet (JWT required)
 # =============================================================================
@@ -652,14 +671,42 @@ class AudioFileReassignView(APIView):
 # Audio Streaming / Download
 # =============================================================================
 
+class AudioStreamUrlView(APIView):
+    """Mint a short-lived signed URL for streaming an audio file.
+
+    JWT required and center-scoped. The returned URL embeds a signed token that
+    AudioStreamView validates, so native <audio> elements (which cannot send an
+    Authorization header) can play the file without exposing it publicly.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, file_id):
+        audio_file = _audio_for_user(request.user, file_id)
+        if audio_file is None:
+            return Response(
+                {'error': 'Datei nicht gefunden.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        token = services.sign_audio_stream_token(audio_file.id)
+        return Response({'url': f'/api/audio/{audio_file.id}/?t={token}'})
+
+
 class AudioStreamView(APIView):
     """
     Proxy audio file from S3/MinIO for playback.
-    No authentication required — serves audio by file ID.
+    Authorised via a short-lived signed token (query param `t`) minted by
+    AudioStreamUrlView, since <audio> elements cannot send auth headers.
     """
     permission_classes = [AllowAny]
 
     def get(self, request, file_id):
+        token = request.query_params.get('t', '')
+        if not services.verify_audio_stream_token(file_id, token):
+            return Response(
+                {'error': 'Ungültiger oder abgelaufener Zugriffstoken.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         try:
             audio_file = AudioFile.objects.get(id=file_id)
         except AudioFile.DoesNotExist:

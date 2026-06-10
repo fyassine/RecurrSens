@@ -297,8 +297,12 @@ export async function skipExercise(
 // Audio
 // ---------------------------------------------------------------------------
 
-export function getAudioStreamUrl(fileId: string): string {
-  return `/api/audio/${fileId}/`;
+// Fetch a short-lived signed stream URL (JWT + center-scoped on the backend).
+// Native <audio> elements can't send the auth header, so playback uses this
+// signed URL rather than a static path.
+export async function getAudioStreamUrl(fileId: string): Promise<string> {
+  const { data } = await api.get(`/audio/${fileId}/stream-url/`);
+  return data.url;
 }
 
 export async function reassignAudioFile(
