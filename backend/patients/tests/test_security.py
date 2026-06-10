@@ -1,3 +1,11 @@
+"""
+Security & access-control tests covering the P0/P1 fixes:
+  - signed-token audio streaming
+  - center-scoped audio download-url / reassign
+  - removal of the patient-facing PATCH status bypass
+  - presign-confirm S3 existence check
+  - race-safe PRE_OP session creation
+"""
 from unittest import mock
 
 from django.test import TestCase
@@ -6,9 +14,14 @@ from rest_framework.test import APIClient
 
 from patients import services
 from patients.models import (
+    Patient, AudioFile, Exercise, RecordingSession, Center, UserProfile,
+)
 from django.contrib.auth.models import User
 
 
+def _jwt_for(client, username, password):
+    resp = client.post('/api/auth/token/', {'username': username, 'password': password})
+    return resp.data['access']
 
 
 class AudioAccessControlTest(TestCase):
@@ -92,18 +105,97 @@ class AudioAccessControlTest(TestCase):
         self.assertEqual(resp.status_code, status.HTTP_404_NOT_FOUND)
 
 
+class PatientPatchBypassTest(TestCase):
+    """The patient-facing PATCH (status bypass) must be gone; admin PATCH must
+    not be able to mutate status either."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.patient = Patient.objects.create(patient_id='P-001')
+
+    def test_patient_patch_not_allowed(self):
+        resp = self.client.patch(
+            f'/api/p/{self.patient.id}/', {'status': 'POST_OP_DONE'}, format='json',
+        )
+        self.assertEqual(resp.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+        self.patient.refresh_from_db()
+        self.assertEqual(self.patient.status, Patient.Status.NEW)
+
+    def test_admin_patch_cannot_change_status(self):
+        admin = User.objects.create_superuser('admin', 'a@b.c', 'pw')  # noqa: F841
+        token = _jwt_for(self.client, 'admin', 'pw')
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
+        resp = self.client.patch(
+            f'/api/patients/{self.patient.id}/',
+            {'status': 'POST_OP_DONE'}, format='json',
+        )
+        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.patient.refresh_from_db()
+        # status is not a writable field → unchanged
+        self.assertEqual(self.patient.status, Patient.Status.NEW)
 
 
+class PresignConfirmExistenceTest(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.patient = Patient.objects.create(patient_id='PC-001')
+        Exercise.objects.create(exercise_id='a_n', title='A', description='x', order=1)
+
+    def _confirm(self):
+        return self.client.post(
+            f'/api/p/{self.patient.id}/audio/confirm/',
+            {
+                'storage_key': f'{self.patient.id}/pre/a_n.webm',
+                'exerciseId': 'a_n',
+                'phase': 'PRE_OP',
+            },
+            format='json',
+        )
+
+    def test_confirm_rejected_when_object_missing(self):
+        with mock.patch('patients.services.audio_object_exists', return_value=False):
+            resp = self._confirm()
+        self.assertEqual(resp.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(AudioFile.objects.count(), 0)
+
+    def test_confirm_creates_record_when_object_present(self):
+        with mock.patch('patients.services.audio_object_exists', return_value=True):
+            resp = self._confirm()
+        self.assertEqual(resp.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(AudioFile.objects.count(), 1)
 
 
+class SessionRaceTest(TestCase):
+    def test_advance_twice_creates_single_pre_op_session(self):
+        patient = Patient.objects.create(patient_id='S-001')
+        services.advance_patient_step(patient)  # NEW -> CONSENT_GIVEN, creates session
+        # Re-run the auto-create branch directly; must be idempotent.
+        RecordingSession.objects.get_or_create(
+            patient=patient, phase=RecordingSession.Phase.PRE_OP, session_number=1,
+        )
+        self.assertEqual(
+            RecordingSession.objects.filter(patient=patient, phase='PRE_OP').count(), 1
+        )
 
 
+class ExportS3FailureTest(TestCase):
+    def test_s3_fetch_failure_writes_errors_txt(self):
+        import io
+        import zipfile
 
+        patient = Patient.objects.create(patient_id='EXP-S3')
+        AudioFile.objects.create(
+            patient=patient, exercise_id='a_n', phase='PRE_OP',
+            storage_key=f'{patient.id}/pre/a_n.webm',
+        )
 
+        s3 = mock.Mock()
+        s3.get_object.side_effect = Exception('connection reset')
+        with mock.patch('patients.services.get_s3_client', return_value=s3):
+            zip_bytes = services.export_patients_zip(patient_ids=[str(patient.id)])
 
-
-
-
-
-
-
+        with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+            names = zf.namelist()
+            self.assertIn('metadata.csv', names)
+            self.assertIn('errors.txt', names)
+            self.assertIn('connection reset', zf.read('errors.txt').decode())

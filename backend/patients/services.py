@@ -13,9 +13,9 @@ import logging
 import os
 import zipfile
 from datetime import date, datetime
-from django.core import signing
 from typing import Optional
 
+from django.core import signing
 from django.utils import timezone
 
 import boto3
@@ -146,6 +146,37 @@ def move_audio_in_s3(old_key: str, new_key: str) -> bool:
     return True
 
 
+def get_audio_from_s3(key: str) -> Optional[bytes]:
+    """Download audio file data from S3/MinIO."""
+    s3 = get_s3_client()
+    try:
+        response = s3.get_object(Bucket=settings.S3_BUCKET, Key=key)
+        return response['Body'].read()
+    except Exception as e:
+        logger.error(f'Failed to get S3 file {key}: {e}')
+        return None
+
+
+def audio_object_exists(key: str) -> bool:
+    """Return True if an object exists at *key* in the bucket (HEAD request)."""
+    s3 = get_s3_client()
+    try:
+        s3.head_object(Bucket=settings.S3_BUCKET, Key=key)
+        return True
+    except Exception:
+        return False
+
+
+# =============================================================================
+# Signed audio-stream tokens
+# =============================================================================
+#
+# Native <audio> elements cannot send an Authorization header, so the streaming
+# proxy (AudioStreamView) cannot rely on JWT. Instead, an authenticated,
+# center-scoped endpoint mints a short-lived signed token that the proxy
+# validates. The signature proves an authorised party requested the URL and the
+# embedded timestamp bounds its lifetime.
+
 _AUDIO_STREAM_SALT = 'patients.audio-stream'
 AUDIO_STREAM_TOKEN_MAX_AGE = 300  # seconds (5 minutes)
 
@@ -166,17 +197,6 @@ def verify_audio_stream_token(file_id, token: str) -> bool:
     except signing.BadSignature:
         return False
     return value == str(file_id)
-
-
-def get_audio_from_s3(key: str) -> Optional[bytes]:
-    """Download audio file data from S3/MinIO."""
-    s3 = get_s3_client()
-    try:
-        response = s3.get_object(Bucket=settings.S3_BUCKET, Key=key)
-        return response['Body'].read()
-    except Exception as e:
-        logger.error(f'Failed to get S3 file {key}: {e}')
-        return None
 
 
 # =============================================================================
@@ -215,7 +235,7 @@ def create_recording_session(patient: Patient, phase: str) -> RecordingSession:
         session_number=next_number,
     )
     logger.info(
-        f'Created {phase} session {next_number} for patient {patient.patient_id}'
+        f'Created {phase} session {next_number} for patient {patient.id}'
     )
     # TODO: Send email notification with QR code / recording link to patient
     # Requires SMTP configuration. See tasks.py send_session_email() stub.
@@ -276,12 +296,16 @@ def advance_patient_step(patient: Patient) -> Patient:
 
     patient.save()
 
-    # Auto-create first PRE_OP session when patient starts
+    # Auto-create first PRE_OP session when patient starts.
+    # get_or_create is race-safe: the unique_together (patient, phase,
+    # session_number) constraint prevents duplicate sessions under concurrent
+    # /advance/ requests.
     if next_status == Patient.Status.CONSENT_GIVEN:
-        if not RecordingSession.objects.filter(
-            patient=patient, phase=RecordingSession.Phase.PRE_OP
-        ).exists():
-            create_recording_session(patient, RecordingSession.Phase.PRE_OP)
+        RecordingSession.objects.get_or_create(
+            patient=patient,
+            phase=RecordingSession.Phase.PRE_OP,
+            session_number=1,
+        )
 
     # Trigger async inference tasks
     if next_status in (Patient.Status.PRE_OP_DONE, Patient.Status.POST_OP_DONE):
@@ -290,10 +314,10 @@ def advance_patient_step(patient: Patient) -> Patient:
             phase = 'PRE_OP' if next_status == Patient.Status.PRE_OP_DONE else 'POST_OP'
             run_inference_task.delay(str(patient.id), phase)
         except Exception as e:
-            logger.error(f'Failed to trigger inference for patient {patient.patient_id}: {e}')
+            logger.error(f'Failed to trigger inference for patient {patient.id}: {e}')
 
     logger.info(
-        f'Patient {patient.patient_id} advanced from {current} to {next_status}'
+        f'Patient {patient.id} advanced from {current} to {next_status}'
     )
     return patient
 
@@ -310,14 +334,19 @@ def init_post_op_patient(patient: Patient) -> Patient:
 
     Returns the updated patient instance.
     """
+    now = timezone.now()
     patient.status = Patient.Status.POST_OP_STARTED
-    patient.post_op_date = timezone.now()
-    patient.save(update_fields=['status', 'post_op_date', 'updated_at'])
+    # Set pre_op_date alongside post_op_date so downstream timelines/reports
+    # don't see a null pre-op timestamp when pre-op is skipped.
+    if patient.pre_op_date is None:
+        patient.pre_op_date = now
+    patient.post_op_date = now
+    patient.save(update_fields=['status', 'pre_op_date', 'post_op_date', 'updated_at'])
 
     create_recording_session(patient, RecordingSession.Phase.POST_OP)
 
     logger.info(
-        f'Patient {patient.patient_id} initialised directly as POST_OP_STARTED'
+        f'Patient {patient.id} initialised directly as POST_OP_STARTED'
     )
     return patient
 

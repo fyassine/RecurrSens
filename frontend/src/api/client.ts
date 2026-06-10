@@ -199,13 +199,7 @@ export async function getPublicPatient(token: string): Promise<PatientPublic> {
   return data;
 }
 
-export async function updatePublicPatient(
-  token: string,
-  payload: Record<string, unknown>,
-): Promise<PatientPublic> {
-  const { data } = await publicApi.patch(`/p/${token}/`, payload);
-  return data;
-}
+
 
 export async function advancePublicPatient(token: string): Promise<void> {
   await publicApi.post(`/p/${token}/advance/`);
