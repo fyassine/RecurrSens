@@ -121,7 +121,7 @@ class PatientPatchBypassTest(TestCase):
         self.patient.refresh_from_db()
         self.assertEqual(self.patient.status, Patient.Status.NEW)
 
-    def test_admin_patch_cannot_change_status(self):
+    def test_admin_patch_can_change_status(self):
         admin = User.objects.create_superuser('admin', 'a@b.c', 'pw')  # noqa: F841
         token = _jwt_for(self.client, 'admin', 'pw')
         self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
@@ -131,8 +131,8 @@ class PatientPatchBypassTest(TestCase):
         )
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         self.patient.refresh_from_db()
-        # status is not a writable field → unchanged
-        self.assertEqual(self.patient.status, Patient.Status.NEW)
+        # status is now a writable field
+        self.assertEqual(self.patient.status, Patient.Status.POST_OP_DONE)
 
 
 class PresignConfirmExistenceTest(TestCase):

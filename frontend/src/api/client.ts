@@ -412,3 +412,12 @@ export async function exportPatients(ids?: string[]): Promise<void> {
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
+
+// ---------------------------------------------------------------------------
+// Activity Timeline
+// ---------------------------------------------------------------------------
+
+export async function getPatientActivity(id: string): Promise<import('../types').PatientActivityEvent[]> {
+  const { data } = await api.get(`/patients/${id}/activity/`);
+  return data;
+}
