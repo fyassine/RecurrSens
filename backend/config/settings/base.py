@@ -122,6 +122,13 @@ REST_FRAMEWORK = {
         'rest_framework.renderers.JSONRenderer',
         'rest_framework.renderers.BrowsableAPIRenderer',
     ],
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.ScopedRateThrottle',
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        # Applied per-view via throttle_scope (e.g. patient audio uploads).
+        'audio_upload': '120/hour',
+    },
 }
 
 # ==============================================================================
@@ -190,8 +197,23 @@ STORAGES = {
 # Number of days before patient data is considered expired for retention handling.
 DATA_RETENTION_DAYS = config('DATA_RETENTION_DAYS', default=7, cast=int)
 
-# Admin email that receives an expiry-warning notification (see tasks.py TODO).
+# Admin email that receives an expiry-warning notification.
 ADMIN_NOTIFICATION_EMAIL = config('ADMIN_NOTIFICATION_EMAIL', default='admin@example.com')
+
+# ==============================================================================
+# EMAIL
+# ==============================================================================
+# Defaults to the console backend so dev/tests never attempt a real SMTP
+# connection. Set EMAIL_BACKEND + EMAIL_HOST/PORT/credentials in production.
+EMAIL_BACKEND = config(
+    'EMAIL_BACKEND', default='django.core.mail.backends.console.EmailBackend'
+)
+EMAIL_HOST = config('EMAIL_HOST', default='')
+EMAIL_PORT = config('EMAIL_PORT', default=587, cast=int)
+EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='')
+EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
+EMAIL_USE_TLS = config('EMAIL_USE_TLS', default=True, cast=bool)
+DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='noreply@recurrsens.eu')
 
 # ==============================================================================
 # CELERY

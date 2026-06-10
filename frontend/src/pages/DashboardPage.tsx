@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
-import { Badge, Card, Text, Title, Tooltip, useMantineTheme } from '@mantine/core';
+import axios from 'axios';
+import { Alert, Badge, Card, Text, Title, Tooltip, useMantineTheme } from '@mantine/core';
 import { motion } from 'motion/react';
 import { CalendarCheck, Mic, Hourglass, TimerOff, X } from 'lucide-react';
 import { getPatients, exportPatients } from '../api/client';
@@ -98,6 +99,7 @@ export default function DashboardPage() {
   const { setNotificationCount, setPatients: setGlobalPatients } = useAppData();
   const [patients, setPatients] = useState<Patient[]>([]);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState('');
   const [exporting, setExporting] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [activeFilter, setActiveFilter] = useState<DashboardFilter | null>(null);
@@ -114,12 +116,17 @@ export default function DashboardPage() {
   };
 
   const fetchPatients = useCallback(async () => {
+    setFetchError('');
     try {
       const data = await getPatients();
       setPatients(data);
       setGlobalPatients(data);
-    } catch {
-      // 401 interceptor will clear tokens → redirect
+    } catch (err) {
+      // 401 is handled by the interceptor (refresh / redirect); surface anything
+      // else so the user isn't shown a silently-empty dashboard.
+      if (!(axios.isAxiosError(err) && err.response?.status === 401)) {
+        setFetchError('Patienten konnten nicht geladen werden. Bitte laden Sie die Seite neu.');
+      }
     } finally {
       setLoading(false);
     }
@@ -184,6 +191,12 @@ export default function DashboardPage() {
           <CreatePatientDialog onCreated={fetchPatients} buttonSize="sm" />
         </div>
       </div>
+
+      {fetchError && (
+        <Alert color="red" mb="md" withCloseButton onClose={() => setFetchError('')}>
+          {fetchError}
+        </Alert>
+      )}
 
       {/* KPI strip */}
       <div className="mb-4 grid gap-4" style={{ gridTemplateColumns: 'repeat(4, minmax(0, 1fr))' }}>

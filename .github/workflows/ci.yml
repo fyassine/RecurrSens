@@ -13,6 +13,25 @@ concurrency:
   cancel-in-progress: true   # cancel older runs if you push again
 
 jobs:
+  lint:
+    name: Lint backend (Ruff)
+    runs-on: ubuntu-latest
+    # Non-blocking for now: the existing codebase has not yet been brought fully
+    # clean. Drop continue-on-error once `ruff check backend` passes to make
+    # linting a hard gate.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install Ruff
+        run: pip install ruff
+      - name: Ruff check
+        working-directory: backend
+        run: ruff check .
+
   test:
     name: Run backend tests
     runs-on: ubuntu-latest
