@@ -1,0 +1,16 @@
+%% Patient workflow state machine (advance_patient_step / STATUS_TRANSITIONS)
+stateDiagram-v2
+    [*] --> NEW: createPatient
+    NEW --> CONSENT_GIVEN: advance (auto-create first PRE_OP session)
+    CONSENT_GIVEN --> PRE_OP_DONE: advance (set pre_op_date; trigger run_inference_task PRE_OP)
+    PRE_OP_DONE --> POST_OP_STARTED: advance (admin unlocks after surgery)
+    POST_OP_STARTED --> POST_OP_DONE: advance (set post_op_date; trigger run_inference_task POST_OP)
+    POST_OP_DONE --> [*]
+
+    note right of POST_OP_STARTED
+      init_post_op_patient() can start a
+      patient directly here (post-surgery
+      first visit), creating a POST_OP session.
+      Additional POST_OP follow-up sessions
+      are created via createSession.
+    end note
