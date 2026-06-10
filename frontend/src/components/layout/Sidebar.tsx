@@ -1,4 +1,4 @@
-import { LayoutGrid, Settings, LogOut } from 'lucide-react';
+import { LayoutGrid, Settings, LogOut, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Tooltip } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
@@ -84,8 +84,9 @@ function NavItem({
 export default function Sidebar() {
   const location = useLocation();
   const navigate = useNavigate();
-  const collapsed = !useMediaQuery('(min-width: 768px)', true);
-  const { centerName, userRole, setCenterName, setUserRole } = useAppData();
+  const isDesktop = useMediaQuery('(min-width: 768px)', true);
+  const { centerName, userRole, setCenterName, setUserRole, sidebarCollapsed, setSidebarCollapsed } = useAppData();
+  const collapsed = !isDesktop || sidebarCollapsed;
   const centerLabel = centerName ?? (userRole === 'SUPER_ADMIN' ? 'Alle Zentren' : '');
 
   const isActive = (prefixes: string[]) =>
@@ -144,6 +145,15 @@ export default function Sidebar() {
       {/* Footer */}
       <div className="flex-shrink-0 border-t border-white/10 px-2 py-2">
         <NavItem icon={LogOut} label="Abmelden" active={false} onClick={handleLogout} collapsed={collapsed} />
+        {isDesktop && (
+          <NavItem
+            icon={sidebarCollapsed ? PanelLeftOpen : PanelLeftClose}
+            label={sidebarCollapsed ? 'Sidebar einblenden' : 'Sidebar einklappen'}
+            active={false}
+            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+            collapsed={collapsed}
+          />
+        )}
       </div>
     </aside>
   );

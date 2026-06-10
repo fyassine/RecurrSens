@@ -522,3 +522,126 @@ class AudioFileReassignTest(BaseAPITest):
             format='json',
         )
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+
+class PatientActivityAPITest(BaseAPITest):
+    """Tests for the Patient activity endpoint and legacy merging logic."""
+
+    def test_patient_activity_empty_db_logs_synthesised(self):
+        """If there are no PatientAuditLog entries, the view synthesises legacy timeline."""
+        patient = self.create_test_patient('ACT-001')
+        response = self.client.get(f'/api/patients/{patient.id}/activity/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        # Should include creation and scheduled expiry (synthesised)
+        types = [e['type'] for e in response.data]
+        self.assertIn('create', types)
+        self.assertIn('expiry', types)
+
+    def test_patient_activity_merged_with_legacy_logs(self):
+        """If database logs exist, legacy events preceding earliest DB log are merged."""
+        from django.utils import timezone
+        from datetime import timedelta
+        from patients.models import PatientAuditLog
+
+        patient = self.create_test_patient('ACT-002')
+        # Simulate patient creation happening in the past
+        patient.created_at = timezone.now() - timedelta(days=2)
+        patient.save()
+
+        # Database log written now
+        PatientAuditLog.objects.create(
+            patient=patient,
+            event_type='edit',
+            event='Status geändert',
+            detail='Neu → Einwilligung erteilt',
+            actor='admin',
+            actor_name='admin',
+        )
+
+        response = self.client.get(f'/api/patients/{patient.id}/activity/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        types = [e['type'] for e in response.data]
+        # Should include both DB logs (edit) and synthesised legacy logs (create, expiry)
+        self.assertIn('edit', types)
+        self.assertIn('create', types)
+        self.assertIn('expiry', types)
+
+    def test_audit_log_created_at_and_patient_id_edit(self):
+        """Updating patient_id and created_at writes PatientAuditLog entries."""
+        from django.utils import timezone
+        from datetime import timedelta
+        from patients.models import PatientAuditLog
+
+        patient = self.create_test_patient('ACT-EDIT-001')
+        old_created = patient.created_at
+        new_created = old_created - timedelta(days=5)
+
+        response = self.client.patch(f'/api/patients/{patient.id}/', {
+            'patient_id': 'ACT-EDIT-001-renamed',
+            'created_at': new_created.isoformat(),
+        })
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        patient.refresh_from_db()
+        self.assertEqual(patient.patient_id, 'ACT-EDIT-001-renamed')
+        self.assertEqual(patient.created_at.date(), new_created.date())
+
+        # Check logs
+        edit_logs = PatientAuditLog.objects.filter(patient=patient, event_type='edit')
+        self.assertTrue(edit_logs.exists())
+        # It should contain details about patient_id change and created_at change
+        detail = edit_logs.first().detail
+        self.assertIn('Patienten-ID', detail)
+        self.assertIn('Erstellungsdatum', detail)
+
+    def test_audit_log_skip_exercise(self):
+        """Skipping an exercise creates a PatientAuditLog entry."""
+        from patients.models import PatientAuditLog, RecordingSession
+        patient = self.create_test_patient('ACT-SKIP-001', status='CONSENT_GIVEN')
+        # Create session
+        RecordingSession.objects.create(patient=patient, phase='PRE_OP', session_number=1)
+
+        # Skip a_n
+        response = self.client.post(f'/api/p/{patient.id}/skips/', {
+            'phase': 'PRE_OP',
+            'exercise_id': 'a_n',
+        })
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+        # Check audit log
+        logs = PatientAuditLog.objects.filter(patient=patient, event_type='edit', event='Übung übersprungen')
+        self.assertEqual(logs.count(), 1)
+        self.assertIn('Vokal A', logs.first().detail)
+
+    def test_audit_log_feedback(self):
+        """Submitting feedback creates/updates a PatientAuditLog entry."""
+        from patients.models import PatientAuditLog
+        patient = self.create_test_patient('ACT-FEEDBACK-001', status='POST_OP_STARTED')
+
+        response = self.client.post(f'/api/p/{patient.id}/feedback/', {
+            'phase': 'POST_OP',
+            'rating': 4,
+            'comment': 'Good session',
+        })
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+        logs = PatientAuditLog.objects.filter(patient=patient, event_type='edit', event='Feedback eingereicht')
+        self.assertEqual(logs.count(), 1)
+        self.assertIn('4/5 Sterne', logs.first().detail)
+        self.assertIn('Good session', logs.first().detail)
+
+    def test_audit_log_advance(self):
+        """Advancing the patient workflow step creates a PatientAuditLog entry."""
+        from patients.models import PatientAuditLog
+        patient = self.create_test_patient('ACT-ADV-001', status='NEW')
+
+        # Advance NEW -> CONSENT_GIVEN
+        response = self.client.post(f'/api/patients/{patient.id}/advance/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        logs = PatientAuditLog.objects.filter(patient=patient, event_type='edit', event='Status geändert')
+        self.assertEqual(logs.count(), 1)
+        self.assertIn('Neu → Einwilligung erteilt', logs.first().detail)
+
+

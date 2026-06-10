@@ -4,7 +4,7 @@ Provides a rich admin interface for managing patients, audio files, exercises, a
 """
 from django.contrib import admin
 from django.utils import timezone
-from .models import Patient, AudioFile, Exercise, RecordingSession, PatientFeedback, ExerciseSkip, Center, UserProfile, LoginHistory
+from .models import Patient, AudioFile, Exercise, RecordingSession, PatientFeedback, ExerciseSkip, Center, UserProfile, LoginHistory, PatientAuditLog
 from . import services
 
 
@@ -169,21 +169,43 @@ class UserProfileAdmin(admin.ModelAdmin):
     search_fields = ('user__username',)
 
 
-# Customize admin site branding
-admin.site.site_header = 'Recurrensparese Diagnose — Administration'
-admin.site.site_title = 'Recurrensparese Admin'
-admin.site.index_title = 'Verwaltung'
-
-
 @admin.register(LoginHistory)
 class LoginHistoryAdmin(admin.ModelAdmin):
-    list_display = ('user', 'ip_address', 'created_at')
+    list_display = ('user', 'ip_address', 'short_user_agent', 'created_at')
     list_filter = ('created_at',)
     search_fields = ('user__username', 'ip_address')
     readonly_fields = ('user', 'ip_address', 'user_agent', 'created_at')
+    ordering = ('-created_at',)
+
+    def short_user_agent(self, obj):
+        return (obj.user_agent[:60] + '…') if len(obj.user_agent) > 60 else obj.user_agent
+    short_user_agent.short_description = 'User-Agent'
 
     def has_add_permission(self, request):
         return False
 
     def has_change_permission(self, request, obj=None):
         return False
+
+
+@admin.register(PatientAuditLog)
+class PatientAuditLogAdmin(admin.ModelAdmin):
+    """Read-only audit log viewer."""
+    list_display = ('patient', 'event_type', 'event', 'actor', 'actor_name', 'created_at')
+    list_filter = ('event_type', 'actor', 'created_at')
+    search_fields = ('patient__patient_id', 'event', 'actor_name')
+    readonly_fields = ('id', 'patient', 'event_type', 'event', 'detail', 'files', 'actor', 'actor_name', 'created_at')
+    ordering = ('-created_at',)
+    raw_id_fields = ('patient',)
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+
+# Customize admin site branding
+admin.site.site_header = 'Recurrensparese Diagnose — Administration'
+admin.site.site_title = 'Recurrensparese Admin'
+admin.site.index_title = 'Verwaltung'
