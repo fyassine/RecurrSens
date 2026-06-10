@@ -13,6 +13,7 @@ import logging
 import os
 import zipfile
 from datetime import date, datetime
+from django.core import signing
 from typing import Optional
 
 from django.utils import timezone
@@ -143,6 +144,28 @@ def move_audio_in_s3(old_key: str, new_key: str) -> bool:
         logger.warning(f'Failed to delete old S3 file {old_key} after copy: {e}')
 
     return True
+
+
+_AUDIO_STREAM_SALT = 'patients.audio-stream'
+AUDIO_STREAM_TOKEN_MAX_AGE = 300  # seconds (5 minutes)
+
+
+def sign_audio_stream_token(file_id) -> str:
+    """Return a short-lived signed token authorising streaming of one audio file."""
+    return signing.dumps(str(file_id), salt=_AUDIO_STREAM_SALT)
+
+
+def verify_audio_stream_token(file_id, token: str) -> bool:
+    """Validate a stream token against a file id, enforcing the max-age expiry."""
+    if not token:
+        return False
+    try:
+        value = signing.loads(
+            token, salt=_AUDIO_STREAM_SALT, max_age=AUDIO_STREAM_TOKEN_MAX_AGE
+        )
+    except signing.BadSignature:
+        return False
+    return value == str(file_id)
 
 
 def get_audio_from_s3(key: str) -> Optional[bytes]:
