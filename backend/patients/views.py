@@ -151,6 +151,7 @@ class PatientViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_200_OK,
             )
         except ValueError as e:
+            # ValueError carries a deliberate, user-facing validation message.
             return Response(
                 {'error': str(e)},
                 status=status.HTTP_400_BAD_REQUEST,
@@ -217,7 +218,8 @@ class PatientViewSet(viewsets.ModelViewSet):
 class PatientPublicView(APIView):
     """
     Patient-facing endpoint accessed via UUID token in the URL.
-    Supports GET (read data) and PATCH (update demographics).
+    Read-only: workflow transitions go through PatientPublicAdvanceView so the
+    state machine (and its side effects) are never bypassed.
     """
     authentication_classes = []  # No session/JWT — UUID token in URL
     permission_classes = [IsPatientTokenValid]
@@ -235,36 +237,6 @@ class PatientPublicView(APIView):
             )
         serializer = PatientPublicSerializer(patient)
         return Response(serializer.data)
-
-    def patch(self, request, token):
-        """Update patient status (patient-facing PATCH)."""
-        try:
-            patient = Patient.objects.get(id=token)
-        except Patient.DoesNotExist:
-            return Response(
-                {'error': 'Patient nicht gefunden.'},
-                status=status.HTTP_404_NOT_FOUND,
-            )
-
-        # Only allow updates during specific workflow steps
-        allowed_statuses = [
-            Patient.Status.NEW,
-            Patient.Status.CONSENT_GIVEN,
-        ]
-        allowed_fields = {'status'}
-
-        # Filter to only allowed fields
-        filtered_data = {
-            k: v for k, v in request.data.items() if k in allowed_fields
-        }
-
-        serializer = PatientUpdateSerializer(
-            patient, data=filtered_data, partial=True
-        )
-        serializer.is_valid(raise_exception=True)
-        serializer.save()
-
-        return Response(PatientPublicSerializer(patient).data)
 
 
 class PatientPublicAdvanceView(APIView):
@@ -381,6 +353,7 @@ class AudioUploadView(APIView):
     """
     authentication_classes = [JWTAuthentication]  # JWT for admin, or UUID token via IsAdminOrPatientToken
     permission_classes = [IsAdminOrPatientToken]
+    throttle_scope = 'audio_upload'
 
     def post(self, request, token):
         try:
@@ -397,6 +370,12 @@ class AudioUploadView(APIView):
         if not file or not exercise_id:
             return Response(
                 {'error': 'Datei und exerciseId sind erforderlich.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not Exercise.objects.filter(exercise_id=exercise_id).exists():
+            return Response(
+                {'error': f'Unbekannte Übung: {exercise_id}.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -475,6 +454,7 @@ class AudioPresignView(APIView):
     the upload endpoint to create the DB record.
     """
     permission_classes = [IsAdminOrPatientToken]
+    throttle_scope = 'audio_upload'
 
     def post(self, request, token):
         try:
@@ -491,6 +471,12 @@ class AudioPresignView(APIView):
         if not exercise_id:
             return Response(
                 {'error': 'exerciseId ist erforderlich.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not Exercise.objects.filter(exercise_id=exercise_id).exists():
+            return Response(
+                {'error': f'Unbekannte Übung: {exercise_id}.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -560,6 +546,15 @@ class AudioPresignConfirmView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        # Verify the client actually uploaded the object before creating the DB
+        # record. Without this, a client could confirm phantom files that break
+        # export and completeness checks.
+        if not services.audio_object_exists(storage_key):
+            return Response(
+                {'error': 'Datei wurde nicht in S3 gefunden.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         audio_file = AudioFile.objects.create(
             patient=patient,
             exercise_id=exercise_id,
@@ -591,9 +586,8 @@ class AudioFileReassignView(APIView):
     permission_classes = [IsAuthenticated]
 
     def patch(self, request, file_id):
-        try:
-            audio_file = AudioFile.objects.select_related('patient').get(id=file_id)
-        except AudioFile.DoesNotExist:
+        audio_file = _audio_for_user(request.user, file_id)
+        if audio_file is None:
             return Response(
                 {'error': 'Datei nicht gefunden.'},
                 status=status.HTTP_404_NOT_FOUND,
@@ -743,9 +737,8 @@ class AudioDownloadUrlView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, file_id):
-        try:
-            audio_file = AudioFile.objects.get(id=file_id)
-        except AudioFile.DoesNotExist:
+        audio_file = _audio_for_user(request.user, file_id)
+        if audio_file is None:
             return Response(
                 {'error': 'Datei nicht gefunden.'},
                 status=status.HTTP_404_NOT_FOUND,

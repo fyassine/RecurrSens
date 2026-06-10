@@ -43,7 +43,7 @@ def run_inference_task(self, patient_id: str, phase: str):
 
     if not keys:
         logger.warning(
-            f'No audio files for patient {patient.patient_id} phase {phase}'
+            f'No audio files for patient {patient.id} phase {phase}'
         )
         return
 
@@ -64,18 +64,27 @@ def run_inference_task(self, patient_id: str, phase: str):
         response.raise_for_status()
         prediction_result = response.json()
         logger.info(
-            f'Inference prediction for {patient.patient_id} ({phase}): '
+            f'Inference prediction for {patient.id} ({phase}): '
             f'{prediction_result}'
         )
     except requests.RequestException as e:
         logger.error(
-            f'Inference prediction failed for {patient.patient_id} ({phase}): {e}'
+            f'Inference prediction failed for {patient.id} ({phase}): {e}'
         )
         # Retry on failure
         try:
             self.retry(exc=e)
         except self.MaxRetriesExceededError:
-            logger.error(f'Max retries exceeded for prediction {patient.patient_id}')
+            # Permanent failure: mark the prediction so the record isn't left
+            # stuck at TODO forever, and surface it for manual review.
+            field = 'prediction_pre' if phase == 'PRE_OP' else 'prediction_post'
+            setattr(patient, field, Patient.PredictionStatus.FAILED)
+            patient.save(update_fields=[field])
+            logger.error(
+                f'Max retries exceeded for prediction {patient.id} ({phase}); '
+                f'marked {field}=FAILED'
+            )
+            return
 
     # --- Call reasoning endpoint ---
     reasoning_result = None
@@ -88,12 +97,12 @@ def run_inference_task(self, patient_id: str, phase: str):
         response.raise_for_status()
         reasoning_result = response.json()
         logger.info(
-            f'Inference reasoning for {patient.patient_id} ({phase}): '
+            f'Inference reasoning for {patient.id} ({phase}): '
             f'{reasoning_result}'
         )
     except requests.RequestException as e:
         logger.error(
-            f'Inference reasoning failed for {patient.patient_id} ({phase}): {e}'
+            f'Inference reasoning failed for {patient.id} ({phase}): {e}'
         )
 
     # --- Store results ---
@@ -134,7 +143,7 @@ def run_inference_task(self, patient_id: str, phase: str):
     if update_fields:
         patient.save(update_fields=update_fields)
         logger.info(
-            f'Saved inference results for {patient.patient_id} ({phase}): '
+            f'Saved inference results for {patient.id} ({phase}): '
             f'updated {update_fields}'
         )
 
@@ -161,20 +170,33 @@ def check_data_expiry():
         expires_at__gt=now,
         notification_sent_at__isnull=True,
     )
+    from django.core.mail import send_mail
+
     for patient in expiring_soon:
-        # TODO: send notification email to settings.ADMIN_NOTIFICATION_EMAIL
-        #   Example:
-        #   from django.core.mail import send_mail
-        #   send_mail(
-        #       subject=f'Ablauf: Patient {patient.patient_id}',
-        #       message=f'Die Daten des Patienten {patient.patient_id} laufen am '
-        #               f'{patient.expires_at.strftime("%d.%m.%Y %H:%M")} ab.',
-        #       from_email=settings.DEFAULT_FROM_EMAIL,
-        #       recipient_list=[settings.ADMIN_NOTIFICATION_EMAIL],
-        #   )
+        # Notify the admin. The pseudonym (patient_id) is appropriate here — this
+        # is an internal admin notification, not a log. Failures (e.g. no SMTP
+        # configured) fall back to a logged warning so the periodic task never
+        # crashes and the record is still marked notified.
+        try:
+            send_mail(
+                subject=f'Ablauf: Patient {patient.patient_id}',
+                message=(
+                    f'Die Daten des Patienten {patient.patient_id} laufen am '
+                    f'{patient.expires_at.strftime("%d.%m.%Y %H:%M")} ab.'
+                ),
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[settings.ADMIN_NOTIFICATION_EMAIL],
+                fail_silently=False,
+            )
+        except Exception as e:
+            logger.warning(
+                f'Expiry email failed for patient {patient.id}; '
+                f'recording notification anyway: {e}'
+            )
+
         patient.notification_sent_at = now
         patient.save(update_fields=['notification_sent_at'])
-        logger.info(f'Expiry notification recorded for patient {patient.patient_id}')
+        logger.info(f'Expiry notification recorded for patient {patient.id}')
 
     # --- Pass 2: auto-delete expired patients that have been downloaded ---
     from .services import delete_patient_with_files
@@ -185,7 +207,7 @@ def check_data_expiry():
     )
     for patient in to_delete:
         delete_patient_with_files(patient)
-        logger.info(f'Auto-deleted patient {patient.patient_id} (expired + downloaded)')
+        logger.info(f'Auto-deleted patient {patient.id} (expired + downloaded)')
 
 
 @shared_task
@@ -219,7 +241,7 @@ def send_session_email(patient_id: str, session_id: str):
 
     recording_url = f'{settings.APP_URL}/p/{patient.id}'
     logger.info(
-        f'TODO: Send session email to patient {patient.patient_id} '
+        f'TODO: Send session email to patient {patient.id} '
         f'for {session.get_phase_display()} session {session.session_number}. '
         f'Recording URL: {recording_url}'
     )

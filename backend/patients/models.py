@@ -116,6 +116,7 @@ class Patient(models.Model):
         TODO = 'TODO', 'Ausstehend'
         INFECTED = 'INFECTED', 'Pathologisch'
         HEALTHY = 'HEALTHY', 'Gesund'
+        FAILED = 'FAILED', 'Fehlgeschlagen'
 
     # Primary key is UUID — also serves as the patient access token and offline linking key
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
