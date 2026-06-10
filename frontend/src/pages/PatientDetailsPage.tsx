@@ -33,7 +33,6 @@ import {
   getPatient,
   updatePatient,
   advancePatient,
-  getAudioStreamUrl,
   uploadAudio,
   getExercises,
   advancePublicPatient,
@@ -45,6 +44,7 @@ import {
 } from '../api/client';
 import { StatusBadge, FollowUpBadge } from '../components/Badges';
 import ConfirmDialog from '../components/ConfirmDialog';
+import { AudioPlayer } from '../components/AudioPlayer';
 import { formatDate, formatDateTime, NO_RECORDING_DATE } from '../utils';
 import type { Exercise, AudioFile as AudioFileType } from '../types';
 
@@ -466,7 +466,7 @@ function AudioSection({
                   {f.exercise_id && <Badge ml="xs" size="sm" variant="light">{f.exercise_id}</Badge>}
                 </Text>
               </Group>
-              <audio controls src={getAudioStreamUrl(f.id)} className="w-full" style={{ height: 32 }} />
+              <AudioPlayer fileId={f.id} />
             </div>
           ))}
         </div>
@@ -546,6 +546,7 @@ function BulkReassignDialog({
   const handleSave = async () => {
     setSaving(true);
     setError('');
+    let done = 0;
     try {
       let targetSessionId: string | null = null;
       if (isNewFollowup) {
@@ -556,12 +557,21 @@ function BulkReassignDialog({
       } else {
         targetSessionId = selectedSession || null;
       }
+      // Reassign sequentially, stopping at the first failure. There is no
+      // backend batch endpoint, so a mid-loop failure leaves earlier files
+      // already reassigned — tell the admin to re-check rather than silently
+      // reporting a generic error.
       for (const fileId of fileIds) {
         await reassignAudioFile(fileId, selectedPhase, targetSessionId);
+        done += 1;
       }
       onDone();
     } catch {
-      setError('Zuordnung konnte nicht gespeichert werden.');
+      setError(
+        done > 0
+          ? `Zuordnung teilweise fehlgeschlagen (${done} von ${fileIds.length} übernommen). Bitte prüfen Sie die Zuordnung.`
+          : 'Zuordnung konnte nicht gespeichert werden.',
+      );
     } finally {
       setSaving(false);
     }

@@ -5,6 +5,21 @@
 # ==============================================================================
 
 services:
+  # Datastore host ports are exposed only in dev (for local debugging / GUI
+  # clients). Production keeps these services on the internal network only.
+  db:
+    ports:
+      - "${DB_PORT:-5432}:5432"
+
+  minio:
+    ports:
+      - "9000:9000"   # S3 API
+      - "9001:9001"   # MinIO Console
+
+  redis:
+    ports:
+      - "6379:6379"
+
   backend:
     build:
       context: ./backend
@@ -22,6 +37,12 @@ services:
 
   celery:
     command: celery -A config worker --loglevel=debug
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings.development
+    volumes:
+      - ./backend:/app
+
+  celery-beat:
     environment:
       DJANGO_SETTINGS_MODULE: config.settings.development
     volumes:

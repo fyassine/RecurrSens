@@ -33,17 +33,31 @@ export function isLoggedIn(): boolean {
   return !!accessToken;
 }
 
-async function refreshAccessToken(): Promise<string | null> {
-  const refresh = localStorage.getItem('refresh_token');
-  if (!refresh) return null;
+// Single-flight refresh: concurrent 401s share one refresh request instead of
+// each firing their own (which races and can spam the backend / corrupt state).
+let refreshPromise: Promise<string | null> | null = null;
+
+export async function refreshAccessToken(): Promise<string | null> {
+  if (refreshPromise) return refreshPromise;
+
+  refreshPromise = (async () => {
+    const refresh = localStorage.getItem('refresh_token');
+    if (!refresh) return null;
+    try {
+      const { data } = await axios.post('/api/auth/token/refresh/', { refresh });
+      accessToken = data.access;
+      localStorage.setItem('access_token', data.access);
+      return data.access;
+    } catch {
+      clearTokens();
+      return null;
+    }
+  })();
+
   try {
-    const { data } = await axios.post('/api/auth/token/refresh/', { refresh });
-    accessToken = data.access;
-    localStorage.setItem('access_token', data.access);
-    return data.access;
-  } catch {
-    clearTokens();
-    return null;
+    return await refreshPromise;
+  } finally {
+    refreshPromise = null;
   }
 }
 
@@ -198,8 +212,6 @@ export async function getPublicPatient(token: string): Promise<PatientPublic> {
   const { data } = await publicApi.get(`/p/${token}/`);
   return data;
 }
-
-
 
 export async function advancePublicPatient(token: string): Promise<void> {
   await publicApi.post(`/p/${token}/advance/`);

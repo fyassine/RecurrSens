@@ -1,17 +1,14 @@
 import { useState } from 'react';
+import axios from 'axios';
 import { Alert, Button, Checkbox, Group, Modal, Stack, Text, TextInput } from '@mantine/core';
 import { Plus, CheckCircle2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { createPatient } from '../api/client';
 import PatientAccessOptions from './PatientAccessOptions';
 
-type ApiError = {
-  response?: {
-    data?: {
-      patient_id?: string[];
-      detail?: string;
-    };
-  };
+type ApiErrorData = {
+  patient_id?: string[];
+  detail?: string;
 };
 
 export default function CreatePatientDialog({
@@ -50,7 +47,9 @@ export default function CreatePatientDialog({
       setStep(2);
       onCreated();
     } catch (err: unknown) {
-      const data = (err as ApiError).response?.data;
+      const data = axios.isAxiosError(err)
+        ? (err.response?.data as ApiErrorData | undefined)
+        : undefined;
       const detail = data?.patient_id?.[0] ?? data?.detail ?? 'Fehler beim Erstellen.';
       setError(detail);
     } finally {
