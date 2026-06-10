@@ -1,0 +1,36 @@
+%% RecurrSens — System Architecture / Component Map
+flowchart TB
+    subgraph Client["Clients"]
+        Admin["Clinician (Admin)\nReact SPA — JWT"]
+        Patient["Patient\nRecording Wizard — UUID token via QR"]
+    end
+
+    Nginx["Nginx (reverse proxy + TLS)\n/ -> SPA  •  /api/* /admin/* -> Django\n/static -> staticfiles  •  /logs -> Dozzle"]
+
+    subgraph App["Application tier"]
+        Django["Django 5.1 + DRF (Gunicorn)\nViewSets / APIViews, services.py"]
+        Celery["Celery worker\nrun_inference_task"]
+        Beat["Celery beat\ncheck_data_expiry (daily)"]
+    end
+
+    subgraph Data["Stateful services"]
+        PG[("PostgreSQL 16\npatients, audio, exercises,\ncenters, sessions")]
+        Minio[("MinIO / S3\naudio objects")]
+        Redis[("Redis 7\nbroker + result hints")]
+    end
+
+    Inference["External Inference Service\nPOST /predict  •  POST /reasoning"]
+
+    Admin --> Nginx
+    Patient --> Nginx
+    Nginx --> Django
+    Django --> PG
+    Django <-->|presigned URLs / server upload| Minio
+    Patient -. direct presigned PUT .-> Minio
+    Django --> Redis
+    Celery --> Redis
+    Beat --> Redis
+    Celery --> PG
+    Celery -->|bucket + keys| Inference
+    Celery -->|read audio| Minio
+    Inference -->|prediction + gradcam + reasoning| Celery

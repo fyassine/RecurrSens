@@ -1,0 +1,92 @@
+%% RecurrSens — Entity Relationship (core domain)
+erDiagram
+    Center ||--o{ UserProfile : "has users"
+    Center ||--o{ Patient : "owns"
+    UserProfile }o--|| User : "profile (1:1)"
+    Patient ||--o{ RecordingSession : "sessions"
+    Patient ||--o{ AudioFile : "audio_files"
+    Patient ||--o{ PatientFeedback : "feedback_entries"
+    Patient ||--o{ ExerciseSkip : "exercise_skips"
+    RecordingSession ||--o{ AudioFile : "audio_files"
+    RecordingSession ||--o{ ExerciseSkip : "exercise_skips"
+    Exercise ||..o{ AudioFile : "exercise_id (string ref)"
+    Exercise ||..o{ ExerciseSkip : "exercise_id (string ref)"
+
+    Center {
+        uuid id PK
+        string name UK
+        datetime created_at
+    }
+    UserProfile {
+        bigint id PK
+        fk user "OneToOne -> auth User"
+        string role "SUPER_ADMIN | CENTER_USER"
+        fk center "nullable"
+    }
+    Exercise {
+        bigint id PK
+        string exercise_id UK
+        string title
+        text description
+        string example_audio_url
+        int order
+        bool is_active
+    }
+    Patient {
+        uuid id PK "= patient access token (QR)"
+        string patient_id UK "pseudonym, no PII"
+        fk center "nullable"
+        string status
+        string prediction_pre
+        string prediction_post
+        float ai_percentage_rp_pre
+        float ai_percentage_rp_post
+        string gradcam_prediction_pre
+        string gradcam_prediction_post
+        float gradcam_percentage_pre
+        float gradcam_percentage_post
+        text ai_reasoning_pre
+        text ai_reasoning_post
+        datetime pre_op_date
+        datetime post_op_date
+        datetime created_at
+        datetime updated_at
+        datetime expires_at
+        datetime notification_sent_at
+        datetime last_exported_at
+        datetime deleted_at
+    }
+    RecordingSession {
+        uuid id PK
+        fk patient
+        string phase "PRE_OP | POST_OP"
+        int session_number "unique per patient+phase"
+        datetime created_at
+    }
+    AudioFile {
+        uuid id PK
+        fk patient
+        fk session "nullable"
+        string exercise_id
+        string phase
+        string storage_key "S3/MinIO key"
+        datetime created_at
+    }
+    PatientFeedback {
+        uuid id PK
+        fk patient
+        string phase
+        smallint rating "1..5, nullable"
+        text comment
+        bool skipped
+        datetime created_at
+        datetime updated_at
+    }
+    ExerciseSkip {
+        uuid id PK
+        fk patient
+        fk session "nullable"
+        string phase
+        string exercise_id
+        datetime created_at
+    }
