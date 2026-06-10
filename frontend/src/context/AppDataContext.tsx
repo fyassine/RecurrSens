@@ -11,6 +11,8 @@ interface AppDataContextValue {
   setUserRole: (role: UserRole) => void;
   centerName: string | null;
   setCenterName: (name: string | null) => void;
+  sidebarCollapsed: boolean;
+  setSidebarCollapsed: (collapsed: boolean) => void;
 }
 
 export const AppDataContext = createContext<AppDataContextValue>({
@@ -22,6 +24,8 @@ export const AppDataContext = createContext<AppDataContextValue>({
   setUserRole: () => {},
   centerName: null,
   setCenterName: () => {},
+  sidebarCollapsed: false,
+  setSidebarCollapsed: () => {},
 });
 
 export function useAppData() {

@@ -37,7 +37,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
-from .models import Patient, AudioFile, Exercise, RecordingSession, PatientFeedback, ExerciseSkip
+from .models import Patient, AudioFile, Exercise, RecordingSession, PatientFeedback, ExerciseSkip, PatientAuditLog
 from .serializers import (
     PatientListSerializer,
     PatientDetailSerializer,
@@ -97,7 +97,7 @@ class PatientViewSet(viewsets.ModelViewSet):
     lookup_field = 'pk'
 
     def get_queryset(self):
-        qs = Patient.objects.prefetch_related('audio_files').all()
+        qs = Patient.objects.prefetch_related('audio_files', 'feedback_entries', 'exercise_skips').all()
         if _get_role(self.request.user) == 'CENTER_USER':
             center = _get_center(self.request.user)
             if center is None:
@@ -210,6 +210,140 @@ class PatientViewSet(viewsets.ModelViewSet):
             status=status.HTTP_201_CREATED,
         )
 
+    @action(detail=True, methods=['get'], url_path='activity')
+    def activity(self, request, pk=None):
+        """
+        Return a list of activity events for the patient timeline.
+
+        Combines database audit log entries (PatientAuditLog) with filtered
+        synthesised legacy events (for actions preceding the first audit log entry,
+        or for de-duplicating patient creation/expiry).
+        """
+        import uuid as _uuid
+
+        patient = self.get_object()
+
+        # Retrieve real database audit logs
+        audit_qs = (
+            PatientAuditLog.objects
+            .filter(patient=patient)
+            .order_by('-created_at')
+        )
+
+        db_events = [
+            {
+                'id': str(entry.id),
+                'type': entry.event_type,
+                'event': entry.event,
+                'detail': entry.detail,
+                'files': entry.files,
+                'actor': entry.actor,
+                'actor_name': entry.actor_name,
+                'timestamp': entry.created_at.isoformat(),
+            }
+            for entry in audit_qs
+        ]
+
+        db_event_types = {entry.event_type for entry in audit_qs}
+        earliest_db_ts = min(entry.created_at for entry in audit_qs) if audit_qs.exists() else None
+
+        fallback_events = []
+
+        # 1. Patient creation (if not already logged in DB)
+        if 'create' not in db_event_types:
+            fallback_events.append({
+                'id': f'create-{patient.id}',
+                'type': 'create',
+                'event': 'Patient angelegt',
+                'detail': 'Neuer Patienteneintrag erstellt',
+                'files': [],
+                'actor': 'admin',
+                'actor_name': 'admin',
+                'timestamp': patient.created_at,
+            })
+
+        # 2. Audio file uploads (preceding the earliest DB log)
+        from collections import defaultdict
+        audio_files = (
+            patient.audio_files
+            .select_related('session')
+            .order_by('created_at')
+        )
+        upload_groups = defaultdict(list)
+        for af in audio_files:
+            day_key = af.created_at.date().isoformat()
+            upload_groups[(af.phase, day_key)].append(af)
+
+        for (phase, day_key), files in upload_groups.items():
+            group_ts = min(af.created_at for af in files)
+            if earliest_db_ts and group_ts >= earliest_db_ts:
+                continue
+            phase_label = 'Prä-OP' if phase == 'PRE_OP' else 'Post-OP'
+            count = len(files)
+            file_labels = [
+                f'Aufnahme {i + 1}' + (f' [{af.exercise_id.upper()}]' if af.exercise_id else '')
+                for i, af in enumerate(files)
+            ]
+            fallback_events.append({
+                'id': f'upload-{phase}-{day_key}-{_uuid.uuid4().hex[:6]}',
+                'type': 'upload',
+                'event': f'{phase_label} Aufnahmen hochgeladen',
+                'detail': f'{count} Aufnahme{"n" if count != 1 else ""} hinzugefügt',
+                'files': file_labels,
+                'actor': 'patient',
+                'actor_name': f'{patient.patient_id} (Patient)',
+                'timestamp': group_ts,
+            })
+
+        # 3. Last export (preceding the earliest DB log)
+        if patient.last_exported_at:
+            if not earliest_db_ts or patient.last_exported_at < earliest_db_ts:
+                fallback_events.append({
+                    'id': f'export-{patient.id}',
+                    'type': 'export',
+                    'event': 'Patientendaten exportiert',
+                    'detail': 'Vollständiger Datenexport (ZIP)',
+                    'files': [],
+                    'actor': 'admin',
+                    'actor_name': 'admin',
+                    'timestamp': patient.last_exported_at,
+                })
+
+        # 4. Scheduled expiry (if not already logged in DB)
+        if 'expiry' not in db_event_types:
+            fallback_events.append({
+                'id': f'expiry-{patient.id}',
+                'type': 'expiry',
+                'event': 'Automatische Ablaufmarkierung geplant',
+                'detail': f'Datensatz zum Löschen vorgemerkt (Ablauf: {patient.expires_at.strftime("%d.%m.%Y")})',
+                'files': [],
+                'actor': 'system',
+                'actor_name': 'System',
+                'timestamp': patient.created_at,
+            })
+
+        # 5. Soft deletion (preceding the earliest DB log)
+        if patient.deleted_at:
+            if not earliest_db_ts or patient.deleted_at < earliest_db_ts:
+                fallback_events.append({
+                    'id': f'delete-{patient.id}',
+                    'type': 'delete',
+                    'event': 'Patient gelöscht',
+                    'detail': 'Audiodaten wurden entfernt (Soft-Löschung)',
+                    'files': [],
+                    'actor': 'admin',
+                    'actor_name': 'admin',
+                    'timestamp': patient.deleted_at,
+                })
+
+        # Format timestamps to ISO strings for fallback events
+        for e in fallback_events:
+            e['timestamp'] = e['timestamp'].isoformat()
+
+        combined_events = db_events + fallback_events
+        combined_events.sort(key=lambda e: e['timestamp'], reverse=True)
+        return Response(combined_events, status=status.HTTP_200_OK)
+
 
 # =============================================================================
 # Patient-Facing Views (UUID token auth, no JWT)
@@ -304,6 +438,29 @@ class PatientFeedbackView(APIView):
             },
         )
 
+        try:
+            phase_label = 'Prä-OP' if data['phase'] == 'PRE_OP' else 'Post-OP'
+            if feedback.skipped:
+                detail_str = f'Feedback für {phase_label} übersprungen'
+            else:
+                rating_val = feedback.rating
+                detail_str = f'Bewertung: {rating_val}/5 Sterne'
+                if feedback.comment:
+                    comment_trunc = (feedback.comment[:60] + '...') if len(feedback.comment) > 63 else feedback.comment
+                    detail_str += f' — "{comment_trunc}"'
+            
+            PatientAuditLog.objects.create(
+                patient=patient,
+                event_type=PatientAuditLog.EventType.EDIT,
+                event='Feedback eingereicht' if created else 'Feedback aktualisiert',
+                detail=detail_str,
+                files=[],
+                actor=PatientAuditLog.Actor.PATIENT,
+                actor_name=f'{patient.patient_id} (Patient)',
+            )
+        except Exception:
+            logger.exception('Failed to write patient feedback audit log for patient %s', patient.id)
+
         return Response(
             PatientFeedbackSerializer(feedback).data,
             status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
@@ -335,6 +492,24 @@ class ExerciseSkipView(APIView):
             exercise_id=data['exercise_id'],
             defaults={'phase': data['phase']},
         )
+
+        if created:
+            try:
+                exercise = Exercise.objects.filter(exercise_id=data['exercise_id']).first()
+                exercise_title = exercise.title if exercise else data['exercise_id']
+                phase_label = 'Prä-OP' if data['phase'] == 'PRE_OP' else 'Post-OP'
+                
+                PatientAuditLog.objects.create(
+                    patient=patient,
+                    event_type=PatientAuditLog.EventType.EDIT,
+                    event='Übung übersprungen',
+                    detail=f'Übung {exercise_title} übersprungen — {phase_label}',
+                    files=[],
+                    actor=PatientAuditLog.Actor.PATIENT,
+                    actor_name=f'{patient.patient_id} (Patient)',
+                )
+            except Exception:
+                logger.exception('Failed to write exercise skip audit log for patient %s', patient.id)
 
         return Response(
             ExerciseSkipSerializer(skip).data,
@@ -786,6 +961,14 @@ class MeView(APIView):
         })
 
 
+class AccountInfoView(APIView):
+    """Return full account info: profile, current session, and login history."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        return Response(services.get_account_info(request.user, request))
+
+
 class ExportView(APIView):
     """Export patient data as a ZIP file.
 
@@ -819,16 +1002,43 @@ class ExportView(APIView):
 
             if patient_ids and len(patient_ids) == 1:
                 try:
-                    pid = Patient.objects.get(id=patient_ids[0]).patient_id
-                    filename = f'{pid}_export_{today}.zip'
+                    patient = Patient.objects.get(id=patient_ids[0])
+                    filename = f'{patient.patient_id}_export_{today}.zip'
                 except Patient.DoesNotExist:
+                    patient = None
                     filename = f'patienten_export_{today}.zip'
             else:
+                patient = None
                 filename = f'patienten_export_{today}.zip'
 
             response = HttpResponse(zip_bytes, content_type='application/zip')
             response['Content-Disposition'] = f'attachment; filename="{filename}"'
             response['X-Export-Filename'] = filename
+
+            # Write audit log entries for all exported patients
+            try:
+                actor_name = request.user.username if request.user.is_authenticated else 'admin'
+                exported_qs = (
+                    Patient.objects.filter(id__in=patient_ids)
+                    if patient_ids
+                    else Patient.objects.all()
+                )
+                audit_entries = [
+                    PatientAuditLog(
+                        patient=p,
+                        event_type=PatientAuditLog.EventType.EXPORT,
+                        event='Patientendaten exportiert',
+                        detail=f'Vollständiger Datenexport (ZIP) — {filename}',
+                        files=[],
+                        actor=PatientAuditLog.Actor.ADMIN,
+                        actor_name=actor_name,
+                    )
+                    for p in exported_qs
+                ]
+                PatientAuditLog.objects.bulk_create(audit_entries, ignore_conflicts=True)
+            except Exception:
+                logger.exception('Failed to write export audit log entries')
+
             return response
         except Exception as e:
             logger.error(f'Export failed: {e}')

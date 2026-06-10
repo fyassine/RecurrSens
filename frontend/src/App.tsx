@@ -26,6 +26,13 @@ export default function App() {
   const [patients, setPatients] = useState<Patient[]>([]);
   const [userRole, setUserRole] = useState<UserRole>(() => getUserRole());
   const [centerName, setCenterName] = useState<string | null>(null);
+  const [sidebarCollapsed, setSidebarCollapsedState] = useState<boolean>(
+    () => localStorage.getItem('sidebar_collapsed') === 'true',
+  );
+  const setSidebarCollapsed = (collapsed: boolean) => {
+    setSidebarCollapsedState(collapsed);
+    localStorage.setItem('sidebar_collapsed', String(collapsed));
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -64,6 +71,8 @@ export default function App() {
         setUserRole,
         centerName,
         setCenterName,
+        sidebarCollapsed,
+        setSidebarCollapsed,
       }}
     >
       <BrowserRouter>

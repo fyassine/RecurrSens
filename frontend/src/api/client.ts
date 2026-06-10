@@ -139,6 +139,44 @@ export async function getMe(): Promise<MeResponse> {
   return data as MeResponse;
 }
 
+export type DeviceInfo = {
+  browser: string | null;
+  browser_version: string | null;
+  os: string | null;
+  os_version: string | null;
+  device_type: 'Desktop' | 'Mobil' | 'Tablet' | 'Unbekannt';
+  device_family: string | null;
+};
+
+export type CurrentSessionInfo = DeviceInfo & {
+  ip_address: string | null;
+  user_agent: string;
+};
+
+export type LoginHistoryEntry = DeviceInfo & {
+  created_at: string;
+  ip_address: string | null;
+};
+
+export type AccountInfo = {
+  username: string;
+  email: string;
+  first_name: string;
+  last_name: string;
+  date_joined: string;
+  role: UserRole;
+  center_id: string | null;
+  center_name: string | null;
+  last_login: string | null;
+  current_session: CurrentSessionInfo;
+  login_history: LoginHistoryEntry[];
+};
+
+export async function getAccountInfo(): Promise<AccountInfo> {
+  const { data } = await api.get('/me/account/');
+  return data as AccountInfo;
+}
+
 // ---------------------------------------------------------------------------
 // Admin — Patients
 // ---------------------------------------------------------------------------
@@ -374,3 +412,13 @@ export async function exportPatients(ids?: string[]): Promise<void> {
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
+
+// ---------------------------------------------------------------------------
+// Activity Timeline
+// ---------------------------------------------------------------------------
+
+export async function getPatientActivity(id: string): Promise<import('../types').PatientActivityEvent[]> {
+  const { data } = await api.get(`/patients/${id}/activity/`);
+  return data;
+}
+

@@ -1,7 +1,7 @@
 """Model tests for the patients app."""
 from django.test import TestCase
 from django.utils import timezone
-from patients.models import Patient, AudioFile, Exercise, RecordingSession
+from patients.models import Patient, AudioFile, Exercise, RecordingSession, PatientAuditLog
 
 
 class ExerciseModelTest(TestCase):
@@ -232,3 +232,23 @@ class AudioFileModelTest(TestCase):
         self.assertEqual(
             self.patient.audio_files.filter(phase='PRE_OP').count(), 1
         )
+
+
+class PatientAuditLogModelTest(TestCase):
+    """Tests for the PatientAuditLog model."""
+
+    def test_create_audit_log(self):
+        patient = Patient.objects.create(patient_id='AUDIT-001')
+        log = PatientAuditLog.objects.create(
+            patient=patient,
+            event_type='create',
+            event='Patient angelegt',
+            actor='admin',
+            actor_name='test-admin',
+        )
+        self.assertEqual(log.patient, patient)
+        self.assertEqual(log.event_type, 'create')
+        self.assertEqual(log.actor, 'admin')
+        self.assertEqual(log.actor_name, 'test-admin')
+        self.assertIsNotNone(log.id)
+

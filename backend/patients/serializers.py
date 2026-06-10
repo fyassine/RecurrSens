@@ -126,6 +126,7 @@ class PatientListSerializer(serializers.ModelSerializer):
     audio_count_pre = serializers.SerializerMethodField()
     audio_count_post = serializers.SerializerMethodField()
     current_post_op_session_number = serializers.SerializerMethodField()
+    last_activity = serializers.ReadOnlyField()
 
     class Meta:
         model = Patient
@@ -137,6 +138,7 @@ class PatientListSerializer(serializers.ModelSerializer):
             'pre_op_date', 'post_op_date',
             'deleted_at',
             'expires_at', 'created_at', 'updated_at',
+            'last_activity',
         ]
         read_only_fields = fields
 
@@ -160,6 +162,7 @@ class PatientDetailSerializer(serializers.ModelSerializer):
     audio_files_pre = serializers.SerializerMethodField()
     audio_files_post = serializers.SerializerMethodField()
     sessions = RecordingSessionSerializer(many=True, read_only=True)
+    last_activity = serializers.ReadOnlyField()
 
     class Meta:
         model = Patient
@@ -178,6 +181,7 @@ class PatientDetailSerializer(serializers.ModelSerializer):
             'deleted_at', 'expires_at', 'created_at', 'updated_at',
             # Sessions & Audio
             'sessions', 'audio_files', 'audio_files_pre', 'audio_files_post',
+            'last_activity',
         ]
         read_only_fields = ['id', 'updated_at', 'deleted_at']
 
@@ -278,20 +282,21 @@ class PatientCreateSerializer(serializers.ModelSerializer):
 
 class PatientUpdateSerializer(serializers.ModelSerializer):
     """
-    Serializer for updating patient demographics (admin only).
+    Serializer for updating patient demographics and status (admin only).
 
-    Deliberately excludes ``status`` and the AI prediction fields:
-      - ``status`` transitions must go through ``advance_patient_step`` (the
-        ``/advance/`` action) so the state machine and its side effects run.
-      - AI fields are written exclusively by the inference task via the ORM
-        (see ``tasks.run_inference_task``) and must not be client-writable.
+    Deliberately excludes the AI prediction fields, which are written exclusively
+    by the inference task via the ORM.
     """
+    created_at = serializers.DateTimeField(required=False)
+    expires_at = serializers.DateTimeField(required=False)
 
     class Meta:
         model = Patient
         fields = [
             'patient_id',
+            'status',
             'pre_op_date', 'post_op_date',
+            'created_at', 'expires_at',
         ]
 
     def validate_patient_id(self, value):
@@ -304,6 +309,107 @@ class PatientUpdateSerializer(serializers.ModelSerializer):
                 f'Ein Patient mit der ID "{value}" existiert bereits.'
             )
         return value.strip()
+
+    def update(self, instance, validated_data):
+        import logging
+        from django.utils import timezone
+        logger = logging.getLogger(__name__)
+
+        old_status = instance.status
+        old_patient_id = instance.patient_id
+        old_created_at = instance.created_at
+        old_expires_at = instance.expires_at
+
+        new_status = validated_data.get('status', old_status)
+
+        instance = super().update(instance, validated_data)
+
+        # ── Write audit log entries ──────────────────────────────────────────
+        try:
+            from .models import PatientAuditLog
+            changed_fields = []
+            if new_status != old_status:
+                status_labels = {
+                    'NEW': 'Neu',
+                    'CONSENT_GIVEN': 'Einwilligung erteilt',
+                    'PRE_OP_DONE': 'Prä-OP abgeschlossen',
+                    'POST_OP_STARTED': 'Post-OP begonnen',
+                    'POST_OP_DONE': 'Post-OP abgeschlossen',
+                }
+                old_label = status_labels.get(old_status, old_status)
+                new_label = status_labels.get(new_status, new_status)
+                PatientAuditLog.objects.create(
+                    patient=instance,
+                    event_type=PatientAuditLog.EventType.EDIT,
+                    event='Status geändert',
+                    detail=f'{old_label} → {new_label}',
+                    files=[],
+                    actor=PatientAuditLog.Actor.ADMIN,
+                    actor_name='admin',
+                )
+            if instance.patient_id != old_patient_id:
+                changed_fields.append(f'Patienten-ID: {old_patient_id} → {instance.patient_id}')
+            if 'created_at' in validated_data and validated_data['created_at'] is not None:
+                new_created_at = validated_data['created_at']
+                # Check if date has actually changed to avoid logging identical times or tz conversions
+                if old_created_at.date() != new_created_at.date():
+                    old_date_str = old_created_at.strftime('%d.%m.%Y')
+                    new_date_str = new_created_at.strftime('%d.%m.%Y')
+                    changed_fields.append(f'Erstellungsdatum: {old_date_str} → {new_date_str}')
+            if 'expires_at' in validated_data and validated_data['expires_at'] is not None:
+                new_expires_at = validated_data['expires_at']
+                if old_expires_at.date() != new_expires_at.date():
+                    old_exp_str = old_expires_at.strftime('%d.%m.%Y')
+                    new_exp_str = new_expires_at.strftime('%d.%m.%Y')
+                    changed_fields.append(f'Ablaufdatum: {old_exp_str} → {new_exp_str}')
+
+            if changed_fields:
+                PatientAuditLog.objects.create(
+                    patient=instance,
+                    event_type=PatientAuditLog.EventType.EDIT,
+                    event='Patientendaten bearbeitet',
+                    detail='; '.join(changed_fields),
+                    files=[],
+                    actor=PatientAuditLog.Actor.ADMIN,
+                    actor_name='admin',
+                )
+        except Exception:
+            logger.exception('Failed to write edit audit log for patient %s', instance.id)
+
+        if new_status != old_status:
+            # Handle status transition side effects
+            if new_status == Patient.Status.CONSENT_GIVEN:
+                RecordingSession.objects.get_or_create(
+                    patient=instance,
+                    phase=RecordingSession.Phase.PRE_OP,
+                    session_number=1,
+                )
+            elif new_status == Patient.Status.POST_OP_STARTED:
+                RecordingSession.objects.get_or_create(
+                    patient=instance,
+                    phase=RecordingSession.Phase.POST_OP,
+                    session_number=1,
+                )
+
+            # Update dates if not set
+            now = timezone.now()
+            if new_status == Patient.Status.PRE_OP_DONE and not instance.pre_op_date:
+                instance.pre_op_date = now
+                instance.save(update_fields=['pre_op_date'])
+            elif new_status == Patient.Status.POST_OP_DONE and not instance.post_op_date:
+                instance.post_op_date = now
+                instance.save(update_fields=['post_op_date'])
+
+            # Trigger inference if appropriate
+            if new_status in (Patient.Status.PRE_OP_DONE, Patient.Status.POST_OP_DONE):
+                try:
+                    from .tasks import run_inference_task
+                    phase = 'PRE_OP' if new_status == Patient.Status.PRE_OP_DONE else 'POST_OP'
+                    run_inference_task.delay(str(instance.id), phase)
+                except Exception as e:
+                    logger.error(f'Failed to trigger inference for patient {instance.id}: {e}')
+
+        return instance
 
 
 # =============================================================================

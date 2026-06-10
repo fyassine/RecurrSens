@@ -15,6 +15,7 @@ import zipfile
 from datetime import date, datetime
 from typing import Optional
 
+from django.contrib.auth.models import update_last_login
 from django.core import signing
 from django.utils import timezone
 
@@ -26,8 +27,10 @@ from django.conf import settings
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import cm
 from reportlab.pdfgen import canvas
+from user_agents import parse as parse_ua
 
-from .models import Patient, AudioFile, Exercise, RecordingSession
+from .models import Patient, AudioFile, Exercise, RecordingSession, LoginHistory
+from .permissions import _get_role, _get_center
 
 logger = logging.getLogger(__name__)
 
@@ -295,6 +298,30 @@ def advance_patient_step(patient: Patient) -> Patient:
         patient.post_op_date = timezone.now()
 
     patient.save()
+
+    # Log status change in PatientAuditLog
+    try:
+        from .models import PatientAuditLog
+        status_labels = {
+            'NEW': 'Neu',
+            'CONSENT_GIVEN': 'Einwilligung erteilt',
+            'PRE_OP_DONE': 'Prä-OP abgeschlossen',
+            'POST_OP_STARTED': 'Post-OP begonnen',
+            'POST_OP_DONE': 'Post-OP abgeschlossen',
+        }
+        old_label = status_labels.get(current, current)
+        new_label = status_labels.get(next_status, next_status)
+        PatientAuditLog.objects.create(
+            patient=patient,
+            event_type=PatientAuditLog.EventType.EDIT,
+            event='Status geändert',
+            detail=f'{old_label} → {new_label}',
+            files=[],
+            actor=PatientAuditLog.Actor.PATIENT,
+            actor_name=f'{patient.patient_id} (Patient)',
+        )
+    except Exception:
+        logger.exception('Failed to write advance audit log for patient %s', patient.id)
 
     # Auto-create first PRE_OP session when patient starts.
     # get_or_create is race-safe: the unique_together (patient, phase,
@@ -622,3 +649,93 @@ def delete_patient_with_files(patient: Patient) -> None:
         f'Soft-deleted patient {patient.patient_id}: '
         f'audio files removed, metadata preserved'
     )
+
+
+# =============================================================================
+# Authentication / Login History
+# =============================================================================
+
+USER_AGENT_MAX_LENGTH = 500  # must match LoginHistory.user_agent max_length
+
+
+def get_client_ip(request) -> Optional[str]:
+    """Return the client's IP, preferring X-Forwarded-For (set by nginx)."""
+    forwarded = request.META.get('HTTP_X_FORWARDED_FOR')
+    if forwarded:
+        return forwarded.split(',')[0].strip()
+    return request.META.get('REMOTE_ADDR')
+
+
+def parse_user_agent(ua_string: str) -> dict:
+    """Parse a raw User-Agent string into structured browser/OS/device info."""
+    if not ua_string:
+        return {
+            'browser': None,
+            'browser_version': None,
+            'os': None,
+            'os_version': None,
+            'device_type': 'Unbekannt',
+            'device_family': None,
+        }
+    ua = parse_ua(ua_string)
+    if ua.is_mobile:
+        device_type = 'Mobil'
+    elif ua.is_tablet:
+        device_type = 'Tablet'
+    elif ua.is_pc:
+        device_type = 'Desktop'
+    else:
+        device_type = 'Unbekannt'
+    return {
+        'browser': ua.browser.family,
+        'browser_version': ua.browser.version_string,
+        'os': ua.os.family,
+        'os_version': ua.os.version_string,
+        'device_type': device_type,
+        'device_family': ua.device.family,
+    }
+
+
+def record_login(user, request) -> None:
+    """Record a successful login: update last_login + create a LoginHistory row."""
+    update_last_login(None, user)
+    ua_string = request.META.get('HTTP_USER_AGENT', '')[:USER_AGENT_MAX_LENGTH]
+    LoginHistory.objects.create(
+        user=user,
+        ip_address=get_client_ip(request),
+        user_agent=ua_string,
+    )
+
+
+def get_account_info(user, request) -> dict:
+    """Assemble the full account/login-history payload for AccountInfoView."""
+    role = _get_role(user)
+    center = _get_center(user)
+
+    current_ua = request.META.get('HTTP_USER_AGENT', '')
+    history = [
+        {
+            'created_at': entry.created_at,
+            'ip_address': entry.ip_address,
+            **parse_user_agent(entry.user_agent),
+        }
+        for entry in user.login_history.all()[:10]
+    ]
+
+    return {
+        'username': user.username,
+        'email': user.email,
+        'first_name': user.first_name,
+        'last_name': user.last_name,
+        'date_joined': user.date_joined,
+        'role': role,
+        'center_id': str(center.id) if center else None,
+        'center_name': center.name if center else None,
+        'last_login': user.last_login,
+        'current_session': {
+            'ip_address': get_client_ip(request),
+            'user_agent': current_ua,
+            **parse_user_agent(current_ua),
+        },
+        'login_history': history,
+    }
