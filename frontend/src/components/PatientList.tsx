@@ -74,7 +74,7 @@ export default function PatientList({
   const [search, setSearch] = useState('');
   const [orderBy, setOrderBy] = useState<SortKey>('created_at');
   const [order, setOrder] = useState<Order>('desc');
-  const [page, setPage] = useState(0);
+  const [pageIndex, setPageIndex] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const nowMs = Date.now();
   const warningThresholdMs = nowMs + 86400000;
@@ -88,7 +88,7 @@ export default function PatientList({
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
 
   useEffect(() => {
-    setPage(0);
+    setPageIndex(0);
   }, [search, activeFilter]);
 
   const filtered = useMemo(() => {
@@ -122,11 +122,11 @@ export default function PatientList({
   }, [filtered, orderBy, order]);
 
   const totalPages = Math.max(1, Math.ceil(sorted.length / rowsPerPage));
-  const safePage = Math.min(page, totalPages - 1);
-  const paginated = sorted.slice(safePage * rowsPerPage, (safePage + 1) * rowsPerPage);
-  // page 1 = oldest, page N = newest; internal page 0 (newest slice) → displayed as totalPages
-  const displayPage    = totalPages - safePage;
-  const toInternalPage = (d: number) => totalPages - d;
+  const safePageIndex = Math.min(pageIndex, totalPages - 1);
+  const paginated = sorted.slice(safePageIndex * rowsPerPage, (safePageIndex + 1) * rowsPerPage);
+  // page 1 = newest slice, page N = oldest slice; internal page index 0 (newest slice) → displayed as page 1
+  const displayPage    = safePageIndex + 1;
+  const toInternalPage = (d: number) => Math.max(0, Math.min(totalPages - 1, d - 1));
 
   const rpCount = useMemo(
     () => sorted.filter((p) => p.prediction_pre === 'INFECTED' || p.prediction_post === 'INFECTED').length,
@@ -140,7 +140,7 @@ export default function PatientList({
       setOrderBy(key);
       setOrder('asc');
     }
-    setPage(0);
+    setPageIndex(0);
   };
 
   const visibleIds = paginated.map((p) => p.id);
@@ -307,6 +307,7 @@ export default function PatientList({
                 <SortHeader label="Status" field="status" orderBy={orderBy} order={order} onSort={handleSort} />
                 <SortHeader label="Löschdatum" field="expires_at" orderBy={orderBy} order={order} onSort={handleSort} />
                 <SortHeader label="Aufnahmedatum" field="pre_op_date" orderBy={orderBy} order={order} onSort={handleSort} />
+                <SortHeader label="Letzte Aktivität" field="last_activity" orderBy={orderBy} order={order} onSort={handleSort} />
                 <Table.Th style={{ width: 140, textAlign: 'center' }} />
               </Table.Tr>
             </Table.Thead>
@@ -384,11 +385,21 @@ export default function PatientList({
                     >
                       {p.pre_op_date ? formatDateTime(p.pre_op_date) : NO_RECORDING_DATE}
                     </Table.Td>
+                    <Table.Td
+                      align="center"
+                      style={{
+                        whiteSpace: 'nowrap',
+                        fontSize: '0.8rem',
+                      }}
+                    >
+                      {formatDateTime(p.last_activity)}
+                    </Table.Td>
                     <Table.Td align="center" style={{ width: 140 }} onClick={(e) => e.stopPropagation()}>
                       <div className={`flex items-center justify-center gap-0.5 transition-opacity ${isMenuOpen ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
                         <Menu position="bottom-end" withinPortal onOpen={() => setMenuOpenId(p.id)} onClose={() => setMenuOpenId(null)}>
                           <Menu.Target>
                             <ActionIcon
+                              aria-label={`Weitere Aktionen für Patient ${p.patient_id}`}
                               size="sm"
                               variant="subtle"
                               color="gray"
@@ -433,6 +444,7 @@ export default function PatientList({
                         </Menu>
                         <Tooltip label="Patienten-Aufnahme öffnen">
                           <ActionIcon
+                            aria-label="Patienten-Aufnahme öffnen"
                             size="sm"
                             variant="subtle"
                             color="brand"
@@ -448,6 +460,7 @@ export default function PatientList({
                         {p.status === 'PRE_OP_DONE' && (
                           <Tooltip label="Für Post-OP freischalten">
                             <ActionIcon
+                              aria-label="Für Post-OP freischalten"
                               size="sm"
                               variant="subtle"
                               color="green"
@@ -464,6 +477,7 @@ export default function PatientList({
                         {p.status === 'POST_OP_DONE' && (
                           <Tooltip label="Neue Follow-Up Sitzung starten">
                             <ActionIcon
+                              aria-label="Neue Follow-Up Sitzung starten"
                               size="sm"
                               variant="subtle"
                               color="cyan"
@@ -480,6 +494,7 @@ export default function PatientList({
                         {canDelete && (
                           <Tooltip label="Löschen">
                             <ActionIcon
+                              aria-label="Patient löschen"
                               size="sm"
                               variant="subtle"
                               color="red"
@@ -500,7 +515,7 @@ export default function PatientList({
               })}
               {paginated.length === 0 && (
                 <Table.Tr>
-                  <Table.Td colSpan={9} align="center" py="xl">
+                  <Table.Td colSpan={8} align="center" py="xl">
                     <Text size="sm" c="dimmed">
                       {search
                         ? `Kein Patient mit ID „${search}" gefunden.`
@@ -529,7 +544,7 @@ export default function PatientList({
                   onClick={() => {
                     const newTotal = Math.max(1, Math.ceil(sorted.length / size));
                     setRowsPerPage(size);
-                    setPage((p) => Math.min(p, newTotal - 1));
+                    setPageIndex((p) => Math.min(p, newTotal - 1));
                   }}
                   className="flex h-7 w-8 items-center justify-center rounded text-sm transition-colors"
                   style={{
@@ -550,11 +565,12 @@ export default function PatientList({
           {totalPages > 1 && (
             <div className="flex items-center gap-1">
               <ActionIcon
+                aria-label="Vorherige Seite"
                 size="sm"
                 variant="subtle"
                 color="gray"
-                disabled={displayPage >= totalPages}
-                onClick={() => setPage(toInternalPage(displayPage + 1))}
+                disabled={displayPage <= 1}
+                onClick={() => setPageIndex(toInternalPage(displayPage - 1))}
               >
                 <ChevronLeft size={14} />
               </ActionIcon>
@@ -564,7 +580,7 @@ export default function PatientList({
                 ) : (
                   <UnstyledButton
                     key={btn}
-                    onClick={() => setPage(toInternalPage(btn as number))}
+                    onClick={() => setPageIndex(toInternalPage(btn as number))}
                     className="flex h-7 w-8 items-center justify-center rounded text-sm transition-colors"
                     style={{
                       border: '1px solid',
@@ -580,11 +596,12 @@ export default function PatientList({
                 ),
               )}
               <ActionIcon
+                aria-label="Nächste Seite"
                 size="sm"
                 variant="subtle"
                 color="gray"
-                disabled={displayPage <= 1}
-                onClick={() => setPage(toInternalPage(displayPage - 1))}
+                disabled={displayPage >= totalPages}
+                onClick={() => setPageIndex(toInternalPage(displayPage + 1))}
               >
                 <ChevronRight size={14} />
               </ActionIcon>

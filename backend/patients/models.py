@@ -66,6 +66,32 @@ class UserProfile(models.Model):
         return f'{self.user.username} ({self.get_role_display()})'  # type: ignore[attr-defined]
 
 
+class LoginHistory(models.Model):
+    """Audit log of successful logins, recorded from CenterTokenObtainPairView."""
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='login_history',
+        verbose_name='Benutzer',
+    )
+    ip_address = models.GenericIPAddressField(
+        null=True, blank=True, verbose_name='IP-Adresse',
+    )
+    user_agent = models.CharField(
+        max_length=500, blank=True, default='', verbose_name='User-Agent',
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Zeitpunkt')
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Login-Verlauf'
+        verbose_name_plural = 'Login-Verläufe'
+
+    def __str__(self):
+        return f'{self.user.username} @ {self.created_at:%Y-%m-%d %H:%M}'
+
+
 class Exercise(models.Model):
     """
     Voice exercise configuration.
@@ -256,6 +282,35 @@ class Patient(models.Model):
         """True if audio data was exported at least once."""
         return self.last_exported_at is not None
 
+    @property
+    def last_activity(self):
+        """
+        Returns the latest timestamp among:
+        - patient.updated_at
+        - patient's audio files created_at
+        - patient's feedback entries updated_at / created_at
+        - patient's exercise skips created_at
+        """
+        timestamps = [self.updated_at]
+
+        if hasattr(self, '_prefetched_objects_cache') and 'audio_files' in self._prefetched_objects_cache:
+            timestamps.extend(af.created_at for af in self.audio_files.all())
+        else:
+            timestamps.extend(self.audio_files.values_list('created_at', flat=True))
+
+        if hasattr(self, '_prefetched_objects_cache') and 'feedback_entries' in self._prefetched_objects_cache:
+            timestamps.extend(fe.updated_at for fe in self.feedback_entries.all())
+        else:
+            timestamps.extend(self.feedback_entries.values_list('updated_at', flat=True))
+
+        if hasattr(self, '_prefetched_objects_cache') and 'exercise_skips' in self._prefetched_objects_cache:
+            timestamps.extend(es.created_at for es in self.exercise_skips.all())
+        else:
+            timestamps.extend(self.exercise_skips.values_list('created_at', flat=True))
+
+        valid_timestamps = [t for t in timestamps if t]
+        return max(valid_timestamps) if valid_timestamps else self.updated_at
+
 
 class RecordingSession(models.Model):
     """
@@ -411,7 +466,6 @@ class ExerciseSkip(models.Model):
         )
 
 
-
 class PatientAuditLog(models.Model):
     """
     Append-only audit log for patient-level events.
@@ -505,3 +559,4 @@ class PatientAuditLog(models.Model):
 
     def __str__(self):
         return f'{self.get_event_type_display()} — {self.patient.patient_id} @ {self.created_at:%Y-%m-%d %H:%M}'
+
