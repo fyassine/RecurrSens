@@ -19,6 +19,8 @@ Internal only (not exposed):
 
 ### Design Decisions
 
+*(The choices below were made under the original 856MB RAM plan. The server has since been upgraded — see Server Specifications below — but the architecture and limits were kept as-is since they work well within the new headroom.)*
+
 | Decision | Choice | Rationale |
 |----------|--------|-----------|
 | Orchestration | Docker Compose | Server has 856MB RAM; K3s needs ~512MB baseline, leaving nothing for the app |
@@ -35,45 +37,64 @@ Internal only (not exposed):
 
 ## Server Specifications
 
-- **Provider:** Strato VPS Linux VC1-1
+*(Verified 2026-06-11 — server was upgraded from the original VC1-1 spec at some point; figures below are current.)*
+
+- **Provider:** Strato VPS
 - **IP:** 31.70.77.124
-- **OS:** Ubuntu 22.04.5 LTS
-- **CPU:** 1 vCPU (AMD EPYC-Milan)
-- **RAM:** 856MB + 2GB swap
-- **Disk:** 10GB NVMe SSD
+- **OS:** Ubuntu 24.04.4 LTS
+- **CPU:** 2 vCPU (AMD EPYC-Milan)
+- **RAM:** 3868MB (~3.8GB) + 2047MB (~2GB) swap
+- **Disk:** 116GB (6.5GB used, 109GB available)
 - **SSH:** `ssh -i ~/.ssh/id_ed25519 flakhal@31.70.77.124`
 
 ## Container Memory Limits
 
+### Production (`recurrsens` project)
+
 | Service | Limit | Typical Usage |
 |---------|-------|---------------|
-| Backend (Gunicorn) | 256MB | ~70MB |
-| Celery Worker | 192MB | ~90MB |
-| Celery Beat | 96MB | ~74MB |
-| PostgreSQL | 192MB | ~17MB |
-| MinIO | 192MB | ~56MB |
+| Backend (Gunicorn) | 256MB | ~110MB |
+| Celery Worker | 192MB | ~172MB |
+| Celery Beat | 96MB | ~85MB |
+| PostgreSQL | 192MB | ~48MB |
+| MinIO | 192MB | ~144MB |
 | Redis | 48MB | ~4MB |
-| Nginx | 48MB | ~2MB |
-| **Total** | **1024MB** | **~313MB** |
+| Nginx | 128MB | ~7MB |
+| Dozzle | 32MB | ~23MB |
+| **Total** | **1136MB** | **~593MB** |
+
+### Staging (`recurrsens-staging` project)
+
+| Service | Limit |
+|---------|-------|
+| Backend (Gunicorn) | 256MB |
+| Celery Worker | 192MB |
+| PostgreSQL | 128MB |
+| MinIO | 128MB |
+| Redis | 32MB |
+| Nginx | 48MB |
+| **Total** | **784MB** |
+
+Combined (production + staging) reserved limit ≈ **1.9GB**, well within the 3.8GB physical RAM + 2GB swap available.
 
 ## Staging Environment
 
 ### Architecture
 
-Staging runs alongside production on the same VPS by **sharing stateless infrastructure** (PostgreSQL, Redis, MinIO) and only duplicating application-specific containers:
+Staging runs alongside production on the same VPS with its **own dedicated `db`, `redis`, and `minio` containers** — fully isolated from production's data and schema. Only the staging `nginx` container talks to production's network (so production nginx can proxy `staging.recurrsens.eu` to it).
 
 | Container | Production | Staging | Notes |
 |---|:---:|:---:|---|
-| `db` (PostgreSQL) | ✅ | **shared** | Staging uses a separate database (`stimmbandlaesion_staging`) |
-| `redis` | ✅ | **shared** | Staging uses Redis DB 1 (production uses DB 0) |
-| `minio` | ✅ | **shared** | Staging uses a separate bucket (`stimmbandlaesion-staging`) |
+| `db` (PostgreSQL) | ✅ | ✅ | Separate container + volume (`recurrsens-staging-db-1`) |
+| `redis` | ✅ | ✅ | Separate container (`recurrsens-staging-redis-1`) |
+| `minio` | ✅ | ✅ | Separate container + volume (`recurrsens-staging-minio-1`) |
 | `backend` | ✅ | ✅ | Separate container, tagged `:staging` |
 | `celery` | ✅ | ✅ | Separate container, tagged `:staging` |
 | `celery-beat` | ✅ | ❌ | Not needed in staging |
 | `nginx` | ✅ | ✅ | Production nginx terminates SSL; staging nginx serves SPA |
 | `dozzle` | ✅ | **shared** | Already sees all containers |
 
-**Estimated additional RAM for staging**: ~110 MB (backend ~60 MB + celery ~50 MB)
+**Additional RAM for staging**: ~784MB reserved limit (db 128MB + redis 32MB + minio 128MB + backend 256MB + celery 192MB + nginx 48MB).
 
 ### Networking
 
@@ -81,9 +102,12 @@ Staging runs alongside production on the same VPS by **sharing stateless infrast
 Internet → :443 → Production Nginx ─┬→ recurrsens.eu       → Production backend (:8000)
                                      └→ staging.recurrsens.eu → Staging Nginx (:8080)
                                                                    └→ Staging backend (:8000)
+                                                                        └→ Staging db / redis / minio
 
 Production Nginx (recurrsens-nginx-1) acts as the SSL terminator for both environments.
-Staging containers join the `recurrsens_default` network to access shared infra.
+Only the staging `nginx` container joins the `recurrsens_default` network (so production
+nginx can resolve and proxy to it). Staging's db/redis/minio/backend/celery are isolated
+on the staging project's own network.
 ```
 
 ### Deploy Workflow
@@ -103,44 +127,46 @@ Staging also auto-deploys when code is pushed to the `staging` branch.
 | Project | Directory | Compose files |
 |---|---|---|
 | `recurrsens` (production) | `~/recurrsens/` | `docker-compose.yml` + `docker-compose.prod.yml` |
-| `recurrsens-staging` (staging) | `~/recurrsens-staging/` | `docker-compose.yml` + `docker-compose.staging.yml` |
+| `recurrsens-staging` (staging) | `~/recurrsens-staging/` | `docker-compose.staging.yml` (self-contained) |
 
 ### Staging Setup (one-time)
 
 ```bash
-# 1. Create staging database on the shared PostgreSQL instance
-docker exec -it recurrsens-db-1 psql -U postgres -c "CREATE DATABASE stimmbandlaesion_staging;"
+# 1. Add DNS A record for staging.recurrsens.eu → 31.70.77.124
 
-# 2. Add DNS A record for staging.recurrsens.eu → 31.70.77.124
-
-# 3. Obtain SSL certificate for staging subdomain
+# 2. Obtain SSL certificate for staging subdomain
 sudo certbot certonly --webroot -w /var/www/certbot -d staging.recurrsens.eu
 
-# 4. Create GitHub "staging" environment with staging-specific vars:
+# 3. Create GitHub "staging" environment with staging-specific vars/secrets, e.g.:
 #    ALLOWED_HOSTS=staging.recurrsens.eu
 #    APP_URL=https://staging.recurrsens.eu
 #    CORS_ALLOWED_ORIGINS=https://staging.recurrsens.eu
-#    DB_NAME=stimmbandlaesion_staging
-#    S3_BUCKET=stimmbandlaesion-staging
+#    CSRF_TRUSTED_ORIGINS=https://staging.recurrsens.eu
+#    DB_HOST=db, DB_PORT=5432, DB_NAME=stimmbandlaesion, DB_USER=stimmbandlaesion
+#    S3_ENDPOINT=http://minio:9000, S3_BUCKET=stimmbandlaesion, S3_ACCESS_KEY=stimmbandlaesion
+#    CELERY_BROKER_URL=redis://redis:6379/0
+# (db/redis/minio are staging's own dedicated containers — see Architecture above)
 ```
 
 ### Staging Commands
 
+Run from `~/recurrsens-staging/` on the VPS (see [README.staging.md](../README.staging.md) for the full operations guide):
+
 ```bash
 # Container status
-ssh flakhal@31.70.77.124 "docker compose -p recurrsens-staging -f ~/recurrsens-staging/docker-compose.yml -f ~/recurrsens-staging/docker-compose.staging.yml ps"
+ssh flakhal@31.70.77.124 "cd ~/recurrsens-staging && docker compose -p recurrsens-staging -f docker-compose.staging.yml ps"
 
 # Logs
-ssh flakhal@31.70.77.124 "docker compose -p recurrsens-staging -f ~/recurrsens-staging/docker-compose.yml -f ~/recurrsens-staging/docker-compose.staging.yml logs backend --tail=50"
+ssh flakhal@31.70.77.124 "cd ~/recurrsens-staging && docker compose -p recurrsens-staging -f docker-compose.staging.yml logs backend --tail=50"
 
 # Restart
-ssh flakhal@31.70.77.124 "docker compose -p recurrsens-staging -f ~/recurrsens-staging/docker-compose.yml -f ~/recurrsens-staging/docker-compose.staging.yml restart"
+ssh flakhal@31.70.77.124 "cd ~/recurrsens-staging && docker compose -p recurrsens-staging -f docker-compose.staging.yml restart"
 
 # Stop staging (to free resources)
-ssh flakhal@31.70.77.124 "docker compose -p recurrsens-staging -f ~/recurrsens-staging/docker-compose.yml -f ~/recurrsens-staging/docker-compose.staging.yml down"
+ssh flakhal@31.70.77.124 "cd ~/recurrsens-staging && docker compose -p recurrsens-staging -f docker-compose.staging.yml down"
 
 # Django management commands
-ssh flakhal@31.70.77.124 "docker compose -p recurrsens-staging -f ~/recurrsens-staging/docker-compose.yml -f ~/recurrsens-staging/docker-compose.staging.yml exec backend python manage.py <command>"
+ssh flakhal@31.70.77.124 "cd ~/recurrsens-staging && docker compose -p recurrsens-staging -f docker-compose.staging.yml exec backend python manage.py <command>"
 ```
 
 ## File Layout on Server
@@ -153,9 +179,8 @@ ssh flakhal@31.70.77.124 "docker compose -p recurrsens-staging -f ~/recurrsens-s
 │   ├── dozzle-users.yml            # Dozzle auth config
 │   └── .env                        # Production secrets (chmod 600)
 │
-└── recurrsens-staging/             # Staging
-    ├── docker-compose.yml          # Base compose config (same file)
-    ├── docker-compose.staging.yml  # Staging overrides
+└── recurrsens-staging/             # Staging (self-contained, isolated db/redis/minio)
+    ├── docker-compose.staging.yml  # Full staging compose config
     └── .env                        # Staging secrets (chmod 600)
 ```
 

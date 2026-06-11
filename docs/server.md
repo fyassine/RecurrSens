@@ -2,7 +2,7 @@
 
 ## Architecture Overview
 
-The application runs on a single Strato VPS (VC 1-1) using Docker Compose. All services run as containers behind an Nginx reverse proxy.
+The application runs on a single Strato VPS using Docker Compose. All services run as containers behind an Nginx reverse proxy.
 
 ```
 Internet → :80/:443 → Nginx → Backend (Gunicorn)
@@ -19,6 +19,8 @@ Internal only (not exposed):
 ```
 
 ### Design Decisions
+
+*(The choices below were made under the original 1 vCore / 1GB RAM plan. The server has since been upgraded — see Server Specifications — but the architecture and limits were kept as-is since they work well within the new headroom.)*
 
 | Decision | Choice | Rationale |
 |----------|--------|-----------|
@@ -38,28 +40,22 @@ Internal only (not exposed):
 
 ## Server Specifications
 
+*(Verified 2026-06-11 — server was upgraded from the original VC1-1 plan; figures below are current.)*
+
 | | |
 |---|---|
-| **Provider** | Strato VPS Linux VC 1-1 |
-| **Plan** | 1 vCore · 10 GB SSD · 1 GB RAM · 1 €/month |
+| **Provider** | Strato VPS |
+| **CPU** | 2 vCPU (AMD EPYC-Milan) |
+| **RAM** | 3868 MB (~3.8 GB) |
+| **Disk** | 116 GB (6.5 GB used) |
 | **IP** | `31.70.77.124` |
-| **OS** | Ubuntu 22.04.5 LTS |
-| **Swap** | 2 GB |
+| **OS** | Ubuntu 24.04.4 LTS |
+| **Swap** | 2047 MB (~2 GB) |
 | **SSH** | `ssh -i ~/.ssh/id_ed25519 flakhal@31.70.77.124` |
 
 ## Container Memory Limits
 
-| Service | Limit | Typical Usage |
-|---------|-------|---------------|
-| Backend (Gunicorn) | 256 MB | ~70 MB |
-| Celery Worker | 192 MB | ~90 MB |
-| Celery Beat | 96 MB | ~74 MB |
-| PostgreSQL | 192 MB | ~17 MB |
-| MinIO | 192 MB | ~56 MB |
-| Redis | 48 MB | ~4 MB |
-| Nginx | 48 MB | ~2 MB |
-| Dozzle | 32 MB | ~8 MB |
-| **Total limits** | **1,056 MB** | **~321 MB** |
+For up-to-date production and staging memory limits, see [docs/deployment.md § Container Memory Limits](deployment.md#container-memory-limits) — production currently reserves ~1136 MB and staging ~784 MB, well within the 3.8 GB RAM + 2 GB swap available.
 
 Swap absorbs burst usage (e.g. during image builds or migrations).
 

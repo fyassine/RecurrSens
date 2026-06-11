@@ -5,14 +5,74 @@
 #   docker compose -p recurrsens-staging \
 #     -f docker-compose.staging.yml up -d
 #
-# This file is self-contained:
+# This file is fully self-contained:
 #   - Uses :staging tagged images
-#   - Connects to the SAME db/redis/minio from the production project
-#   - Uses a separate database, Redis DB, and S3 bucket
+#   - Runs its own dedicated db, redis, and minio containers (no shared state
+#     with production — avoids schema drift between staging and prod)
 #   - Binds nginx to port 8080 (proxied by production nginx)
 # ==============================================================================
 
 services:
+  # ── Staging database ────────────────────────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-stimmbandlaesion}
+      POSTGRES_USER: ${DB_USER:-stimmbandlaesion}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-change-me-in-staging}
+    volumes:
+      - staging_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-stimmbandlaesion} -d ${DB_NAME:-stimmbandlaesion}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - default
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+
+  # ── Staging cache / broker ──────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - default
+    deploy:
+      resources:
+        limits:
+          memory: 32M
+
+  # ── Staging object storage ──────────────────────────────────────────────────
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY:-stimmbandlaesion}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:-change-me-in-staging}
+    command: server /data --console-address ":9001"
+    volumes:
+      - staging_minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - default
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+
   # ── Staging backend ─────────────────────────────────────────────────────────
   backend:
     image: ghcr.io/fyassine/recurrsens-backend:staging
@@ -28,25 +88,31 @@ services:
       DJANGO_SETTINGS_MODULE: config.settings.production
       DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-change-me-in-staging}
       ALLOWED_HOSTS: ${ALLOWED_HOSTS:-staging.recurrsens.eu}
-      DB_NAME: ${DB_NAME:-stimmbandlaesion_staging}
-      DB_USER: ${DB_USER:-postgres}
-      DB_PASSWORD: ${DB_PASSWORD:-postgres}
-      DB_HOST: recurrsens-db-1               # Connect to production's db container
+      DB_NAME: ${DB_NAME:-stimmbandlaesion}
+      DB_USER: ${DB_USER:-stimmbandlaesion}
+      DB_PASSWORD: ${DB_PASSWORD:-change-me-in-staging}
+      DB_HOST: db
       DB_PORT: "5432"
       S3_REGION: ${S3_REGION:-us-east-1}
-      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-minioadmin}
-      S3_SECRET_KEY: ${S3_SECRET_KEY:-minioadmin}
-      S3_ENDPOINT: http://recurrsens-minio-1:9000  # Connect to production's minio
-      S3_BUCKET: ${S3_BUCKET:-stimmbandlaesion-staging}
-      CELERY_BROKER_URL: redis://recurrsens-redis-1:6379/1  # DB 1 (prod uses DB 0)
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-stimmbandlaesion}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-change-me-in-staging}
+      S3_ENDPOINT: http://minio:9000
+      S3_BUCKET: ${S3_BUCKET:-stimmbandlaesion}
+      CELERY_BROKER_URL: redis://redis:6379/0
       INFERENCE_SERVICE_URL: ${INFERENCE_SERVICE_URL:-http://inference:8001}
       APP_URL: ${APP_URL:-https://staging.recurrsens.eu}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://staging.recurrsens.eu}
       DJANGO_SUPERUSER_USERNAME: ${DJANGO_SUPERUSER_USERNAME:-admin}
       DJANGO_SUPERUSER_PASSWORD: ${DJANGO_SUPERUSER_PASSWORD:-stimmbandlaesion}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
     networks:
       - default
-      - recurrsens_default     # Join production's network for db/redis/minio access
     deploy:
       resources:
         limits:
@@ -61,21 +127,27 @@ services:
       DJANGO_SETTINGS_MODULE: config.settings.production
       DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-change-me-in-staging}
       ALLOWED_HOSTS: ${ALLOWED_HOSTS:-staging.recurrsens.eu}
-      DB_NAME: ${DB_NAME:-stimmbandlaesion_staging}
-      DB_USER: ${DB_USER:-postgres}
-      DB_PASSWORD: ${DB_PASSWORD:-postgres}
-      DB_HOST: recurrsens-db-1
+      DB_NAME: ${DB_NAME:-stimmbandlaesion}
+      DB_USER: ${DB_USER:-stimmbandlaesion}
+      DB_PASSWORD: ${DB_PASSWORD:-change-me-in-staging}
+      DB_HOST: db
       DB_PORT: "5432"
       S3_REGION: ${S3_REGION:-us-east-1}
-      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-minioadmin}
-      S3_SECRET_KEY: ${S3_SECRET_KEY:-minioadmin}
-      S3_ENDPOINT: http://recurrsens-minio-1:9000
-      S3_BUCKET: ${S3_BUCKET:-stimmbandlaesion-staging}
-      CELERY_BROKER_URL: redis://recurrsens-redis-1:6379/1
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-stimmbandlaesion}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-change-me-in-staging}
+      S3_ENDPOINT: http://minio:9000
+      S3_BUCKET: ${S3_BUCKET:-stimmbandlaesion}
+      CELERY_BROKER_URL: redis://redis:6379/0
       INFERENCE_SERVICE_URL: ${INFERENCE_SERVICE_URL:-http://inference:8001}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
     networks:
       - default
-      - recurrsens_default
     deploy:
       resources:
         limits:
@@ -93,7 +165,7 @@ services:
       - backend
     networks:
       - default
-      - recurrsens_default
+      - recurrsens_default     # Production nginx resolves this container here to proxy staging.recurrsens.eu
     deploy:
       resources:
         limits:
@@ -101,7 +173,9 @@ services:
 
 volumes:
   staging_static_files:
+  staging_postgres_data:
+  staging_minio_data:
 
 networks:
   recurrsens_default:
-    external: true             # Attach to production's Docker network
+    external: true             # Only nginx joins this, so production nginx can proxy to staging.recurrsens.eu
