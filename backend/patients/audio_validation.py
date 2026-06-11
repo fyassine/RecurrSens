@@ -18,7 +18,6 @@ from dataclasses import dataclass
 
 from django.core.exceptions import ValidationError
 
-
 MAX_AUDIO_BYTES = 50 * 1024 * 1024
 
 

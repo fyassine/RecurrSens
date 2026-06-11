@@ -3,9 +3,20 @@ Django Admin configuration for the patients app.
 Provides a rich admin interface for managing patients, audio files, exercises, and sessions.
 """
 from django.contrib import admin
-from django.utils import timezone
-from .models import Patient, AudioFile, Exercise, RecordingSession, PatientFeedback, ExerciseSkip, Center, UserProfile, LoginHistory, PatientAuditLog
+
 from . import services
+from .models import (
+    AudioFile,
+    Center,
+    Exercise,
+    ExerciseSkip,
+    LoginHistory,
+    Patient,
+    PatientAuditLog,
+    PatientFeedback,
+    RecordingSession,
+    UserProfile,
+)
 
 
 class AudioFileInline(admin.TabularInline):

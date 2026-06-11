@@ -11,10 +11,11 @@ code because they carry richer context (actor username, changed fields, etc.)
 that signals cannot easily access.
 """
 import logging
+
 from django.db.models.signals import post_save, pre_delete
 from django.dispatch import receiver
 
-from .models import Patient, AudioFile, PatientAuditLog
+from .models import AudioFile, Patient, PatientAuditLog
 
 logger = logging.getLogger(__name__)
 

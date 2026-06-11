@@ -10,7 +10,6 @@ from django.test import SimpleTestCase
 
 from patients.audio_validation import MAX_AUDIO_BYTES, validate_audio_upload
 
-
 # Minimal magic-byte headers per container.
 MP4 = b'\x00\x00\x00\x18ftypmp42\x00\x00\x00\x00mp42isom' + b'\x00' * 16
 WEBM = b'\x1a\x45\xdf\xa3' + b'\x00' * 28

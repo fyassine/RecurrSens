@@ -14,7 +14,7 @@ from django.core import mail
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
-from patients.models import Patient, AudioFile
+from patients.models import AudioFile, Patient
 from patients.tasks import (
     backup_database_snapshot,
     check_data_expiry,

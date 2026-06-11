@@ -7,7 +7,7 @@ Routes are organized into three groups:
 3. Public endpoints (/api/exercises/, /api/audio/...) — no auth
 4. Export (/api/export/) — JWT required
 """
-from django.urls import path, include
+from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
 from . import views

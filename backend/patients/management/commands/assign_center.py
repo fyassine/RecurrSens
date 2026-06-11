@@ -7,6 +7,7 @@ Usage:
     python manage.py assign_center "MRI" --dry-run      # preview without saving
 """
 from django.core.management.base import BaseCommand, CommandError
+
 from patients.models import Center, Patient
 
 
@@ -39,7 +40,7 @@ class Command(BaseCommand):
             raise CommandError(
                 f'Center "{name}" not found.\n'
                 f'Existing centers: {existing or ["(none — create one in Django admin first)"]}'
-            )
+            ) from None
 
         qs = Patient.objects.all() if assign_all else Patient.objects.filter(center__isnull=True)
         count = qs.count()

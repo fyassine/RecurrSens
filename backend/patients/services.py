@@ -7,30 +7,28 @@ Ported from the deprecated Next.js app (lib/api.ts):
 - generate_patient_pdf: QR code PDF generation
 - export_patients_data: CSV + audio ZIP export
 """
-import io
 import csv
+import io
 import logging
 import os
 import zipfile
 from datetime import date, datetime
-from typing import Optional
-
-from django.contrib.auth.models import update_last_login
-from django.core import signing
-from django.utils import timezone
 
 import boto3
 import boto3.session
-from botocore.config import Config as BotocoreConfig
 import qrcode
+from botocore.config import Config as BotocoreConfig
 from django.conf import settings
+from django.contrib.auth.models import update_last_login
+from django.core import signing
+from django.utils import timezone
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import cm
 from reportlab.pdfgen import canvas
 from user_agents import parse as parse_ua
 
-from .models import Patient, AudioFile, Exercise, RecordingSession, LoginHistory
-from .permissions import _get_role, _get_center
+from .models import Exercise, LoginHistory, Patient, RecordingSession
+from .permissions import _get_center, _get_role
 
 logger = logging.getLogger(__name__)
 
@@ -149,7 +147,7 @@ def move_audio_in_s3(old_key: str, new_key: str) -> bool:
     return True
 
 
-def get_audio_from_s3(key: str) -> Optional[bytes]:
+def get_audio_from_s3(key: str) -> bytes | None:
     """Download audio file data from S3/MinIO."""
     s3 = get_s3_client()
     try:
@@ -245,7 +243,7 @@ def create_recording_session(patient: Patient, phase: str) -> RecordingSession:
     return session
 
 
-def get_active_session(patient: Patient, phase: str) -> Optional[RecordingSession]:
+def get_active_session(patient: Patient, phase: str) -> RecordingSession | None:
     """
     Get the latest recording session for a patient and phase.
     This is the session that audio uploads will be assigned to.
@@ -658,7 +656,7 @@ def delete_patient_with_files(patient: Patient) -> None:
 USER_AGENT_MAX_LENGTH = 500  # must match LoginHistory.user_agent max_length
 
 
-def get_client_ip(request) -> Optional[str]:
+def get_client_ip(request) -> str | None:
     """Return the client's IP, preferring X-Forwarded-For (set by nginx)."""
     forwarded = request.META.get('HTTP_X_FORWARDED_FOR')
     if forwarded:
