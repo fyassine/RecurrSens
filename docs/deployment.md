@@ -224,6 +224,49 @@ ssh flakhal@31.70.77.124 "cd ~/stimmbandlaesion && docker compose -f docker-comp
 ssh flakhal@31.70.77.124 "cd ~/stimmbandlaesion && docker compose -f docker-compose.yml -f docker-compose.prod.yml exec backend python manage.py <command>"
 ```
 
+## Database Backups
+
+Production runs a nightly encrypted PostgreSQL backup as a Celery Beat
+periodic task (`patients.tasks.backup_database_snapshot`, scheduled at 02:30
+Europe/Berlin via `db-backup-nightly`). The pipeline: `pg_dump --format=custom
+--compress=9` → GPG-encrypt → upload to `S3_BUCKET` under
+`{BACKUP_S3_PREFIX}/{BACKUP_ENV}/` → prune backups beyond
+`BACKUP_RETENTION` → email `ADMIN_NOTIFICATION_EMAIL` with the result.
+
+Disabled by default — only enable on the production deployment server.
+
+### Configuration
+
+Set in the production GitHub environment (vars/secrets used by
+`.github/workflows/deploy.yml`):
+
+| Variable | Type | Description |
+|---|---|---|
+| `DB_BACKUP_ENABLED` | var | Set to `true` to enable the nightly task |
+| `BACKUP_RETENTION` | var | Number of backups to keep (default 30) |
+| `BACKUP_S3_PREFIX` | var | S3 key prefix (default `backups`) |
+| `GPG_RECIPIENT_KEY` | secret | GPG key ID/email the dump is encrypted to |
+| `GPG_PUBLIC_KEY` | secret | Base64-encoded ASCII-armored GPG public key — generate with `gpg --export --armor <recipient> \| base64 -w0` |
+
+When `DB_BACKUP_ENABLED=true`, `config.settings.production` raises
+`ImproperlyConfigured` at boot unless both `GPG_RECIPIENT_KEY` and
+`GPG_PUBLIC_KEY` are set — backups are never uploaded unencrypted.
+
+### Verification
+
+```bash
+# Confirm the periodic task was registered
+ssh flakhal@31.70.77.124 "cd ~/recurrsens && docker compose -f docker-compose.yml -f docker-compose.prod.yml logs celery-beat --tail=50"
+# Or check Django admin → Periodic Tasks → db-backup-nightly
+
+# Trigger an on-demand backup (e.g. before a risky migration)
+ssh flakhal@31.70.77.124 "cd ~/recurrsens && docker compose -f docker-compose.yml -f docker-compose.prod.yml exec celery python manage.py backup_database"
+```
+
+A successful run uploads `{DB_NAME}_{timestamp}.dump.gpg` to MinIO/S3 and
+emails `ADMIN_NOTIFICATION_EMAIL` a summary; a failure (after 2 retries)
+emails a failure summary instead.
+
 ## Security
 
 - **SSH:** Key-based only, root login disabled, password authentication disabled

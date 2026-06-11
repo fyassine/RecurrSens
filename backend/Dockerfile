@@ -17,8 +17,15 @@ RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 # Stage 2: Production image
 FROM python:3.12-slim AS runner
 
+# libpq5: Postgres client library
+# postgresql-client-16: pg_dump (matches the postgres:16-alpine server, used
+#   by patients.tasks.backup_database_snapshot)
+# gnupg: encrypts the nightly DB backup before it is uploaded to S3/MinIO
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libpq5 \
+    libpq5 wget gnupg ca-certificates \
+    && wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | gpg --dearmor -o /usr/share/keyrings/postgresql.gpg \
+    && echo "deb [signed-by=/usr/share/keyrings/postgresql.gpg] http://apt.postgresql.org/pub/repos/apt bookworm-pgdg main" > /etc/apt/sources.list.d/pgdg.list \
+    && apt-get update && apt-get install -y --no-install-recommends postgresql-client-16 \
     && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user

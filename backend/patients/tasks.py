@@ -6,10 +6,19 @@ Primary task: run_inference_task
   - Sends audio keys to the inference service
   - Stores prediction results back on the Patient model
 """
+import base64
 import logging
+import os
+import shutil
+import subprocess
+import tempfile
+
+import boto3
 import requests
 from celery import shared_task
 from django.conf import settings
+from django.core.mail import send_mail
+from django.utils import timezone
 
 logger = logging.getLogger(__name__)
 
@@ -186,6 +195,176 @@ def check_data_expiry():
     for patient in to_delete:
         delete_patient_with_files(patient)
         logger.info(f'Auto-deleted patient {patient.patient_id} (expired + downloaded)')
+
+
+@shared_task(bind=True, max_retries=2, default_retry_delay=300)
+def backup_database_snapshot(self):
+    """
+    Periodic task: nightly encrypted PostgreSQL backup to S3/MinIO.
+
+    Only runs when DB_BACKUP_ENABLED=True (production only — see
+    CELERY_BEAT_SCHEDULE in settings; dev/staging leave this unset).
+
+    Pipeline:
+      1. pg_dump --format=custom --compress=9
+      2. GPG-encrypt the dump (DB_BACKUP_GPG_RECIPIENT is required whenever
+         this task is enabled — enforced at boot in config.settings.production)
+      3. Upload to S3_BUCKET under DB_BACKUP_S3_PREFIX/DB_BACKUP_ENV_LABEL/
+      4. Prune old backups beyond DB_BACKUP_RETENTION
+      5. Email ADMIN_NOTIFICATION_EMAIL with the result
+    """
+    if not settings.DB_BACKUP_ENABLED:
+        logger.info('backup_database_snapshot: DB_BACKUP_ENABLED=False; skipping')
+        return
+
+    db = settings.DATABASES['default']
+    timestamp = timezone.now().strftime('%Y-%m-%d_%H-%M-%S')
+    work_dir = tempfile.mkdtemp(prefix='db-backup-')
+    dump_path = os.path.join(work_dir, f"{db['NAME']}_{timestamp}.dump")
+    enc_path = f'{dump_path}.gpg'
+
+    try:
+        _run_pg_dump(db, dump_path)
+        _gpg_encrypt(dump_path, enc_path, work_dir)
+
+        s3_key = (
+            f'{settings.DB_BACKUP_S3_PREFIX}/{settings.DB_BACKUP_ENV_LABEL}/'
+            f'{os.path.basename(enc_path)}'
+        )
+        size = os.path.getsize(enc_path)
+        _upload_to_s3(enc_path, s3_key)
+        pruned = _prune_old_backups()
+    except Exception as exc:
+        logger.error(f'backup_database_snapshot failed: {exc}')
+        try:
+            self.retry(exc=exc)
+        except self.MaxRetriesExceededError:
+            _send_backup_email(success=False, detail=str(exc))
+        return
+    finally:
+        shutil.rmtree(work_dir, ignore_errors=True)
+
+    logger.info(
+        f'backup_database_snapshot: uploaded {s3_key} ({size} bytes), '
+        f'pruned {pruned} old backup(s)'
+    )
+    _send_backup_email(
+        success=True,
+        detail=(
+            f'Database : {db["NAME"]}\n'
+            f'Env      : {settings.DB_BACKUP_ENV_LABEL}\n'
+            f'S3 key   : {s3_key}\n'
+            f'Size     : {size} bytes\n'
+            f'Pruned   : {pruned} old backup(s) (retention: {settings.DB_BACKUP_RETENTION})\n'
+            f'Time     : {timezone.now().isoformat()}\n'
+        ),
+    )
+
+
+def _run_pg_dump(db: dict, dump_path: str):
+    env = os.environ.copy()
+    env['PGPASSWORD'] = db['PASSWORD']
+    subprocess.run(
+        [
+            'pg_dump',
+            '--host', db['HOST'],
+            '--port', str(db['PORT']),
+            '--username', db['USER'],
+            '--format=custom',
+            '--compress=9',
+            '--no-password',
+            '--file', dump_path,
+            db['NAME'],
+        ],
+        env=env,
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=600,
+    )
+
+
+def _gpg_encrypt(dump_path: str, enc_path: str, work_dir: str):
+    """Encrypt the dump in an isolated GNUPGHOME (no persistent keyring needed)."""
+    gnupg_home = os.path.join(work_dir, 'gnupg')
+    os.makedirs(gnupg_home, mode=0o700, exist_ok=True)
+    env = os.environ.copy()
+    env['GNUPGHOME'] = gnupg_home
+
+    if settings.DB_BACKUP_GPG_PUBLIC_KEY:
+        # Stored base64-encoded so the ASCII-armored key survives as a
+        # single-line env var (.env files / docker-compose don't support
+        # multi-line values).
+        public_key = base64.b64decode(settings.DB_BACKUP_GPG_PUBLIC_KEY).decode('utf-8')
+        subprocess.run(
+            ['gpg', '--batch', '--import'],
+            input=public_key,
+            env=env,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+    subprocess.run(
+        [
+            'gpg', '--batch', '--yes', '--trust-model', 'always',
+            '--encrypt', '--recipient', settings.DB_BACKUP_GPG_RECIPIENT,
+            '--output', enc_path, dump_path,
+        ],
+        env=env,
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=300,
+    )
+
+
+def _s3_client():
+    return boto3.client(
+        's3',
+        endpoint_url=settings.S3_ENDPOINT,
+        aws_access_key_id=settings.S3_ACCESS_KEY,
+        aws_secret_access_key=settings.S3_SECRET_KEY,
+        region_name=settings.S3_REGION,
+    )
+
+
+def _upload_to_s3(file_path: str, s3_key: str):
+    _s3_client().upload_file(file_path, settings.S3_BUCKET, s3_key)
+
+
+def _prune_old_backups() -> int:
+    """Delete the oldest backups beyond DB_BACKUP_RETENTION. Returns count deleted."""
+    client = _s3_client()
+    prefix = f'{settings.DB_BACKUP_S3_PREFIX}/{settings.DB_BACKUP_ENV_LABEL}/'
+
+    keys = []
+    paginator = client.get_paginator('list_objects_v2')
+    for page in paginator.paginate(Bucket=settings.S3_BUCKET, Prefix=prefix):
+        keys.extend(obj['Key'] for obj in page.get('Contents', []))
+    keys.sort()  # timestamped filenames sort chronologically, oldest first
+
+    excess = len(keys) - settings.DB_BACKUP_RETENTION
+    if excess <= 0:
+        return 0
+
+    for key in keys[:excess]:
+        client.delete_object(Bucket=settings.S3_BUCKET, Key=key)
+    return excess
+
+
+def _send_backup_email(success: bool, detail: str):
+    status = 'Succeeded' if success else 'FAILED'
+    try:
+        send_mail(
+            subject=f'[RecurrSens {settings.DB_BACKUP_ENV_LABEL}] DB Backup {status}',
+            message=detail,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[settings.ADMIN_NOTIFICATION_EMAIL],
+            fail_silently=False,
+        )
+    except Exception as e:
+        logger.warning(f'backup_database_snapshot: notification email failed: {e}')
 
 
 @shared_task
