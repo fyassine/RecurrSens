@@ -38,7 +38,7 @@ def run_inference_task(self, patient_id: str, phase: str):
 
     Results are stored on the Patient model's AI fields.
     """
-    from .models import Patient, AudioFile
+    from .models import AudioFile, Patient
 
     try:
         patient = Patient.objects.get(id=patient_id)
@@ -168,6 +168,7 @@ def check_data_expiry():
       2. Auto-delete expired patients that have already been exported.
     """
     from django.utils import timezone
+
     from .models import Patient
 
     now = timezone.now()

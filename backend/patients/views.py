@@ -29,36 +29,49 @@ import logging
 from datetime import datetime
 
 from django.core.exceptions import ValidationError
-from django.http import HttpResponse, StreamingHttpResponse
-from rest_framework import viewsets, status, generics
-from rest_framework.decorators import action, api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated, AllowAny
+from django.http import HttpResponse
+from rest_framework import generics, status, viewsets
+from rest_framework.decorators import action
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
-from .models import Patient, AudioFile, Exercise, RecordingSession, PatientFeedback, ExerciseSkip, PatientAuditLog
-from .serializers import (
-    PatientListSerializer,
-    PatientDetailSerializer,
-    PatientPublicSerializer,
-    PatientCreateSerializer,
-    PatientUpdateSerializer,
-    ExerciseSerializer,
-    AudioFileSerializer,
-    CompletenessSerializer,
-    RecordingSessionSerializer,
-    PatientFeedbackSerializer,
-    PatientFeedbackCreateSerializer,
-    ExerciseSkipSerializer,
-    ExerciseSkipCreateSerializer,
-)
-from .permissions import IsAdminUser, IsPatientTokenValid, IsAdminOrPatientToken, IsSuperAdmin, _get_role, _get_center
 from . import services
 from .audio_validation import (
     ALLOWED_EXTENSIONS,
     extension_for_content_type,
     validate_audio_upload,
+)
+from .models import (
+    AudioFile,
+    Exercise,
+    ExerciseSkip,
+    Patient,
+    PatientAuditLog,
+    PatientFeedback,
+    RecordingSession,
+)
+from .permissions import (
+    IsAdminOrPatientToken,
+    IsPatientTokenValid,
+    IsSuperAdmin,
+    _get_center,
+    _get_role,
+)
+from .serializers import (
+    CompletenessSerializer,
+    ExerciseSerializer,
+    ExerciseSkipCreateSerializer,
+    ExerciseSkipSerializer,
+    PatientCreateSerializer,
+    PatientDetailSerializer,
+    PatientFeedbackCreateSerializer,
+    PatientFeedbackSerializer,
+    PatientListSerializer,
+    PatientPublicSerializer,
+    PatientUpdateSerializer,
+    RecordingSessionSerializer,
 )
 
 logger = logging.getLogger(__name__)

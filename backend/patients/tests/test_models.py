@@ -1,7 +1,9 @@
 """Model tests for the patients app."""
+from django.db import IntegrityError
 from django.test import TestCase
 from django.utils import timezone
-from patients.models import Patient, AudioFile, Exercise, RecordingSession, PatientAuditLog
+
+from patients.models import AudioFile, Exercise, Patient, PatientAuditLog, RecordingSession
 
 
 class ExerciseModelTest(TestCase):
@@ -61,13 +63,13 @@ class PatientModelTest(TestCase):
 
     def test_patient_unique_patient_id(self):
         Patient.objects.create(patient_id='UNIQUE-001')
-        with self.assertRaises(Exception):
+        with self.assertRaises(IntegrityError):
             Patient.objects.create(patient_id='UNIQUE-001')
 
     def test_patient_ordering(self):
         """Most recently created patients should come first."""
-        p1 = Patient.objects.create(patient_id='ORDER-001')
-        p2 = Patient.objects.create(patient_id='ORDER-002')
+        Patient.objects.create(patient_id='ORDER-001')
+        Patient.objects.create(patient_id='ORDER-002')
         patients = list(Patient.objects.all())
         self.assertEqual(patients[0].patient_id, 'ORDER-002')
         self.assertEqual(patients[1].patient_id, 'ORDER-001')
@@ -116,7 +118,7 @@ class RecordingSessionModelTest(TestCase):
             phase=RecordingSession.Phase.PRE_OP,
             session_number=1,
         )
-        with self.assertRaises(Exception):
+        with self.assertRaises(IntegrityError):
             RecordingSession.objects.create(
                 patient=self.patient,
                 phase=RecordingSession.Phase.PRE_OP,

@@ -7,9 +7,9 @@ Provides different serializer variants depending on the consumer:
 - Create/update operations get dedicated serializers with validation
 """
 from rest_framework import serializers
-from .models import Patient, AudioFile, Exercise, RecordingSession, PatientFeedback, ExerciseSkip
-from .services import get_active_session
 
+from .models import AudioFile, Exercise, ExerciseSkip, Patient, PatientFeedback, RecordingSession
+from .services import get_active_session
 
 # =============================================================================
 # Exercise Serializers
@@ -312,6 +312,7 @@ class PatientUpdateSerializer(serializers.ModelSerializer):
 
     def update(self, instance, validated_data):
         import logging
+
         from django.utils import timezone
         logger = logging.getLogger(__name__)
 

@@ -1,7 +1,7 @@
 """
 Production-specific settings.
 """
-from decouple import config, Csv
+from decouple import Csv, config
 from django.core.exceptions import ImproperlyConfigured
 
 from .base import *  # noqa: F401,F403

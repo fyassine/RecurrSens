@@ -8,15 +8,20 @@ Security & access-control tests covering the P0/P1 fixes:
 """
 from unittest import mock
 
+from django.contrib.auth.models import User
 from django.test import TestCase
 from rest_framework import status
 from rest_framework.test import APIClient
 
 from patients import services
 from patients.models import (
-    Patient, AudioFile, Exercise, RecordingSession, Center, UserProfile,
+    AudioFile,
+    Center,
+    Exercise,
+    Patient,
+    RecordingSession,
+    UserProfile,
 )
-from django.contrib.auth.models import User
 
 
 def _jwt_for(client, username, password):

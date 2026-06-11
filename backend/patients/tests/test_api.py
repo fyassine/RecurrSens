@@ -2,12 +2,19 @@
 API integration tests for the patients app.
 Tests cover all major endpoints, authentication, and business logic flows.
 """
-from django.test import TestCase
 from django.contrib.auth.models import User
-from rest_framework.test import APIClient
+from django.test import TestCase
 from rest_framework import status
+from rest_framework.test import APIClient
 
-from patients.models import Patient, AudioFile, Exercise, RecordingSession, PatientFeedback, ExerciseSkip
+from patients.models import (
+    AudioFile,
+    Exercise,
+    ExerciseSkip,
+    Patient,
+    PatientFeedback,
+    RecordingSession,
+)
 
 
 class BaseAPITest(TestCase):
@@ -539,8 +546,10 @@ class PatientActivityAPITest(BaseAPITest):
 
     def test_patient_activity_merged_with_legacy_logs(self):
         """If database logs exist, legacy events preceding earliest DB log are merged."""
-        from django.utils import timezone
         from datetime import timedelta
+
+        from django.utils import timezone
+
         from patients.models import PatientAuditLog
 
         patient = self.create_test_patient('ACT-002')
@@ -569,8 +578,8 @@ class PatientActivityAPITest(BaseAPITest):
 
     def test_audit_log_created_at_and_patient_id_edit(self):
         """Updating patient_id and created_at writes PatientAuditLog entries."""
-        from django.utils import timezone
         from datetime import timedelta
+
         from patients.models import PatientAuditLog
 
         patient = self.create_test_patient('ACT-EDIT-001')
