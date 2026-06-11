@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 from datetime import timedelta
 
+from celery.schedules import crontab
 from decouple import config, Csv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -210,6 +211,27 @@ CELERY_BEAT_SCHEDULE = {
         'schedule': timedelta(hours=24),
     },
 }
+
+# ==============================================================================
+# DATABASE BACKUP (Celery periodic task)
+# ==============================================================================
+# Nightly encrypted pg_dump -> S3/MinIO. Disabled by default — only enabled on
+# the production deployment server (see docker-compose.yml). When enabled,
+# DB_BACKUP_GPG_RECIPIENT is required (enforced in config.settings.production).
+DB_BACKUP_ENABLED = config('DB_BACKUP_ENABLED', default=False, cast=bool)
+DB_BACKUP_ENV_LABEL = config('BACKUP_ENV', default='production')
+DB_BACKUP_RETENTION = config('BACKUP_RETENTION', default=30, cast=int)
+DB_BACKUP_S3_PREFIX = config('BACKUP_S3_PREFIX', default='backups')
+DB_BACKUP_GPG_RECIPIENT = config('GPG_RECIPIENT_KEY', default='')
+# Base64-encoded ASCII-armored public key (single-line, .env-safe). Generate with:
+#   gpg --export --armor <recipient> | base64 -w0
+DB_BACKUP_GPG_PUBLIC_KEY = config('GPG_PUBLIC_KEY', default='')
+
+if DB_BACKUP_ENABLED:
+    CELERY_BEAT_SCHEDULE['db-backup-nightly'] = {
+        'task': 'patients.tasks.backup_database_snapshot',
+        'schedule': crontab(hour=2, minute=30),  # 02:30 Europe/Berlin, low traffic
+    }
 
 # ==============================================================================
 # INFERENCE SERVICE

@@ -1,9 +1,22 @@
 """
 Production-specific settings.
 """
+from django.core.exceptions import ImproperlyConfigured
+
 from .base import *  # noqa: F401,F403
 
 DEBUG = False
+
+# ==============================================================================
+# Database backup — GPG encryption is mandatory whenever enabled, since the
+# nightly dump contains real patient data. Fail loudly at boot rather than
+# silently uploading an unencrypted dump.
+# ==============================================================================
+if DB_BACKUP_ENABLED and not (DB_BACKUP_GPG_RECIPIENT and DB_BACKUP_GPG_PUBLIC_KEY):  # noqa: F405
+    raise ImproperlyConfigured(
+        'DB_BACKUP_ENABLED=true requires both GPG_RECIPIENT_KEY and '
+        'GPG_PUBLIC_KEY to be set (database backups must be encrypted).'
+    )
 
 # Security settings
 SECURE_BROWSER_XSS_FILTER = True

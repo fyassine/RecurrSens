@@ -99,6 +99,14 @@ services:
       S3_BUCKET: ${S3_BUCKET:-stimmbandlaesion}
       CELERY_BROKER_URL: redis://redis:6379/0
       INFERENCE_SERVICE_URL: ${INFERENCE_SERVICE_URL:-http://inference:8001}
+      # Nightly DB backup (this worker executes the task; celery-beat schedules it)
+      DB_BACKUP_ENABLED: ${DB_BACKUP_ENABLED:-false}
+      BACKUP_ENV: ${BACKUP_ENV:-production}
+      BACKUP_RETENTION: ${BACKUP_RETENTION:-30}
+      BACKUP_S3_PREFIX: ${BACKUP_S3_PREFIX:-backups}
+      GPG_RECIPIENT_KEY: ${GPG_RECIPIENT_KEY:-}
+      GPG_PUBLIC_KEY: ${GPG_PUBLIC_KEY:-}
+      ADMIN_NOTIFICATION_EMAIL: ${ADMIN_NOTIFICATION_EMAIL:-admin@example.com}
     depends_on:
       db:
         condition: service_healthy
@@ -122,6 +130,13 @@ services:
       CELERY_BROKER_URL: redis://redis:6379/0
       ADMIN_NOTIFICATION_EMAIL: ${ADMIN_NOTIFICATION_EMAIL:-admin@example.com}
       DATA_RETENTION_DAYS: ${DATA_RETENTION_DAYS:-3}
+      # Nightly DB backup schedule registration (must match the celery worker's
+      # DB_BACKUP_ENABLED so the periodic task is created/skipped consistently;
+      # GPG_* vars are required here too because production.py validates them
+      # on every process using config.settings.production)
+      DB_BACKUP_ENABLED: ${DB_BACKUP_ENABLED:-false}
+      GPG_RECIPIENT_KEY: ${GPG_RECIPIENT_KEY:-}
+      GPG_PUBLIC_KEY: ${GPG_PUBLIC_KEY:-}
     depends_on:
       db:
         condition: service_healthy

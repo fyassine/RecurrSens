@@ -172,6 +172,14 @@ jobs:
 
             # Data retention
             DATA_RETENTION_DAYS=${{ vars.DATA_RETENTION_DAYS }}
+
+            # Database backup (nightly Celery task)
+            DB_BACKUP_ENABLED=${{ vars.DB_BACKUP_ENABLED }}
+            BACKUP_ENV=production
+            BACKUP_RETENTION=${{ vars.BACKUP_RETENTION }}
+            BACKUP_S3_PREFIX=${{ vars.BACKUP_S3_PREFIX }}
+            GPG_RECIPIENT_KEY=${{ secrets.GPG_RECIPIENT_KEY }}
+            GPG_PUBLIC_KEY=${{ secrets.GPG_PUBLIC_KEY }}
             EOF
 
       - name: Deploy via SSH
