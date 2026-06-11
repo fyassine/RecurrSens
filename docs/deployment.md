@@ -237,20 +237,47 @@ Disabled by default — only enable on the production deployment server.
 
 ### Configuration
 
-Set in the production GitHub environment (vars/secrets used by
-`.github/workflows/deploy.yml`):
+Set in the production GitHub environment (**Settings → Environments →
+production**), used by `.github/workflows/deploy.yml`:
 
-| Variable | Type | Description |
+**Variables (vars):**
+
+| Name | Value | Notes |
 |---|---|---|
-| `DB_BACKUP_ENABLED` | var | Set to `true` to enable the nightly task |
-| `BACKUP_RETENTION` | var | Number of backups to keep (default 30) |
-| `BACKUP_S3_PREFIX` | var | S3 key prefix (default `backups`) |
-| `GPG_RECIPIENT_KEY` | secret | GPG key ID/email the dump is encrypted to |
-| `GPG_PUBLIC_KEY` | secret | Base64-encoded ASCII-armored GPG public key — generate with `gpg --export --armor <recipient> \| base64 -w0` |
+| `DB_BACKUP_ENABLED` | `true` | Turns the feature on |
+| `BACKUP_RETENTION` | `30` (or your choice) | Number of nightly backups to keep |
+| `BACKUP_S3_PREFIX` | `backups` (or your choice) | S3 key prefix |
+
+**Secrets:**
+
+| Name | Value |
+|---|---|
+| `GPG_RECIPIENT_KEY` | The key ID/email you'll encrypt to, e.g. `you@example.com` |
+| `GPG_PUBLIC_KEY` | Base64-encoded ASCII-armored GPG public key |
 
 When `DB_BACKUP_ENABLED=true`, `config.settings.production` raises
 `ImproperlyConfigured` at boot unless both `GPG_RECIPIENT_KEY` and
 `GPG_PUBLIC_KEY` are set — backups are never uploaded unencrypted.
+
+### Generating the GPG key
+
+GPG uses **asymmetric encryption**: the public key encrypts, only the
+matching private key can decrypt. The server only ever needs the **public**
+key (to encrypt nightly dumps) — the private key never has to exist on the
+VPS at all. Generate the keypair on your own machine and keep the private
+key there (or in a password manager / offline backup):
+
+```bash
+gpg --quick-generate-key "RecurrSens Backups <you@example.com>" default default never
+gpg --export --armor "you@example.com" | base64 -w0
+```
+
+Paste that base64 output as the `GPG_PUBLIC_KEY` secret. **Back up the
+private key somewhere safe** — without it, the backups are unrecoverable:
+
+```bash
+gpg --export-secret-keys --armor you@example.com > recurrsens-backup-key.asc
+```
 
 ### Verification
 
@@ -266,6 +293,40 @@ ssh flakhal@31.70.77.124 "cd ~/recurrsens && docker compose -f docker-compose.ym
 A successful run uploads `{DB_NAME}_{timestamp}.dump.gpg` to MinIO/S3 and
 emails `ADMIN_NOTIFICATION_EMAIL` a summary; a failure (after 2 retries)
 emails a failure summary instead.
+
+### Where Backups Land
+
+Backups are uploaded to the `S3_BUCKET` (same bucket as patient audio),
+under:
+
+```
+{BACKUP_S3_PREFIX}/{BACKUP_ENV}/{DB_NAME}_{YYYY-MM-DD_HH-MM-SS}.dump.gpg
+```
+
+e.g. `backups/production/stimmbandlaesion_2026-06-12_02-30-00.dump.gpg`.
+
+Browse via the MinIO console (or AWS S3 console if using S3), or list from a
+shell:
+
+```bash
+docker compose exec celery python manage.py shell -c "
+import boto3
+from django.conf import settings
+c = boto3.client('s3', endpoint_url=settings.S3_ENDPOINT, aws_access_key_id=settings.S3_ACCESS_KEY, aws_secret_access_key=settings.S3_SECRET_KEY, region_name=settings.S3_REGION)
+for o in c.list_objects_v2(Bucket=settings.S3_BUCKET, Prefix='backups/production/').get('Contents', []):
+    print(o['Key'], o['Size'], o['LastModified'])
+"
+```
+
+### Restoring a Backup
+
+Download the `.dump.gpg` object, then decrypt with the private key (on the
+machine that holds it, **not** the VPS) and restore with `pg_restore`:
+
+```bash
+gpg --decrypt stimmbandlaesion_2026-06-12_02-30-00.dump.gpg > db.dump
+pg_restore --host <db-host> --username postgres --dbname stimmbandlaesion --clean db.dump
+```
 
 ## Security
 
