@@ -156,7 +156,8 @@ jobs:
             S3_BUCKET=${{ vars.S3_BUCKET }}
 
             # Celery / Redis
-            CELERY_BROKER_URL=redis://redis:6379/0
+            REDIS_PASSWORD=${{ secrets.REDIS_PASSWORD }}
+            CELERY_BROKER_URL=redis://:${{ secrets.REDIS_PASSWORD }}@redis:6379/0
 
             # Inference Service
             INFERENCE_SERVICE_URL=${{ vars.INFERENCE_SERVICE_URL }}
@@ -218,7 +219,11 @@ jobs:
             fi
 
             echo "=== Restarting containers ==="
-            docker compose -p recurrsens -f docker-compose.yml -f docker-compose.prod.yml up -d --wait
+            # --remove-orphans drops containers for services no longer in the compose
+            # files; --scale pins singleton services back to 1 replica in case a
+            # previous deploy left a stale duplicate (e.g. backend) running.
+            docker compose -p recurrsens -f docker-compose.yml -f docker-compose.prod.yml up -d --wait --remove-orphans \
+              --scale backend=1 --scale celery=1 --scale celery-beat=1
 
             echo "=== Reloading nginx upstream DNS ==="
             docker compose -p recurrsens -f docker-compose.yml -f docker-compose.prod.yml exec -T nginx nginx -s reload
