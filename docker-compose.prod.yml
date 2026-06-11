@@ -77,7 +77,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 48M
+          memory: 128M
 
   # --- Dozzle: container log viewer ---
   dozzle:
