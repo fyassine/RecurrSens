@@ -32,6 +32,7 @@ import type { PatientDetail, PatientStatus, RecordingSession } from '../types';
 import {
   getPatient,
   updatePatient,
+  updateSessionVisitDate,
   advancePatient,
   uploadAudio,
   getExercises,
@@ -72,6 +73,8 @@ export default function PatientDetailsPage() {
     fetchPatient();
   }, [fetchPatient]);
 
+  const postOpSections = useMemo(() => (patient ? buildPostOpSections(patient) : []), [patient]);
+
   if (loading) {
     return (
       <div className="flex justify-center py-16">
@@ -88,7 +91,11 @@ export default function PatientDetailsPage() {
     );
   }
 
-  const noRecordings = patient.audio_files_pre.length === 0 && patient.audio_files_post.length === 0;
+  const preOpSession = patient.sessions.find((s) => s.phase === 'PRE_OP' && s.session_number === 1);
+  const noRecordings =
+    patient.audio_files_pre.length === 0
+    && patient.audio_files_post.length === 0
+    && postOpSections.length === 1;
 
   return (
     <div className="min-h-screen pb-4">
@@ -115,22 +122,26 @@ export default function PatientDetailsPage() {
                 sessions={patient.sessions}
                 phase="PRE_OP"
                 date={patient.pre_op_date}
+                sessionId={preOpSession?.id}
+                isActiveSession
                 patientId={patient.id}
                 patientStatus={patient.status}
-                showUpload
                 onUploaded={fetchPatient}
+                onSaveDate={(iso) => updatePatient(patient.id, { pre_op_date: iso })}
                 compact
               />
               <AudioSection
-                title="Post-OP Aufnahmen"
-                audioFiles={patient.audio_files_post}
+                title={postOpSections[0].title}
+                audioFiles={postOpSections[0].audioFiles}
                 sessions={patient.sessions}
                 phase="POST_OP"
-                date={patient.post_op_date}
+                date={postOpSections[0].date}
+                sessionId={postOpSections[0].sessionId}
+                isActiveSession={postOpSections[0].isActiveSession}
                 patientId={patient.id}
                 patientStatus={patient.status}
-                showUpload
                 onUploaded={fetchPatient}
+                onSaveDate={postOpSections[0].onSaveDate}
                 compact
               />
             </div>
@@ -142,22 +153,29 @@ export default function PatientDetailsPage() {
                 sessions={patient.sessions}
                 phase="PRE_OP"
                 date={patient.pre_op_date}
+                sessionId={preOpSession?.id}
+                isActiveSession
                 patientId={patient.id}
                 patientStatus={patient.status}
-                showUpload
                 onUploaded={fetchPatient}
+                onSaveDate={(iso) => updatePatient(patient.id, { pre_op_date: iso })}
               />
-              <AudioSection
-                title="Post-OP Aufnahmen"
-                audioFiles={patient.audio_files_post}
-                sessions={patient.sessions}
-                phase="POST_OP"
-                date={patient.post_op_date}
-                patientId={patient.id}
-                patientStatus={patient.status}
-                showUpload
-                onUploaded={fetchPatient}
-              />
+              {postOpSections.map((sec) => (
+                <AudioSection
+                  key={sec.key}
+                  title={sec.title}
+                  audioFiles={sec.audioFiles}
+                  sessions={patient.sessions}
+                  phase="POST_OP"
+                  date={sec.date}
+                  sessionId={sec.sessionId}
+                  isActiveSession={sec.isActiveSession}
+                  patientId={patient.id}
+                  patientStatus={patient.status}
+                  onUploaded={fetchPatient}
+                  onSaveDate={sec.onSaveDate}
+                />
+              ))}
             </>
           )}
         </div>
@@ -321,10 +339,12 @@ function AudioSection({
   sessions,
   phase,
   date,
+  sessionId,
+  isActiveSession,
   patientId,
   patientStatus,
-  showUpload,
   onUploaded,
+  onSaveDate,
   compact = false,
 }: {
   title: string;
@@ -332,10 +352,12 @@ function AudioSection({
   sessions: RecordingSession[];
   phase: 'PRE_OP' | 'POST_OP';
   date: string | null;
+  sessionId?: string;
+  isActiveSession: boolean;
   patientId: string;
   patientStatus: string;
-  showUpload: boolean;
   onUploaded: () => void;
+  onSaveDate: (isoDate: string) => Promise<unknown>;
   compact?: boolean;
 }) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -361,9 +383,8 @@ function AudioSection({
   const handleSaveDate = async () => {
     setSavingDate(true);
     try {
-      const field = phase === 'PRE_OP' ? 'pre_op_date' : 'post_op_date';
       const iso = dateValue ? new Date(dateValue).toISOString() : new Date().toISOString();
-      await updatePatient(patientId, { [field]: iso });
+      await onSaveDate(iso);
       setEditingDate(false);
       onUploaded();
     } finally {
@@ -397,21 +418,19 @@ function AudioSection({
         ) : (
           <Group gap={4}>
             <Text size="xs" c="dimmed">{date ? formatDateTime(date) : NO_RECORDING_DATE}</Text>
-            {showUpload && (
-              <ActionIcon
-                size="xs"
-                variant="subtle"
-                color="gray"
-                onClick={() => { setDateValue(toDatetimeLocal(date) || toDatetimeLocal(new Date().toISOString())); setEditingDate(true); }}
-              >
-                <Pencil size={11} />
-              </ActionIcon>
-            )}
+            <ActionIcon
+              size="xs"
+              variant="subtle"
+              color="gray"
+              onClick={() => { setDateValue(toDatetimeLocal(date) || toDatetimeLocal(new Date().toISOString())); setEditingDate(true); }}
+            >
+              <Pencil size={11} />
+            </ActionIcon>
           </Group>
         )}
       </Stack>
 
-      {showUpload && audioFiles.length > 0 && (
+      {audioFiles.length > 0 && (
         <Group justify="space-between" mb="xs">
           <Group gap={0}>
             <Checkbox
@@ -448,6 +467,8 @@ function AudioSection({
             patientId={patientId}
             phase={phase}
             patientStatus={patientStatus}
+            sessionId={sessionId}
+            isActiveSession={isActiveSession}
             onDone={onUploaded}
             buttonLabel="Hochladen"
             existingFiles={audioFiles}
@@ -461,20 +482,20 @@ function AudioSection({
           style={{ padding: compact ? '20px' : '32px', color: 'var(--mantine-color-dimmed)' }}
         >
           <Text size="sm" c="dimmed">
-            Keine {phase === 'PRE_OP' ? 'Prä-OP' : 'Post-OP'} Aufnahmen vorhanden.
+            Keine Aufnahmen für {title.replace(/ Aufnahmen$/, '')} vorhanden.
           </Text>
-          {showUpload && (
-            <div className="mt-2">
-              <ManualUpload
-                patientId={patientId}
-                phase={phase}
-                patientStatus={patientStatus}
-                onDone={onUploaded}
-                buttonLabel="Dateien hochladen"
-                existingFiles={audioFiles}
-              />
-            </div>
-          )}
+          <div className="mt-2">
+            <ManualUpload
+              patientId={patientId}
+              phase={phase}
+              patientStatus={patientStatus}
+              sessionId={sessionId}
+              isActiveSession={isActiveSession}
+              onDone={onUploaded}
+              buttonLabel="Dateien hochladen"
+              existingFiles={audioFiles}
+            />
+          </div>
         </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2">
@@ -518,6 +539,66 @@ function sessionLabel(s: RecordingSession): string {
   if (s.phase === 'PRE_OP') return `Prä-OP (Sitzung ${s.session_number})`;
   if (s.session_number === 1) return 'Post-OP';
   return `Follow-up ${s.session_number - 1} (Post-OP Sitzung ${s.session_number})`;
+}
+
+interface AudioSectionData {
+  key: string;
+  title: string;
+  audioFiles: AudioFileType[];
+  date: string | null;
+  sessionId?: string;
+  onSaveDate: (isoDate: string) => Promise<unknown>;
+  isActiveSession: boolean;
+}
+
+// Each POST_OP RecordingSession gets its own card ("Post-OP Aufnahmen" for
+// session 1, "Follow-up N Aufnahmen" for session N+1). Patients who haven't
+// had a real session_number=1 RecordingSession created yet (the common case
+// for the normal pre-op -> post-op flow) get a single virtual section holding
+// their session-less recordings, so they render exactly as before.
+function buildPostOpSections(patient: PatientDetail): AudioSectionData[] {
+  const postOpSessions = patient.sessions
+    .filter((s) => s.phase === 'POST_OP')
+    .sort((a, b) => a.session_number - b.session_number);
+  const sessionOne = postOpSessions.find((s) => s.session_number === 1);
+
+  const sections: AudioSectionData[] = [];
+
+  if (!sessionOne) {
+    sections.push({
+      key: 'post-op-virtual',
+      title: 'Post-OP Aufnahmen',
+      audioFiles: patient.audio_files_post.filter((f) => f.session === null),
+      date: patient.post_op_date,
+      sessionId: undefined,
+      onSaveDate: (iso) => updatePatient(patient.id, { post_op_date: iso }),
+      isActiveSession: true,
+    });
+  }
+
+  for (const session of postOpSessions) {
+    const ownFiles = patient.audio_files_post.filter((f) => f.session === session.id);
+    // Session 1 also picks up any pre-existing recordings that predate the
+    // RecordingSession row (session === null).
+    const legacyFiles = session.session_number === 1
+      ? patient.audio_files_post.filter((f) => f.session === null)
+      : [];
+    sections.push({
+      key: session.id,
+      title: session.session_number === 1
+        ? 'Post-OP Aufnahmen'
+        : `Follow-up ${session.session_number - 1} Aufnahmen`,
+      audioFiles: [...ownFiles, ...legacyFiles],
+      date: session.session_number === 1 ? patient.post_op_date : session.visit_date,
+      sessionId: session.id,
+      onSaveDate: session.session_number === 1
+        ? (iso) => updatePatient(patient.id, { post_op_date: iso })
+        : (iso) => updateSessionVisitDate(patient.id, session.id, iso),
+      isActiveSession: session.session_number === patient.current_post_op_session_number,
+    });
+  }
+
+  return sections;
 }
 
 function BulkReassignDialog({
@@ -675,6 +756,8 @@ function ManualUpload({
   onDone,
   buttonLabel = 'Hochladen',
   existingFiles = [],
+  sessionId,
+  isActiveSession,
 }: {
   patientId: string;
   phase: 'PRE_OP' | 'POST_OP';
@@ -682,6 +765,8 @@ function ManualUpload({
   onDone: () => void;
   buttonLabel?: string;
   existingFiles?: AudioFileType[];
+  sessionId?: string;
+  isActiveSession: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [exercises, setExercises] = useState<Exercise[]>([]);
@@ -725,17 +810,18 @@ function ManualUpload({
     setError('');
     setUploading(true);
     try {
-      if (phase === 'POST_OP' && patientStatus === 'PRE_OP_DONE') {
+      if (phase === 'POST_OP' && patientStatus === 'PRE_OP_DONE' && isActiveSession) {
         await advancePatient(patientId);
       }
       for (const exercise of exercises) {
         const file = files[exercise.exercise_id];
         if (!file) continue;
-        await uploadAudio(patientId, file, exercise.exercise_id);
+        await uploadAudio(patientId, file, exercise.exercise_id, sessionId);
       }
-      const shouldAdvance =
+      const shouldAdvance = isActiveSession && (
         (phase === 'PRE_OP' && patientStatus === 'CONSENT_GIVEN') ||
-        (phase === 'POST_OP' && patientStatus === 'POST_OP_STARTED');
+        (phase === 'POST_OP' && patientStatus === 'POST_OP_STARTED')
+      );
       if (shouldAdvance) {
         await advancePublicPatient(patientId);
       }

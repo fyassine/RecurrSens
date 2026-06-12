@@ -11,6 +11,8 @@ Endpoint summary:
         POST   /api/patients/{token}/advance/  Advance workflow step
         GET    /api/patients/{token}/completeness/  Check data completeness
         GET    /api/patients/{token}/pdf/      Download QR code PDF
+        POST   /api/patients/{token}/sessions/ Create a new recording session
+        PATCH  /api/patients/{token}/sessions/{session_id}/  Update a recording session's visit date
         GET    /api/export/                    Export data as ZIP
 
     Patient-facing (UUID token, no JWT):
@@ -72,6 +74,7 @@ from .serializers import (
     PatientPublicSerializer,
     PatientUpdateSerializer,
     RecordingSessionSerializer,
+    RecordingSessionVisitDateSerializer,
 )
 
 logger = logging.getLogger(__name__)
@@ -222,6 +225,38 @@ class PatientViewSet(viewsets.ModelViewSet):
             RecordingSessionSerializer(session).data,
             status=status.HTTP_201_CREATED,
         )
+
+    @action(detail=True, methods=['patch'], url_path=r'sessions/(?P<session_id>[^/.]+)')
+    def update_session(self, request, pk=None, session_id=None):
+        """Update a recording session's visit date (admin only)."""
+        patient = self.get_object()
+        try:
+            session = patient.sessions.get(pk=session_id)
+        except RecordingSession.DoesNotExist:
+            return Response({'error': 'Sitzung nicht gefunden.'}, status=status.HTTP_404_NOT_FOUND)
+
+        serializer = RecordingSessionVisitDateSerializer(session, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        old_visit_date = session.visit_date
+        serializer.save()
+
+        if session.visit_date != old_visit_date:
+            try:
+                old_str = old_visit_date.strftime('%d.%m.%Y') if old_visit_date else '–'
+                new_str = session.visit_date.strftime('%d.%m.%Y') if session.visit_date else '–'
+                PatientAuditLog.objects.create(
+                    patient=patient,
+                    event_type=PatientAuditLog.EventType.EDIT,
+                    event='Besuchsdatum bearbeitet',
+                    detail=f'Follow-up {session.session_number - 1}: {old_str} → {new_str}',
+                    files=[],
+                    actor=PatientAuditLog.Actor.ADMIN,
+                    actor_name=getattr(request.user, 'username', 'admin'),
+                )
+            except Exception:
+                logger.exception('Failed to write visit_date audit log for session %s', session.id)
+
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=['get'], url_path='activity')
     def activity(self, request, pk=None):
@@ -575,16 +610,31 @@ class AudioUploadView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Determine phase from patient status
-        is_post_op = patient.status in (
-            Patient.Status.POST_OP_STARTED,
-            Patient.Status.POST_OP_DONE,
-        )
-        phase = 'POST_OP' if is_post_op else 'PRE_OP'
-        phase_folder = 'post' if is_post_op else 'pre'
+        session_id = request.data.get('session_id')
 
-        # Find active session for this phase
-        session = services.get_active_session(patient, phase)
+        if session_id:
+            # Admin uploading into a specific recording session (e.g. a
+            # particular follow-up card) — derive phase from the session
+            # itself rather than the patient's overall status.
+            try:
+                session = RecordingSession.objects.get(id=session_id, patient=patient)
+            except RecordingSession.DoesNotExist:
+                return Response(
+                    {'error': 'Sitzung nicht gefunden.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            phase = session.phase
+            phase_folder = 'post' if phase == 'POST_OP' else 'pre'
+        else:
+            # Patient wizard flow — derive phase from patient status and
+            # target the currently active session for that phase.
+            is_post_op = patient.status in (
+                Patient.Status.POST_OP_STARTED,
+                Patient.Status.POST_OP_DONE,
+            )
+            phase = 'POST_OP' if is_post_op else 'PRE_OP'
+            phase_folder = 'post' if is_post_op else 'pre'
+            session = services.get_active_session(patient, phase)
 
         # Build storage key (include session number if session exists)
         if session:
@@ -603,12 +653,12 @@ class AudioUploadView(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
-        # Replace any existing record for this exercise/phase before creating the new one.
-        # Do not filter by session — the existing record may belong to a different (or null) session.
+        # Replace any existing record for this exercise/phase/session before creating the new one.
         AudioFile.objects.filter(
             patient=patient,
             exercise_id=exercise_id,
             phase=phase,
+            session=session,
         ).delete()
 
         # Create DB record

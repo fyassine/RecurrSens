@@ -5,6 +5,7 @@ import type {
   PatientPublic,
   Exercise,
   Completeness,
+  RecordingSession,
 } from '../types';
 
 const api = axios.create({
@@ -222,8 +223,17 @@ export async function advancePatient(id: string): Promise<PatientDetail> {
 export async function createSession(
   patientId: string,
   phase: 'PRE_OP' | 'POST_OP',
-): Promise<{ id: string; phase: string; session_number: number; created_at: string }> {
+): Promise<RecordingSession> {
   const { data } = await api.post(`/patients/${patientId}/sessions/`, { phase });
+  return data;
+}
+
+export async function updateSessionVisitDate(
+  patientId: string,
+  sessionId: string,
+  visitDate: string,
+): Promise<RecordingSession> {
+  const { data } = await api.patch(`/patients/${patientId}/sessions/${sessionId}/`, { visit_date: visitDate });
   return data;
 }
 
@@ -325,6 +335,7 @@ export async function uploadAudio(
   token: string,
   file: Blob,
   exerciseId: string,
+  sessionId?: string,
 ): Promise<void> {
   const formData = new FormData();
   let filename: string;
@@ -337,6 +348,9 @@ export async function uploadAudio(
   }
   formData.append('file', file, filename);
   formData.append('exercise_id', exerciseId);
+  if (sessionId) {
+    formData.append('session_id', sessionId);
+  }
   await publicApi.post(`/p/${token}/audio/upload/`, formData);
 }
 

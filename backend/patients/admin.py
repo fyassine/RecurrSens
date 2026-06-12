@@ -32,7 +32,7 @@ class RecordingSessionInline(admin.TabularInline):
     model = RecordingSession
     extra = 0
     readonly_fields = ('id', 'phase', 'session_number', 'created_at')
-    fields = ('phase', 'session_number', 'created_at')
+    fields = ('phase', 'session_number', 'created_at', 'visit_date')
 
 
 @admin.action(description='Audiodaten löschen (Soft Delete)')
@@ -118,7 +118,7 @@ class PatientAdmin(admin.ModelAdmin):
 @admin.register(RecordingSession)
 class RecordingSessionAdmin(admin.ModelAdmin):
     """Admin configuration for RecordingSession model."""
-    list_display = ('patient', 'phase', 'session_number', 'created_at')
+    list_display = ('patient', 'phase', 'session_number', 'created_at', 'visit_date')
     list_filter = ('phase',)
     search_fields = ('patient__patient_id',)
     readonly_fields = ('id', 'created_at')

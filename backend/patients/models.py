@@ -338,6 +338,14 @@ class RecordingSession(models.Model):
         help_text='Sequential number per patient and phase (1, 2, 3, …)'
     )
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='Erstellt am')
+    visit_date = models.DateTimeField(
+        null=True, blank=True,
+        verbose_name='Besuchsdatum',
+        help_text=(
+            'Datum dieses Aufnahmetermins (für Follow-up-Sitzungen; '
+            'Sitzung 1 verwendet weiterhin Patient.pre_op_date/post_op_date).'
+        ),
+    )
 
     class Meta:
         ordering = ['created_at']

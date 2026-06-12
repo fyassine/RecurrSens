@@ -50,6 +50,7 @@ export interface RecordingSession {
   phase: 'PRE_OP' | 'POST_OP';
   session_number: number;
   created_at: string;
+  visit_date: string | null;
 }
 
 export interface AudioFile {

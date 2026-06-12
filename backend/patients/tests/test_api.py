@@ -654,3 +654,181 @@ class PatientActivityAPITest(BaseAPITest):
         self.assertIn('Neu → Einwilligung erteilt', logs.first().detail)
 
 
+class RecordingSessionVisitDateTest(BaseAPITest):
+    """Tests for PATCH /api/patients/<id>/sessions/<session_id>/ (visit_date)."""
+
+    def setUp(self):
+        super().setUp()
+        self.patient = self.create_test_patient('VD-001', status='POST_OP_STARTED')
+        self.session1 = RecordingSession.objects.create(
+            patient=self.patient, phase='POST_OP', session_number=1,
+        )
+        self.followup = RecordingSession.objects.create(
+            patient=self.patient, phase='POST_OP', session_number=2,
+        )
+
+    def test_update_visit_date(self):
+        response = self.client.patch(
+            f'/api/patients/{self.patient.id}/sessions/{self.followup.id}/',
+            {'visit_date': '2026-07-01T10:00:00Z'},
+            format='json',
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        self.followup.refresh_from_db()
+        self.assertIsNotNone(self.followup.visit_date)
+        self.assertEqual(self.followup.visit_date.year, 2026)
+        self.assertEqual(self.followup.visit_date.month, 7)
+
+    def test_update_visit_date_writes_audit_log(self):
+        from patients.models import PatientAuditLog
+
+        response = self.client.patch(
+            f'/api/patients/{self.patient.id}/sessions/{self.followup.id}/',
+            {'visit_date': '2026-07-01T10:00:00Z'},
+            format='json',
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        logs = PatientAuditLog.objects.filter(
+            patient=self.patient, event_type='edit', event='Besuchsdatum bearbeitet',
+        )
+        self.assertEqual(logs.count(), 1)
+        self.assertIn('Follow-up 1', logs.first().detail)
+
+    def test_update_visit_date_unknown_session_returns_404(self):
+        import uuid
+
+        response = self.client.patch(
+            f'/api/patients/{self.patient.id}/sessions/{uuid.uuid4()}/',
+            {'visit_date': '2026-07-01T10:00:00Z'},
+            format='json',
+        )
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_update_visit_date_requires_auth(self):
+        client = APIClient()
+        response = client.patch(
+            f'/api/patients/{self.patient.id}/sessions/{self.followup.id}/',
+            {'visit_date': '2026-07-01T10:00:00Z'},
+            format='json',
+        )
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+
+class AudioUploadSessionTargetingTest(BaseAPITest):
+    """
+    Tests for POST /api/p/<token>/audio/upload/ with an explicit session_id.
+
+    Covers the fix that lets every follow-up section upload into its own
+    RecordingSession, and the corresponding session-scoped replace-on-upload
+    filter that keeps other sessions' recordings intact.
+    """
+
+    # Minimal valid WEBM header (magic bytes only).
+    WEBM = b'\x1a\x45\xdf\xa3' + b'\x00' * 28
+
+    def setUp(self):
+        super().setUp()
+        self.patient = self.create_test_patient('UP-001', status='POST_OP_STARTED')
+        self.session1 = RecordingSession.objects.create(
+            patient=self.patient, phase='POST_OP', session_number=1,
+        )
+        self.followup = RecordingSession.objects.create(
+            patient=self.patient, phase='POST_OP', session_number=2,
+        )
+
+    def _upload(self, session_id=None, exercise_id='a_n'):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        file = SimpleUploadedFile('recording.webm', self.WEBM, content_type='audio/webm')
+        payload = {'file': file, 'exercise_id': exercise_id}
+        if session_id is not None:
+            payload['session_id'] = str(session_id)
+        return self.client.post(
+            f'/api/p/{self.patient.id}/audio/upload/',
+            payload,
+            format='multipart',
+        )
+
+    def test_upload_with_session_id_lands_in_specified_session(self):
+        from unittest.mock import patch as mock_patch
+
+        with mock_patch('patients.services.upload_audio_to_s3'):
+            response = self._upload(session_id=self.session1.id)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+        audio = AudioFile.objects.get(id=response.data['id'])
+        self.assertEqual(audio.session_id, self.session1.id)
+        self.assertEqual(audio.phase, 'POST_OP')
+        self.assertIn(f'post_{self.session1.session_number}', audio.storage_key)
+
+    def test_upload_with_session_id_derives_phase_from_session(self):
+        """An explicit POST_OP session_id wins even if patient.status says otherwise."""
+        from unittest.mock import patch as mock_patch
+
+        self.patient.status = 'NEW'
+        self.patient.save(update_fields=['status'])
+
+        with mock_patch('patients.services.upload_audio_to_s3'):
+            response = self._upload(session_id=self.session1.id)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+        audio = AudioFile.objects.get(id=response.data['id'])
+        self.assertEqual(audio.phase, 'POST_OP')
+
+    def test_reupload_into_different_session_does_not_delete_other_session(self):
+        """Replace-on-upload is scoped by session, not just (patient, exercise, phase)."""
+        from unittest.mock import patch as mock_patch
+
+        with mock_patch('patients.services.upload_audio_to_s3'):
+            first = self._upload(session_id=self.session1.id)
+            second = self._upload(session_id=self.followup.id)
+
+        self.assertEqual(first.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(second.status_code, status.HTTP_201_CREATED)
+
+        self.assertTrue(AudioFile.objects.filter(id=first.data['id']).exists())
+        self.assertTrue(AudioFile.objects.filter(id=second.data['id']).exists())
+        self.assertEqual(
+            AudioFile.objects.filter(patient=self.patient, exercise_id='a_n').count(), 2,
+        )
+
+    def test_reupload_into_same_session_replaces_previous_recording(self):
+        """Re-recording the same exercise in the same session still replaces it."""
+        from unittest.mock import patch as mock_patch
+
+        with mock_patch('patients.services.upload_audio_to_s3'):
+            first = self._upload(session_id=self.followup.id)
+            second = self._upload(session_id=self.followup.id)
+
+        self.assertEqual(first.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(second.status_code, status.HTTP_201_CREATED)
+
+        self.assertFalse(AudioFile.objects.filter(id=first.data['id']).exists())
+        self.assertEqual(
+            AudioFile.objects.filter(
+                patient=self.patient, exercise_id='a_n', session=self.followup,
+            ).count(), 1,
+        )
+
+    def test_upload_with_invalid_session_id_returns_400(self):
+        import uuid
+        from unittest.mock import patch as mock_patch
+
+        with mock_patch('patients.services.upload_audio_to_s3'):
+            response = self._upload(session_id=uuid.uuid4())
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_upload_without_session_id_targets_active_session(self):
+        """No session_id → falls back to active-session resolution (existing behaviour)."""
+        from unittest.mock import patch as mock_patch
+
+        with mock_patch('patients.services.upload_audio_to_s3'):
+            response = self._upload()
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+        audio = AudioFile.objects.get(id=response.data['id'])
+        self.assertEqual(audio.session_id, self.followup.id)
+
+

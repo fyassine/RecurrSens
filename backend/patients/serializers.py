@@ -37,8 +37,17 @@ class RecordingSessionSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = RecordingSession
-        fields = ['id', 'phase', 'session_number', 'created_at']
+        fields = ['id', 'phase', 'session_number', 'created_at', 'visit_date']
         read_only_fields = fields
+
+
+class RecordingSessionVisitDateSerializer(serializers.ModelSerializer):
+    """Serializer for updating a recording session's visit date (admin only)."""
+
+    class Meta:
+        model = RecordingSession
+        fields = ['id', 'visit_date']
+        read_only_fields = ['id']
 
 
 class AudioFileSerializer(serializers.ModelSerializer):
