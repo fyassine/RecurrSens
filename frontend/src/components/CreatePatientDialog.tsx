@@ -88,12 +88,12 @@ export default function CreatePatientDialog({
               <Stack gap="md">
                 <Text size="sm" c="dimmed">
                   Geben Sie die interne Patienten-ID ein, um einen neuen sicheren Token zu generieren.
+                  Leer lassen für automatische Nummerierung.
                 </Text>
                 {error && <Alert color="red" variant="light">{error}</Alert>}
                 <TextInput
                   label="Patienten-ID"
-                  placeholder="z.B. P-1234"
-                  required
+                  placeholder="z.B. 0021 (optional)"
                   autoFocus
                   value={patientId}
                   onChange={(e) => setPatientId(e.currentTarget.value)}

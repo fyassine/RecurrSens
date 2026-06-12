@@ -99,6 +99,38 @@ class PatientCRUDTest(BaseAPITest):
         })
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
+    def test_create_patient_auto_numbered(self):
+        self.create_test_patient('0019')
+        response = self.client.post('/api/patients/', {
+            'patient_id': '',
+        })
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data['patient_id'], '0020')
+
+    def test_create_patient_auto_numbered_skips_occupied(self):
+        self.create_test_patient('0019')
+        self.create_test_patient('0020')
+        response = self.client.post('/api/patients/', {
+            'patient_id': '',
+        })
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data['patient_id'], '0021')
+
+    def test_create_patient_auto_numbered_width_rollover(self):
+        self.create_test_patient('0099')
+        response = self.client.post('/api/patients/', {
+            'patient_id': '',
+        })
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data['patient_id'], '0100')
+
+    def test_create_patient_auto_numbered_blocked_by_non_numeric(self):
+        self.create_test_patient('ProbeLara2')
+        response = self.client.post('/api/patients/', {
+            'patient_id': '',
+        })
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
     def test_list_patients(self):
         self.create_test_patient('LIST-001')
         self.create_test_patient('LIST-002')
