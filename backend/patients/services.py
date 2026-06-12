@@ -201,6 +201,28 @@ def verify_audio_stream_token(file_id, token: str) -> bool:
 
 
 # =============================================================================
+# Patient Creation
+# =============================================================================
+
+def generate_next_patient_id() -> str | None:
+    """
+    Suggest the next patient_id by incrementing the most recently created
+    patient's ID, if that ID is a zero-padded numeric string (e.g. "0020").
+    Preserves the zero-padded width. Returns None if there are no patients
+    yet or the last patient_id isn't numeric — caller must then ask the user
+    to choose an ID manually.
+    """
+    last_patient = Patient.objects.first()  # default ordering: -created_at
+    if not last_patient or not last_patient.patient_id.isdigit():
+        return None
+    width = len(last_patient.patient_id)
+    candidate = int(last_patient.patient_id) + 1
+    while Patient.objects.filter(patient_id=str(candidate).zfill(width)).exists():
+        candidate += 1
+    return str(candidate).zfill(width)
+
+
+# =============================================================================
 # Workflow State Machine
 # =============================================================================
 
