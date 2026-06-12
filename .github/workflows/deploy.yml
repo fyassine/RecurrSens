@@ -113,6 +113,9 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     environment: production
+    permissions:
+      contents: read
+      packages: read
 
     steps:
       - uses: actions/checkout@v4
@@ -194,7 +197,7 @@ jobs:
             cd ~/recurrsens
 
             echo "=== Pulling latest images ==="
-            echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.repository_owner }} --password-stdin
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
             docker compose -p recurrsens -f docker-compose.yml -f docker-compose.prod.yml pull
 
             echo "=== Ensuring SSL cert exists (self-signed fallback) ==="

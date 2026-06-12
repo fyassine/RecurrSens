@@ -124,6 +124,9 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     environment: staging
+    permissions:
+      contents: read
+      packages: read
 
     steps:
       - uses: actions/checkout@v4
@@ -198,7 +201,7 @@ jobs:
             cd ~/recurrsens-staging
 
             echo "=== Pulling staging images ==="
-            echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.repository_owner }} --password-stdin
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
             docker compose -p recurrsens-staging -f docker-compose.staging.yml pull
 
             echo "=== Starting staging containers ==="
