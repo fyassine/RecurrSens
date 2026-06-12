@@ -174,7 +174,7 @@
       "exercise_id": "happy_birthday",
       "title": "Lied: Happy Birthday",
       "description": "Bitte singen Sie das Lied \"Happy Birthday to You\" so laut und deutlich wie möglich.",
-      "example_audio_url": "",
+      "example_audio_url": "/examples/happy_birthday.flac",
       "order": 15,
       "is_active": true
     }
