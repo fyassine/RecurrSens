@@ -1,7 +1,7 @@
 # RecurrSens — Codebase Knowledge (Master Brain-Dump)
 
 > Single, self-contained reference for implementing features, fixing bugs, and refactoring
-> **RecurrSens** safely. Written against branch `dev/create-centers`.
+> **RecurrSens** safely. Written against branch `dev/patient-updates`.
 >
 > Audience: an engineer or LLM with **no prior repo access**. Every claim is tied to a file,
 > class, function, or feature. File references are relative paths from the repo root.
@@ -52,11 +52,12 @@ The product is bilingual-leaning but the **UI and admin are in German** (`LANGUA
 | **Guided recording wizard** | Patients self-record standardized exercises without staff, via QR — scalable data capture | `frontend/src/pages/PatientWizardPage.tsx`, `components/wizard/*`, `hooks/useExerciseSession.ts` |
 | **Async AI inference** | Turn raw audio into a clinical signal (RP / healthy + % + Grad-CAM + reasoning) without blocking the request | `tasks.run_inference_task` + external inference service |
 | **Multi-center isolation** | Multiple clinics share one deployment but each only sees its own patients | `Center`, `UserProfile`, queryset scoping in `PatientViewSet` |
-| **Data retention & soft-delete** | Comply with medical data-minimization: auto-expire and purge audio after a retention window, but only once safely exported | `Patient.expires_at/last_exported_at/deleted_at`, `tasks.check_data_expiry`, `services.delete_patient_with_files` |
+| **Data retention & backups** | Soft-delete after export. Nightly encrypted DB backups to S3. | `tasks.check_data_expiry`, `tasks.backup_database_snapshot` |
 | **Export (CSV + audio ZIP)** | Researchers/clinicians extract a dataset for offline analysis | `ExportView`, `services.export_patients_zip` |
 | **PDF + QR generation** | Hand the patient a printable sheet linking to their wizard | `services.generate_patient_pdf` |
-| **Audio management & reassignment** | Fix mis-filed recordings (wrong phase/session) without re-recording | `AudioFileReassignView`, `services.move_audio_in_s3` |
+| **Audio management & reassignment** | Fix mis-filed recordings without re-recording. Signed stream tokens for HTML5 native playback. | `AudioFileReassignView`, `services.move_audio_in_s3`, `AudioStreamUrlView` |
 | **Feedback & exercise skips** | Capture patient UX signal and tolerate exercises a patient cannot perform | `PatientFeedbackView`, `ExerciseSkipView` |
+| **Audit & History Logging** | Track administrative and patient-driven actions, login history, and calculate `last_activity`. | `PatientAuditLog`, `LoginHistory`, `Patient.last_activity` |
 
 ### 1.4 How the features interact (narrative)
 
@@ -100,7 +101,7 @@ flowchart TB
     subgraph App["Application tier"]
         Django["Django 5.1 + DRF (Gunicorn)\nViewSets / APIViews, services.py"]
         Celery["Celery worker\nrun_inference_task"]
-        Beat["Celery beat\ncheck_data_expiry (daily)"]
+        Beat["Celery beat\ncheck_data_expiry (daily)\nbackup_database_snapshot"]
     end
     subgraph Data["Stateful services"]
         PG[("PostgreSQL 16")]
@@ -391,6 +392,20 @@ sequenceDiagram
   (Patient.center, `centerName` context, sidebar/topbar labels) but **removed** the `getMe`/role
   helpers and has **no center create/select UI yet** (placeholders in `EinstellungenPage.tsx`). See
   §4 and §6.
+
+### 3.11 Audit & History Logging
+
+- **Purpose**: Maintain an append-only audit trail of patient and administrative events, and track user logins.
+- **PatientAuditLog**: Records events like create, upload, delete, export, edit, expiry, and view. It tracks the actor (admin, patient, system) and specific files affected.
+- **LoginHistory**: Records successful admin logins from `CenterTokenObtainPairView`, tracking IP and User-Agent.
+- **`Patient.last_activity`**: A dynamic property calculating the latest timestamp across `updated_at`, audio files, feedback entries, and exercise skips. Displayed in the frontend patient list.
+
+### 3.12 Nightly Encrypted Backups
+
+- **Purpose**: Secure offsite backup of the Postgres database to S3.
+- **Task**: `tasks.backup_database_snapshot` via Celery Beat (production only).
+- **Process**: Executes `pg_dump`, encrypts it using GnuPG with the key provided in `DB_BACKUP_GPG_PUBLIC_KEY`, uploads to MinIO/S3, and emails the administrator upon success/failure.
+- **CLI**: `python manage.py backup_database` runs the process synchronously.
 
 ---
 

@@ -464,7 +464,7 @@ export default function PatientHistorySidebar({ patientId, refreshTrigger }: Pat
         </div>
 
         {/* Timeline scroll area */}
-        <ScrollArea style={{ flex: 1, minHeight: 0 }}>
+        <ScrollArea.Autosize mah="calc(100vh - 200px)" type="hover">
           <div style={{ padding: '12px 14px' }}>
             {loading ? (
               <div style={{ display: 'flex', justifyContent: 'center', padding: '24px 0' }}>
@@ -489,7 +489,7 @@ export default function PatientHistorySidebar({ patientId, refreshTrigger }: Pat
               ))
             )}
           </div>
-        </ScrollArea>
+        </ScrollArea.Autosize>
       </div>
     </div>
   );
