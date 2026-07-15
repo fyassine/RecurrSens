@@ -124,6 +124,7 @@ const FILTER_OPTIONS: { type: ActivityEventType | 'all'; label: string; icon?: R
   { type: 'delete', label: 'Löschungen', icon: <Trash2 size={10} strokeWidth={2.5} /> },
   { type: 'edit', label: 'Bearbeitet', icon: <Pencil size={10} strokeWidth={2.5} /> },
   { type: 'expiry', label: 'Ablauf', icon: <Timer size={10} strokeWidth={2.5} /> },
+  { type: 'view', label: 'Zugriffe', icon: <Eye size={10} strokeWidth={2.5} /> },
 ];
 
 // ─── Actor avatar ─────────────────────────────────────────────────────────────
