@@ -13,6 +13,7 @@ import logging
 import os
 import zipfile
 from datetime import date, datetime
+from pathlib import Path
 
 import boto3
 import boto3.session
@@ -22,8 +23,10 @@ from django.conf import settings
 from django.contrib.auth.models import update_last_login
 from django.core import signing
 from django.utils import timezone
+from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import cm
+from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas
 from user_agents import parse as parse_ua
 
@@ -464,9 +467,21 @@ def check_completeness(patient: Patient) -> dict:
 # PDF Generation
 # =============================================================================
 
+_LOGO_PATH = Path(__file__).resolve().parent / 'assets' / 'mri_tum_logo.png'
+
+_BRAND_BLUE = colors.HexColor('#0065BD')
+_TEXT_DARK = colors.HexColor('#1A1A1A')
+_TEXT_GRAY = colors.HexColor('#666666')
+_FIELD_BG = colors.HexColor('#F2F4F7')
+_FRAME_GRAY = colors.HexColor('#B8C4D9')
+_RULE_GRAY = colors.HexColor('#DDDDDD')
+
+_MARGIN = 2 * cm
+
+
 def generate_patient_pdf(patient: Patient) -> bytes:
     """
-    Generate a PDF with a QR code for the patient.
+    Generate a letterhead-branded PDF with a QR code for the patient.
     The QR code encodes the patient access URL: {APP_URL}/p/{token}
 
     Returns PDF as bytes.
@@ -479,43 +494,97 @@ def generate_patient_pdf(patient: Patient) -> bytes:
     qr.make(fit=True)
     qr_img = qr.make_image(fill_color='black', back_color='white')
 
-    # Save QR to a temporary buffer
     qr_buffer = io.BytesIO()
     qr_img.save(qr_buffer, format='PNG')
     qr_buffer.seek(0)
 
-    # Create PDF with ReportLab
     pdf_buffer = io.BytesIO()
     p = canvas.Canvas(pdf_buffer, pagesize=A4)
     width, height = A4
 
-    # Title
-    p.setFont('Helvetica-Bold', 18)
-    p.drawString(2 * cm, height - 3 * cm, 'Recurrensparese Diagnose')
+    # --- Header: logo top-right + accent rule -----------------------------
+    logo_w = 4.5 * cm
+    logo_h = logo_w * (283 / 1000)
+    logo_x = width - _MARGIN - logo_w
+    logo_y = height - _MARGIN - logo_h
+    p.drawImage(
+        ImageReader(str(_LOGO_PATH)), logo_x, logo_y,
+        width=logo_w, height=logo_h, mask='auto', preserveAspectRatio=True,
+    )
 
-    # Subtitle
-    p.setFont('Helvetica', 12)
-    p.drawString(2 * cm, height - 4 * cm, f'Patienten-ID: {patient.patient_id}')
+    rule_y = logo_y - 0.5 * cm
+    p.setStrokeColor(_BRAND_BLUE)
+    p.setLineWidth(1.2)
+    p.line(_MARGIN, rule_y, width - _MARGIN, rule_y)
+
+    # --- Body ---------------------------------------------------------------
+    title_y = rule_y - 1.3 * cm
+    p.setFillColor(_TEXT_DARK)
+    p.setFont('Helvetica-Bold', 20)
+    p.drawString(_MARGIN, title_y, 'Recurrensparese Diagnose')
+
+    subtitle_y = title_y - 0.7 * cm
+    p.setFillColor(_TEXT_GRAY)
+    p.setFont('Helvetica', 11)
+    p.drawString(_MARGIN, subtitle_y, 'Zugang zur Sprachaufnahme')
+
+    # Patient ID field
+    box_w = 6 * cm
+    box_h = 1.6 * cm
+    box_top = subtitle_y - 0.9 * cm
+    box_bottom = box_top - box_h
+    p.setFillColor(_FIELD_BG)
+    p.roundRect(_MARGIN, box_bottom, box_w, box_h, 4, fill=1, stroke=0)
+
+    p.setFillColor(_TEXT_GRAY)
+    p.setFont('Helvetica', 8)
+    p.drawString(_MARGIN + 0.4 * cm, box_top - 0.55 * cm, 'PATIENTEN-ID')
+    p.setFillColor(_TEXT_DARK)
+    p.setFont('Helvetica-Bold', 16)
+    p.drawString(_MARGIN + 0.4 * cm, box_top - 1.2 * cm, str(patient.patient_id))
 
     # Instructions
-    p.setFont('Helvetica', 10)
-    p.drawString(2 * cm, height - 5.5 * cm, 'Bitte scannen Sie den QR-Code, um Ihre Sprachaufnahmen zu starten.')
+    instr_y = box_bottom - 0.9 * cm
+    p.setFillColor(colors.HexColor('#333333'))
+    p.setFont('Helvetica', 10.5)
+    p.drawString(_MARGIN, instr_y, 'Bitte scannen Sie den QR-Code, um Ihre Sprachaufnahmen zu starten.')
 
-    # Draw QR code
-    from reportlab.lib.utils import ImageReader
-    qr_reader = ImageReader(qr_buffer)
+    # QR code, centered, in a light frame
     qr_size = 5.5 * cm
-    qr_x = 2.1 * cm
-    qr_y = height - 12.8 * cm
-    p.drawImage(qr_reader, qr_x, qr_y, width=qr_size, height=qr_size)
+    frame_pad = 0.35 * cm
+    frame_size = qr_size + 2 * frame_pad
+    frame_x = (width - frame_size) / 2
+    frame_y = instr_y - 1.2 * cm - frame_size
+    p.setStrokeColor(_FRAME_GRAY)
+    p.setLineWidth(1)
+    p.roundRect(frame_x, frame_y, frame_size, frame_size, 6, fill=0, stroke=1)
+    p.drawImage(
+        ImageReader(qr_buffer), frame_x + frame_pad, frame_y + frame_pad,
+        width=qr_size, height=qr_size,
+    )
 
-    # URL text below QR
+    caption_y = frame_y - 0.6 * cm
+    p.setFillColor(_TEXT_GRAY)
     p.setFont('Helvetica', 8)
-    p.drawString(2.1 * cm, qr_y - 0.5 * cm, patient_url)
+    p.drawCentredString(width / 2, caption_y, patient_url)
 
-    # Footer
+    # --- Footer ---------------------------------------------------------------
+    footer_rule_y = 3 * cm
+    p.setStrokeColor(_RULE_GRAY)
+    p.setLineWidth(0.75)
+    p.line(_MARGIN, footer_rule_y, width - _MARGIN, footer_rule_y)
+
+    p.setFillColor(_TEXT_GRAY)
     p.setFont('Helvetica', 8)
-    p.drawString(2 * cm, 2 * cm, f'Erstellt am: {datetime.now().strftime("%d.%m.%Y %H:%M")}')
+    p.drawString(_MARGIN, footer_rule_y - 0.5 * cm, f'Erstellt am: {datetime.now().strftime("%d.%m.%Y %H:%M")}')
+
+    footer_lines = [
+        'Klinik und Poliklinik für Chirurgie',
+        'Klinikum rechts der Isar · Technische Universität München',
+        'Ismaninger Str. 22 · 81675 München',
+    ]
+    for i, line in enumerate(footer_lines):
+        p.drawRightString(width - _MARGIN, footer_rule_y - 0.5 * cm - i * 0.35 * cm, line)
 
     p.showPage()
     p.save()

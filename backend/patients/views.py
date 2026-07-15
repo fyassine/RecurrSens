@@ -28,10 +28,11 @@ Endpoint summary:
         GET    /api/audio/{file_id}/url/       Get pre-signed download URL
 """
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from django.core.exceptions import ValidationError
 from django.http import HttpResponse
+from django.utils import timezone
 from rest_framework import generics, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -417,8 +418,47 @@ class PatientPublicView(APIView):
                 {'error': 'Patient nicht gefunden.'},
                 status=status.HTTP_404_NOT_FOUND,
             )
+        self._log_access(request, patient)
         serializer = PatientPublicSerializer(patient)
         return Response(serializer.data)
+
+    def _log_access(self, request, patient):
+        """
+        Record a 'view' audit log entry the first time a patient accesses their
+        link within a session window. The wizard polls this endpoint repeatedly
+        after every action, so we throttle to avoid flooding the timeline.
+        """
+        try:
+            recent_cutoff = timezone.now() - timedelta(minutes=30)
+            already_logged = PatientAuditLog.objects.filter(
+                patient=patient,
+                event_type=PatientAuditLog.EventType.VIEW,
+                created_at__gte=recent_cutoff,
+            ).exists()
+            if already_logged:
+                return
+
+            ua_info = services.parse_user_agent(request.META.get('HTTP_USER_AGENT', ''))
+            device_parts = [
+                part for part in (
+                    ua_info.get('device_type'),
+                    ua_info.get('browser'),
+                    ua_info.get('os'),
+                ) if part
+            ]
+            detail = ' · '.join(device_parts)
+
+            PatientAuditLog.objects.create(
+                patient=patient,
+                event_type=PatientAuditLog.EventType.VIEW,
+                event='Link aufgerufen',
+                detail=detail,
+                files=[],
+                actor=PatientAuditLog.Actor.PATIENT,
+                actor_name=f'{patient.patient_id} (Patient)',
+            )
+        except Exception:
+            logger.exception('Failed to write access audit log for patient %s', patient.id)
 
 
 class PatientPublicAdvanceView(APIView):
