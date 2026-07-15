@@ -136,6 +136,7 @@ class PatientListSerializer(serializers.ModelSerializer):
     audio_count_post = serializers.SerializerMethodField()
     current_post_op_session_number = serializers.SerializerMethodField()
     last_activity = serializers.ReadOnlyField()
+    access_code_formatted = serializers.ReadOnlyField()
 
     class Meta:
         model = Patient
@@ -147,7 +148,7 @@ class PatientListSerializer(serializers.ModelSerializer):
             'pre_op_date', 'post_op_date',
             'deleted_at',
             'expires_at', 'created_at', 'updated_at',
-            'last_activity',
+            'last_activity', 'access_code_formatted',
         ]
         read_only_fields = fields
 
@@ -172,11 +173,13 @@ class PatientDetailSerializer(serializers.ModelSerializer):
     audio_files_post = serializers.SerializerMethodField()
     sessions = RecordingSessionSerializer(many=True, read_only=True)
     last_activity = serializers.ReadOnlyField()
+    access_code_formatted = serializers.ReadOnlyField()
 
     class Meta:
         model = Patient
         fields = [
             'id', 'patient_id', 'status',
+            'access_code_formatted',
             'pre_op_date', 'post_op_date',
             # Pre-OP AI
             'prediction_pre', 'ai_percentage_rp_pre',

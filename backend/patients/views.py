@@ -16,6 +16,7 @@ Endpoint summary:
         GET    /api/export/                    Export data as ZIP
 
     Patient-facing (UUID token, no JWT):
+        GET    /api/p/code/{code}/             Resolve access code to UUID token
         GET    /api/p/{token}/                 Get public patient data
         PATCH  /api/p/{token}/                 Update patient demographics
         POST   /api/p/{token}/advance/         Advance workflow step
@@ -47,6 +48,7 @@ from .audio_validation import (
     validate_audio_upload,
 )
 from .models import (
+    ACCESS_CODE_LENGTH,
     AudioFile,
     Exercise,
     ExerciseSkip,
@@ -397,6 +399,33 @@ class PatientViewSet(viewsets.ModelViewSet):
 # =============================================================================
 # Patient-Facing Views (UUID token auth, no JWT)
 # =============================================================================
+
+class PatientCodeResolveView(APIView):
+    """
+    Resolves a short access code (fallback for when QR scanning fails) to the
+    patient's UUID token, so the frontend can redirect into the normal
+    token-based wizard flow.
+    """
+    authentication_classes = []
+    permission_classes = [AllowAny]
+    throttle_scope = 'access_code_lookup'
+
+    def get(self, request, code):
+        normalized = ''.join(ch for ch in code.upper() if ch.isalnum())
+        if len(normalized) != ACCESS_CODE_LENGTH:
+            return Response(
+                {'error': 'Ungültiger Zugangscode.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        try:
+            patient = Patient.objects.get(access_code=normalized)
+        except Patient.DoesNotExist:
+            return Response(
+                {'error': 'Ungültiger Zugangscode.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return Response({'token': str(patient.id)})
+
 
 class PatientPublicView(APIView):
     """

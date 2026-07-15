@@ -261,6 +261,11 @@ export async function getPublicPatient(token: string): Promise<PatientPublic> {
   return data;
 }
 
+export async function resolveAccessCode(code: string): Promise<string> {
+  const { data } = await publicApi.get(`/p/code/${encodeURIComponent(code)}/`);
+  return data.token;
+}
+
 export async function advancePublicPatient(token: string): Promise<void> {
   await publicApi.post(`/p/${token}/advance/`);
 }
