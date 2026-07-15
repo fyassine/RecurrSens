@@ -9,6 +9,7 @@ Models:
 - AudioFile: Audio recordings linked to a patient, session, exercise, and phase.
 - Exercise: Voice exercise configuration (vowels, phrases) used for recordings.
 """
+import secrets
 import uuid
 from datetime import timedelta
 
@@ -16,6 +17,15 @@ from django.conf import settings
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.utils import timezone
+
+# Excludes visually ambiguous characters: I, L, O, 0, 1
+ACCESS_CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'
+ACCESS_CODE_LENGTH = 8
+
+
+def generate_access_code() -> str:
+    """Generate a random 8-char access code (fallback for when QR scanning fails)."""
+    return ''.join(secrets.choice(ACCESS_CODE_ALPHABET) for _ in range(ACCESS_CODE_LENGTH))
 
 
 class Center(models.Model):
@@ -155,6 +165,14 @@ class Patient(models.Model):
         help_text='Pseudonym des Patienten (kein echter Name)'
     )
 
+    # Fallback access path (manual entry) for when QR scanning fails.
+    # Not a secret on its own — same access level as the UUID token, just easier to type.
+    access_code = models.CharField(
+        max_length=ACCESS_CODE_LENGTH, unique=True, null=True, editable=False,
+        verbose_name='Zugangscode',
+        help_text='Alternativer Zugangscode, falls der QR-Code-Scan fehlschlägt'
+    )
+
     # Center assignment (null = legacy patient with no center restriction)
     center = models.ForeignKey(
         Center,
@@ -266,7 +284,23 @@ class Patient(models.Model):
         if not self.expires_at:
             retention_days = getattr(settings, 'DATA_RETENTION_DAYS', 7)
             self.expires_at = timezone.now() + timedelta(days=retention_days)
+        if not self.access_code:
+            self.access_code = self._generate_unique_access_code()
         super().save(*args, **kwargs)
+
+    @classmethod
+    def _generate_unique_access_code(cls) -> str:
+        for _ in range(20):
+            code = generate_access_code()
+            if not cls.objects.filter(access_code=code).exists():
+                return code
+        raise RuntimeError('Konnte keinen eindeutigen Zugangscode generieren.')
+
+    @property
+    def access_code_formatted(self) -> str:
+        """Access code as XXXX-XXXX for display/printing."""
+        code = self.access_code or ''
+        return f'{code[:4]}-{code[4:]}' if len(code) == ACCESS_CODE_LENGTH else code
 
     @property
     def is_expiring_soon(self) -> bool:

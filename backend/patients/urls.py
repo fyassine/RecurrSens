@@ -28,6 +28,11 @@ urlpatterns = [
     # Patient-facing endpoints (UUID token)
     # =========================================================================
     path(
+        'p/code/<str:code>/',
+        views.PatientCodeResolveView.as_view(),
+        name='patient-code-resolve',
+    ),
+    path(
         'p/<uuid:token>/',
         views.PatientPublicView.as_view(),
         name='patient-public',

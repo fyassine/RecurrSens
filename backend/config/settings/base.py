@@ -128,6 +128,7 @@ REST_FRAMEWORK = {
     'DEFAULT_THROTTLE_RATES': {
         # Applied per-view via throttle_scope (e.g. patient audio uploads).
         'audio_upload': '120/hour',
+        'access_code_lookup': '20/hour',
     },
 }
 

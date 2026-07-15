@@ -21,8 +21,13 @@ FROM python:3.12-slim AS runner
 # postgresql-client-16: pg_dump (matches the postgres:16-alpine server, used
 #   by patients.tasks.backup_database_snapshot)
 # gnupg: encrypts the nightly DB backup before it is uploaded to S3/MinIO
+# libpango-1.0-0, libpangocairo-1.0-0, libcairo2, libgdk-pixbuf-2.0-0,
+# libffi-dev, shared-mime-info, fonts-dejavu-core: WeasyPrint's native
+#   rendering stack, used by patients.services.generate_patient_pdf
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq5 wget gnupg ca-certificates \
+    libpango-1.0-0 libpangocairo-1.0-0 libcairo2 libgdk-pixbuf-2.0-0 \
+    libffi-dev shared-mime-info fonts-dejavu-core \
     && wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | gpg --dearmor -o /usr/share/keyrings/postgresql.gpg \
     && echo "deb [signed-by=/usr/share/keyrings/postgresql.gpg] http://apt.postgresql.org/pub/repos/apt bookworm-pgdg main" > /etc/apt/sources.list.d/pgdg.list \
     && apt-get update && apt-get install -y --no-install-recommends postgresql-client-16 \

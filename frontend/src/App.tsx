@@ -7,6 +7,7 @@ import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
 import PatientDetailsPage from './pages/PatientDetailsPage';
 import PatientWizardPage from './pages/PatientWizardPage';
+import AccessCodePage from './pages/AccessCodePage';
 import AnalytikPage from './pages/AnalytikPage';
 import EinstellungenPage from './pages/EinstellungenPage';
 import AppShell from './components/layout/AppShell';
@@ -78,6 +79,7 @@ export default function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/code" element={<AccessCodePage />} />
           <Route path="/p/:token" element={<PatientWizardPage />} />
           <Route
             path="/"
