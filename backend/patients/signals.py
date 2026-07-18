@@ -10,6 +10,7 @@ Export and edit events are written explicitly in the relevant view/serializer
 code because they carry richer context (actor username, changed fields, etc.)
 that signals cannot easily access.
 """
+
 import logging
 
 from django.db.models.signals import post_save, pre_delete
@@ -23,6 +24,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Patient creation
 # ---------------------------------------------------------------------------
+
 
 @receiver(post_save, sender=Patient)
 def log_patient_create(sender, instance: Patient, created: bool, **kwargs):
@@ -61,6 +63,7 @@ def log_patient_create(sender, instance: Patient, created: bool, **kwargs):
 # Audio file upload
 # ---------------------------------------------------------------------------
 
+
 @receiver(post_save, sender=AudioFile)
 def log_audio_upload(sender, instance: AudioFile, created: bool, **kwargs):
     """Write an 'upload' audit entry whenever a new audio file is created."""
@@ -81,14 +84,13 @@ def log_audio_upload(sender, instance: AudioFile, created: bool, **kwargs):
             actor_name=f'{instance.patient.patient_id} (Patient)',
         )
     except Exception:
-        logger.exception(
-            'Failed to write upload audit log for audio file %s', instance.id
-        )
+        logger.exception('Failed to write upload audit log for audio file %s', instance.id)
 
 
 # ---------------------------------------------------------------------------
 # Audio file deletion
 # ---------------------------------------------------------------------------
+
 
 @receiver(pre_delete, sender=AudioFile)
 def log_audio_delete(sender, instance: AudioFile, **kwargs):
@@ -112,6 +114,4 @@ def log_audio_delete(sender, instance: AudioFile, **kwargs):
             actor_name='admin',
         )
     except Exception:
-        logger.exception(
-            'Failed to write delete audit log for audio file %s', instance.id
-        )
+        logger.exception('Failed to write delete audit log for audio file %s', instance.id)

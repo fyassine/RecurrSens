@@ -28,6 +28,7 @@ Endpoint summary:
         GET    /api/audio/{file_id}/           Stream audio file (proxy)
         GET    /api/audio/{file_id}/url/       Get pre-signed download URL
 """
+
 import logging
 from datetime import datetime, timedelta
 
@@ -106,17 +107,21 @@ def _audio_for_user(user, file_id):
 # Admin Patient ViewSet (JWT required)
 # =============================================================================
 
+
 class PatientViewSet(viewsets.ModelViewSet):
     """
     Admin-facing patient CRUD endpoints.
     Requires JWT authentication.
     """
+
     permission_classes = [IsAuthenticated]
     pagination_class = None
     lookup_field = 'pk'
 
     def get_queryset(self):
-        qs = Patient.objects.prefetch_related('audio_files', 'feedback_entries', 'exercise_skips').all()
+        qs = Patient.objects.prefetch_related(
+            'audio_files', 'feedback_entries', 'exercise_skips'
+        ).all()
         if _get_role(self.request.user) == 'CENTER_USER':
             center = _get_center(self.request.user)
             if center is None:
@@ -275,11 +280,7 @@ class PatientViewSet(viewsets.ModelViewSet):
         patient = self.get_object()
 
         # Retrieve real database audit logs
-        audit_qs = (
-            PatientAuditLog.objects
-            .filter(patient=patient)
-            .order_by('-created_at')
-        )
+        audit_qs = PatientAuditLog.objects.filter(patient=patient).order_by('-created_at')
 
         db_events = [
             {
@@ -302,24 +303,23 @@ class PatientViewSet(viewsets.ModelViewSet):
 
         # 1. Patient creation (if not already logged in DB)
         if 'create' not in db_event_types:
-            fallback_events.append({
-                'id': f'create-{patient.id}',
-                'type': 'create',
-                'event': 'Patient angelegt',
-                'detail': 'Neuer Patienteneintrag erstellt',
-                'files': [],
-                'actor': 'admin',
-                'actor_name': 'admin',
-                'timestamp': patient.created_at,
-            })
+            fallback_events.append(
+                {
+                    'id': f'create-{patient.id}',
+                    'type': 'create',
+                    'event': 'Patient angelegt',
+                    'detail': 'Neuer Patienteneintrag erstellt',
+                    'files': [],
+                    'actor': 'admin',
+                    'actor_name': 'admin',
+                    'timestamp': patient.created_at,
+                }
+            )
 
         # 2. Audio file uploads (preceding the earliest DB log)
         from collections import defaultdict
-        audio_files = (
-            patient.audio_files
-            .select_related('session')
-            .order_by('created_at')
-        )
+
+        audio_files = patient.audio_files.select_related('session').order_by('created_at')
         upload_groups = defaultdict(list)
         for af in audio_files:
             day_key = af.created_at.date().isoformat()
@@ -335,57 +335,65 @@ class PatientViewSet(viewsets.ModelViewSet):
                 f'Aufnahme {i + 1}' + (f' [{af.exercise_id.upper()}]' if af.exercise_id else '')
                 for i, af in enumerate(files)
             ]
-            fallback_events.append({
-                'id': f'upload-{phase}-{day_key}-{_uuid.uuid4().hex[:6]}',
-                'type': 'upload',
-                'event': f'{phase_label} Aufnahmen hochgeladen',
-                'detail': f'{count} Aufnahme{"n" if count != 1 else ""} hinzugefügt',
-                'files': file_labels,
-                'actor': 'patient',
-                'actor_name': f'{patient.patient_id} (Patient)',
-                'timestamp': group_ts,
-            })
+            fallback_events.append(
+                {
+                    'id': f'upload-{phase}-{day_key}-{_uuid.uuid4().hex[:6]}',
+                    'type': 'upload',
+                    'event': f'{phase_label} Aufnahmen hochgeladen',
+                    'detail': f'{count} Aufnahme{"n" if count != 1 else ""} hinzugefügt',
+                    'files': file_labels,
+                    'actor': 'patient',
+                    'actor_name': f'{patient.patient_id} (Patient)',
+                    'timestamp': group_ts,
+                }
+            )
 
         # 3. Last export (preceding the earliest DB log)
         if patient.last_exported_at:
             if not earliest_db_ts or patient.last_exported_at < earliest_db_ts:
-                fallback_events.append({
-                    'id': f'export-{patient.id}',
-                    'type': 'export',
-                    'event': 'Patientendaten exportiert',
-                    'detail': 'Vollständiger Datenexport (ZIP)',
-                    'files': [],
-                    'actor': 'admin',
-                    'actor_name': 'admin',
-                    'timestamp': patient.last_exported_at,
-                })
+                fallback_events.append(
+                    {
+                        'id': f'export-{patient.id}',
+                        'type': 'export',
+                        'event': 'Patientendaten exportiert',
+                        'detail': 'Vollständiger Datenexport (ZIP)',
+                        'files': [],
+                        'actor': 'admin',
+                        'actor_name': 'admin',
+                        'timestamp': patient.last_exported_at,
+                    }
+                )
 
         # 4. Scheduled expiry (if not already logged in DB)
         if 'expiry' not in db_event_types:
-            fallback_events.append({
-                'id': f'expiry-{patient.id}',
-                'type': 'expiry',
-                'event': 'Automatische Ablaufmarkierung geplant',
-                'detail': f'Datensatz zum Löschen vorgemerkt (Ablauf: {patient.expires_at.strftime("%d.%m.%Y")})',
-                'files': [],
-                'actor': 'system',
-                'actor_name': 'System',
-                'timestamp': patient.created_at,
-            })
+            fallback_events.append(
+                {
+                    'id': f'expiry-{patient.id}',
+                    'type': 'expiry',
+                    'event': 'Automatische Ablaufmarkierung geplant',
+                    'detail': f'Datensatz zum Löschen vorgemerkt (Ablauf: {patient.expires_at.strftime("%d.%m.%Y")})',
+                    'files': [],
+                    'actor': 'system',
+                    'actor_name': 'System',
+                    'timestamp': patient.created_at,
+                }
+            )
 
         # 5. Soft deletion (preceding the earliest DB log)
         if patient.deleted_at:
             if not earliest_db_ts or patient.deleted_at < earliest_db_ts:
-                fallback_events.append({
-                    'id': f'delete-{patient.id}',
-                    'type': 'delete',
-                    'event': 'Patient gelöscht',
-                    'detail': 'Audiodaten wurden entfernt (Soft-Löschung)',
-                    'files': [],
-                    'actor': 'admin',
-                    'actor_name': 'admin',
-                    'timestamp': patient.deleted_at,
-                })
+                fallback_events.append(
+                    {
+                        'id': f'delete-{patient.id}',
+                        'type': 'delete',
+                        'event': 'Patient gelöscht',
+                        'detail': 'Audiodaten wurden entfernt (Soft-Löschung)',
+                        'files': [],
+                        'actor': 'admin',
+                        'actor_name': 'admin',
+                        'timestamp': patient.deleted_at,
+                    }
+                )
 
         # Format timestamps to ISO strings for fallback events
         for e in fallback_events:
@@ -400,12 +408,14 @@ class PatientViewSet(viewsets.ModelViewSet):
 # Patient-Facing Views (UUID token auth, no JWT)
 # =============================================================================
 
+
 class PatientCodeResolveView(APIView):
     """
     Resolves a short access code (fallback for when QR scanning fails) to the
     patient's UUID token, so the frontend can redirect into the normal
     token-based wizard flow.
     """
+
     authentication_classes = []
     permission_classes = [AllowAny]
     throttle_scope = 'access_code_lookup'
@@ -433,6 +443,7 @@ class PatientPublicView(APIView):
     Read-only: workflow transitions go through PatientPublicAdvanceView so the
     state machine (and its side effects) are never bypassed.
     """
+
     authentication_classes = []  # No session/JWT — UUID token in URL
     permission_classes = [IsPatientTokenValid]
 
@@ -469,11 +480,13 @@ class PatientPublicView(APIView):
 
             ua_info = services.parse_user_agent(request.META.get('HTTP_USER_AGENT', ''))
             device_parts = [
-                part for part in (
+                part
+                for part in (
                     ua_info.get('device_type'),
                     ua_info.get('browser'),
                     ua_info.get('os'),
-                ) if part
+                )
+                if part
             ]
             detail = ' · '.join(device_parts)
 
@@ -492,6 +505,7 @@ class PatientPublicView(APIView):
 
 class PatientPublicAdvanceView(APIView):
     """Advance patient workflow step (accessed via UUID token)."""
+
     authentication_classes = []  # No session/JWT — UUID token in URL
     permission_classes = [IsPatientTokenValid]
 
@@ -518,6 +532,7 @@ class PatientPublicAdvanceView(APIView):
 
 class PatientFeedbackView(APIView):
     """Create or query feedback entries (UUID token auth)."""
+
     authentication_classes = []
     permission_classes = [IsPatientTokenValid]
 
@@ -563,9 +578,13 @@ class PatientFeedbackView(APIView):
                 rating_val = feedback.rating
                 detail_str = f'Bewertung: {rating_val}/5 Sterne'
                 if feedback.comment:
-                    comment_trunc = (feedback.comment[:60] + '...') if len(feedback.comment) > 63 else feedback.comment
+                    comment_trunc = (
+                        (feedback.comment[:60] + '...')
+                        if len(feedback.comment) > 63
+                        else feedback.comment
+                    )
                     detail_str += f' — "{comment_trunc}"'
-            
+
             PatientAuditLog.objects.create(
                 patient=patient,
                 event_type=PatientAuditLog.EventType.EDIT,
@@ -576,7 +595,9 @@ class PatientFeedbackView(APIView):
                 actor_name=f'{patient.patient_id} (Patient)',
             )
         except Exception:
-            logger.exception('Failed to write patient feedback audit log for patient %s', patient.id)
+            logger.exception(
+                'Failed to write patient feedback audit log for patient %s', patient.id
+            )
 
         return Response(
             PatientFeedbackSerializer(feedback).data,
@@ -586,6 +607,7 @@ class PatientFeedbackView(APIView):
 
 class ExerciseSkipView(APIView):
     """Persist a skipped exercise (UUID token auth)."""
+
     authentication_classes = []
     permission_classes = [IsPatientTokenValid]
 
@@ -615,7 +637,7 @@ class ExerciseSkipView(APIView):
                 exercise = Exercise.objects.filter(exercise_id=data['exercise_id']).first()
                 exercise_title = exercise.title if exercise else data['exercise_id']
                 phase_label = 'Prä-OP' if data['phase'] == 'PRE_OP' else 'Post-OP'
-                
+
                 PatientAuditLog.objects.create(
                     patient=patient,
                     event_type=PatientAuditLog.EventType.EDIT,
@@ -626,7 +648,9 @@ class ExerciseSkipView(APIView):
                     actor_name=f'{patient.patient_id} (Patient)',
                 )
             except Exception:
-                logger.exception('Failed to write exercise skip audit log for patient %s', patient.id)
+                logger.exception(
+                    'Failed to write exercise skip audit log for patient %s', patient.id
+                )
 
         return Response(
             ExerciseSkipSerializer(skip).data,
@@ -638,12 +662,16 @@ class ExerciseSkipView(APIView):
 # Audio Upload Views
 # =============================================================================
 
+
 class AudioUploadView(APIView):
     """
     Server-side audio file upload.
     For clients that can't use pre-signed URLs directly.
     """
-    authentication_classes = [JWTAuthentication]  # JWT for admin, or UUID token via IsAdminOrPatientToken
+
+    authentication_classes = [
+        JWTAuthentication
+    ]  # JWT for admin, or UUID token via IsAdminOrPatientToken
     permission_classes = [IsAdminOrPatientToken]
     throttle_scope = 'audio_upload'
 
@@ -760,6 +788,7 @@ class AudioPresignView(APIView):
     The client uploads the file directly, then confirms by calling
     the upload endpoint to create the DB record.
     """
+
     permission_classes = [IsAdminOrPatientToken]
     throttle_scope = 'audio_upload'
 
@@ -812,12 +841,14 @@ class AudioPresignView(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
-        return Response({
-            'upload_url': upload_url,
-            'storage_key': key,
-            'phase': phase,
-            'exercise_id': exercise_id,
-        })
+        return Response(
+            {
+                'upload_url': upload_url,
+                'storage_key': key,
+                'phase': phase,
+                'exercise_id': exercise_id,
+            }
+        )
 
 
 class AudioPresignConfirmView(APIView):
@@ -825,6 +856,7 @@ class AudioPresignConfirmView(APIView):
     Confirm a pre-signed upload: create the DB record after the client
     has successfully uploaded the file directly to S3.
     """
+
     permission_classes = [IsAdminOrPatientToken]
 
     def post(self, request, token):
@@ -879,6 +911,7 @@ class AudioPresignConfirmView(APIView):
 # Audio File Reassignment (admin)
 # =============================================================================
 
+
 class AudioFileReassignView(APIView):
     """
     PATCH /api/audio/<file_id>/reassign/
@@ -890,6 +923,7 @@ class AudioFileReassignView(APIView):
     and session fields are all updated atomically so that future exports and
     streaming always resolve to the correct file location.
     """
+
     permission_classes = [IsAuthenticated]
 
     def patch(self, request, file_id):
@@ -962,6 +996,7 @@ class AudioFileReassignView(APIView):
         audio_file.save(update_fields=['storage_key', 'phase', 'session'])
 
         from .serializers import AudioFileCompactSerializer
+
         return Response(
             AudioFileCompactSerializer(audio_file).data,
             status=status.HTTP_200_OK,
@@ -972,6 +1007,7 @@ class AudioFileReassignView(APIView):
 # Audio Streaming / Download
 # =============================================================================
 
+
 class AudioStreamUrlView(APIView):
     """Mint a short-lived signed URL for streaming an audio file.
 
@@ -979,6 +1015,7 @@ class AudioStreamUrlView(APIView):
     AudioStreamView validates, so native <audio> elements (which cannot send an
     Authorization header) can play the file without exposing it publicly.
     """
+
     permission_classes = [IsAuthenticated]
 
     def get(self, request, file_id):
@@ -998,6 +1035,7 @@ class AudioStreamView(APIView):
     Authorised via a short-lived signed token (query param `t`) minted by
     AudioStreamUrlView, since <audio> elements cannot send auth headers.
     """
+
     permission_classes = [AllowAny]
 
     def get(self, request, file_id):
@@ -1025,8 +1063,12 @@ class AudioStreamView(APIView):
 
         # Determine MIME type
         mime_types = {
-            'mp3': 'audio/mpeg', 'wav': 'audio/wav', 'webm': 'audio/webm',
-            'ogg': 'audio/ogg', 'm4a': 'audio/mp4', 'aac': 'audio/aac',
+            'mp3': 'audio/mpeg',
+            'wav': 'audio/wav',
+            'webm': 'audio/webm',
+            'ogg': 'audio/ogg',
+            'm4a': 'audio/mp4',
+            'aac': 'audio/aac',
             'flac': 'audio/flac',
         }
         ext = audio_file.storage_key.rsplit('.', 1)[-1].lower()
@@ -1041,6 +1083,7 @@ class AudioStreamView(APIView):
 
 class AudioDownloadUrlView(APIView):
     """Get a pre-signed download URL for an audio file."""
+
     permission_classes = [IsAuthenticated]
 
     def get(self, request, file_id):
@@ -1066,8 +1109,10 @@ class AudioDownloadUrlView(APIView):
 # Exercise List
 # =============================================================================
 
+
 class ExerciseListView(generics.ListAPIView):
     """List all active voice exercises. Public endpoint."""
+
     permission_classes = [AllowAny]
     serializer_class = ExerciseSerializer
     queryset = Exercise.objects.filter(is_active=True)
@@ -1078,23 +1123,28 @@ class ExerciseListView(generics.ListAPIView):
 # Data Export
 # =============================================================================
 
+
 class MeView(APIView):
     """Return the current user's role and center info."""
+
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
         role = _get_role(request.user)
         center = _get_center(request.user)
-        return Response({
-            'username': request.user.username,
-            'role': role,
-            'center_id': str(center.id) if center else None,
-            'center_name': center.name if center else None,
-        })
+        return Response(
+            {
+                'username': request.user.username,
+                'role': role,
+                'center_id': str(center.id) if center else None,
+                'center_name': center.name if center else None,
+            }
+        )
 
 
 class AccountInfoView(APIView):
     """Return full account info: profile, current session, and login history."""
+
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
@@ -1108,6 +1158,7 @@ class ExportView(APIView):
         ids: Optional comma-separated list of patient UUIDs to export.
              When omitted, exports all completed patients.
     """
+
     permission_classes = [IsSuperAdmin]
 
     def get(self, request):

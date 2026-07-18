@@ -2,6 +2,7 @@
 API integration tests for the patients app.
 Tests cover all major endpoints, authentication, and business logic flows.
 """
+
 from django.contrib.auth.models import User
 from django.test import TestCase
 from rest_framework import status
@@ -29,21 +30,28 @@ class BaseAPITest(TestCase):
             email='admin@test.com',
         )
         # Get JWT token
-        response = self.client.post('/api/auth/token/', {
-            'username': 'testadmin',
-            'password': 'testpass123',
-        })
+        response = self.client.post(
+            '/api/auth/token/',
+            {
+                'username': 'testadmin',
+                'password': 'testpass123',
+            },
+        )
         self.token = response.data['access']
         self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {self.token}')
 
         # Create test exercises
         Exercise.objects.create(
-            exercise_id='a_n', title='Vokal A',
-            description='Test', order=1,
+            exercise_id='a_n',
+            title='Vokal A',
+            description='Test',
+            order=1,
         )
         Exercise.objects.create(
-            exercise_id='i_n', title='Vokal I',
-            description='Test', order=2,
+            exercise_id='i_n',
+            title='Vokal I',
+            description='Test',
+            order=2,
         )
 
     def create_test_patient(self, patient_id='TEST-001', **kwargs):
@@ -56,10 +64,13 @@ class JWTAuthTest(BaseAPITest):
 
     def test_obtain_token(self):
         client = APIClient()
-        response = client.post('/api/auth/token/', {
-            'username': 'testadmin',
-            'password': 'testpass123',
-        })
+        response = client.post(
+            '/api/auth/token/',
+            {
+                'username': 'testadmin',
+                'password': 'testpass123',
+            },
+        )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn('access', response.data)
         self.assertIn('refresh', response.data)
@@ -80,55 +91,76 @@ class PatientCRUDTest(BaseAPITest):
     """Tests for patient CRUD operations (admin endpoints)."""
 
     def test_create_patient(self):
-        response = self.client.post('/api/patients/', {
-            'patient_id': 'NEW-001',
-        })
+        response = self.client.post(
+            '/api/patients/',
+            {
+                'patient_id': 'NEW-001',
+            },
+        )
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(response.data['patient_id'], 'NEW-001')
 
     def test_create_duplicate_patient(self):
         self.create_test_patient('DUP-001')
-        response = self.client.post('/api/patients/', {
-            'patient_id': 'DUP-001',
-        })
+        response = self.client.post(
+            '/api/patients/',
+            {
+                'patient_id': 'DUP-001',
+            },
+        )
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_create_patient_empty_id(self):
-        response = self.client.post('/api/patients/', {
-            'patient_id': '',
-        })
+        response = self.client.post(
+            '/api/patients/',
+            {
+                'patient_id': '',
+            },
+        )
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_create_patient_auto_numbered(self):
         self.create_test_patient('0019')
-        response = self.client.post('/api/patients/', {
-            'patient_id': '',
-        })
+        response = self.client.post(
+            '/api/patients/',
+            {
+                'patient_id': '',
+            },
+        )
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(response.data['patient_id'], '0020')
 
     def test_create_patient_auto_numbered_skips_occupied(self):
         self.create_test_patient('0019')
         self.create_test_patient('0020')
-        response = self.client.post('/api/patients/', {
-            'patient_id': '',
-        })
+        response = self.client.post(
+            '/api/patients/',
+            {
+                'patient_id': '',
+            },
+        )
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(response.data['patient_id'], '0021')
 
     def test_create_patient_auto_numbered_width_rollover(self):
         self.create_test_patient('0099')
-        response = self.client.post('/api/patients/', {
-            'patient_id': '',
-        })
+        response = self.client.post(
+            '/api/patients/',
+            {
+                'patient_id': '',
+            },
+        )
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertEqual(response.data['patient_id'], '0100')
 
     def test_create_patient_auto_numbered_blocked_by_non_numeric(self):
         self.create_test_patient('ProbeLara2')
-        response = self.client.post('/api/patients/', {
-            'patient_id': '',
-        })
+        response = self.client.post(
+            '/api/patients/',
+            {
+                'patient_id': '',
+            },
+        )
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_list_patients(self):
@@ -150,9 +182,12 @@ class PatientCRUDTest(BaseAPITest):
 
     def test_update_patient(self):
         patient = self.create_test_patient('UPD-001')
-        response = self.client.patch(f'/api/patients/{patient.id}/', {
-            'patient_id': 'UPD-001-renamed',
-        })
+        response = self.client.patch(
+            f'/api/patients/{patient.id}/',
+            {
+                'patient_id': 'UPD-001-renamed',
+            },
+        )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         patient.refresh_from_db()
         self.assertEqual(patient.patient_id, 'UPD-001-renamed')
@@ -176,9 +211,7 @@ class PatientWorkflowTest(BaseAPITest):
         self.assertEqual(response.data['status'], 'CONSENT_GIVEN')
         # Should auto-create a PRE_OP session
         self.assertEqual(
-            RecordingSession.objects.filter(
-                patient=patient, phase='PRE_OP'
-            ).count(), 1
+            RecordingSession.objects.filter(patient=patient, phase='PRE_OP').count(), 1
         )
 
     def test_advance_full_workflow(self):
@@ -229,21 +262,23 @@ class CompletenessTest(BaseAPITest):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertFalse(response.data['complete'])
         # Missing entries include exercise IDs, e.g. 'preOpAudio:a_n,i_n'
-        self.assertTrue(
-            any(m.startswith('preOpAudio') for m in response.data['missing'])
-        )
+        self.assertTrue(any(m.startswith('preOpAudio') for m in response.data['missing']))
 
     def test_complete_patient(self):
         patient = self.create_test_patient('CMP-002')
         # Create audio files for all active exercises, both phases
         for exercise in Exercise.objects.filter(is_active=True):
             AudioFile.objects.create(
-                patient=patient, exercise_id=exercise.exercise_id,
-                phase='PRE_OP', storage_key=f'{patient.id}/pre/{exercise.exercise_id}.webm',
+                patient=patient,
+                exercise_id=exercise.exercise_id,
+                phase='PRE_OP',
+                storage_key=f'{patient.id}/pre/{exercise.exercise_id}.webm',
             )
             AudioFile.objects.create(
-                patient=patient, exercise_id=exercise.exercise_id,
-                phase='POST_OP', storage_key=f'{patient.id}/post/{exercise.exercise_id}.webm',
+                patient=patient,
+                exercise_id=exercise.exercise_id,
+                phase='POST_OP',
+                storage_key=f'{patient.id}/post/{exercise.exercise_id}.webm',
             )
 
         response = self.client.get(f'/api/patients/{patient.id}/completeness/')
@@ -256,12 +291,16 @@ class CompletenessTest(BaseAPITest):
 
         # Create audio files for only one exercise per phase
         AudioFile.objects.create(
-            patient=patient, exercise_id='a_n',
-            phase='PRE_OP', storage_key=f'{patient.id}/pre/a_n.webm',
+            patient=patient,
+            exercise_id='a_n',
+            phase='PRE_OP',
+            storage_key=f'{patient.id}/pre/a_n.webm',
         )
         AudioFile.objects.create(
-            patient=patient, exercise_id='a_n',
-            phase='POST_OP', storage_key=f'{patient.id}/post/a_n.webm',
+            patient=patient,
+            exercise_id='a_n',
+            phase='POST_OP',
+            storage_key=f'{patient.id}/post/a_n.webm',
         )
 
         # Skip the remaining exercise
@@ -291,10 +330,13 @@ class PatientPublicTest(BaseAPITest):
         client = APIClient()
         response = client.get('/api/p/00000000-0000-0000-0000-000000000000/')
         # DRF returns 403 when IsPatientTokenValid denies access
-        self.assertIn(response.status_code, [
-            status.HTTP_401_UNAUTHORIZED,
-            status.HTTP_403_FORBIDDEN,
-        ])
+        self.assertIn(
+            response.status_code,
+            [
+                status.HTTP_401_UNAUTHORIZED,
+                status.HTTP_403_FORBIDDEN,
+            ],
+        )
 
     def test_advance_via_token(self):
         patient = self.create_test_patient('PUB-003')
@@ -306,11 +348,14 @@ class PatientPublicTest(BaseAPITest):
     def test_submit_feedback(self):
         patient = self.create_test_patient('PUB-004')
         client = APIClient()
-        response = client.post(f'/api/p/{patient.id}/feedback/', {
-            'phase': 'PRE_OP',
-            'rating': 4,
-            'comment': 'Alles klar',
-        })
+        response = client.post(
+            f'/api/p/{patient.id}/feedback/',
+            {
+                'phase': 'PRE_OP',
+                'rating': 4,
+                'comment': 'Alles klar',
+            },
+        )
         self.assertIn(response.status_code, [status.HTTP_200_OK, status.HTTP_201_CREATED])
         self.assertEqual(PatientFeedback.objects.filter(patient=patient, phase='PRE_OP').count(), 1)
 
@@ -322,10 +367,13 @@ class PatientPublicTest(BaseAPITest):
     def test_submit_feedback_skip(self):
         patient = self.create_test_patient('PUB-005')
         client = APIClient()
-        response = client.post(f'/api/p/{patient.id}/feedback/', {
-            'phase': 'POST_OP',
-            'skipped': True,
-        })
+        response = client.post(
+            f'/api/p/{patient.id}/feedback/',
+            {
+                'phase': 'POST_OP',
+                'skipped': True,
+            },
+        )
         self.assertIn(response.status_code, [status.HTTP_200_OK, status.HTTP_201_CREATED])
         feedback = PatientFeedback.objects.get(patient=patient, phase='POST_OP')
         self.assertTrue(feedback.skipped)
@@ -333,10 +381,13 @@ class PatientPublicTest(BaseAPITest):
     def test_skip_exercise(self):
         patient = self.create_test_patient('PUB-006')
         client = APIClient()
-        response = client.post(f'/api/p/{patient.id}/skips/', {
-            'phase': 'PRE_OP',
-            'exercise_id': 'a_n',
-        })
+        response = client.post(
+            f'/api/p/{patient.id}/skips/',
+            {
+                'phase': 'PRE_OP',
+                'exercise_id': 'a_n',
+            },
+        )
         self.assertIn(response.status_code, [status.HTTP_200_OK, status.HTTP_201_CREATED])
         self.assertEqual(
             ExerciseSkip.objects.filter(patient=patient, phase='PRE_OP', exercise_id='a_n').count(),
@@ -355,8 +406,11 @@ class ExerciseListTest(BaseAPITest):
 
     def test_only_active_exercises(self):
         Exercise.objects.create(
-            exercise_id='inactive', title='Inactive',
-            description='Test', order=99, is_active=False,
+            exercise_id='inactive',
+            title='Inactive',
+            description='Test',
+            order=99,
+            is_active=False,
         )
         client = APIClient()
         response = client.get('/api/exercises/')
@@ -427,8 +481,10 @@ class ExerciseSerializerTest(BaseAPITest):
     def test_exercise_has_single_example_url(self):
         Exercise.objects.all().delete()
         Exercise.objects.create(
-            exercise_id='i_h', title='Vokal I hoch',
-            description='Test', order=1,
+            exercise_id='i_h',
+            title='Vokal I hoch',
+            description='Test',
+            order=1,
             example_audio_url='/examples/i_h.flac',
         )
         client = APIClient()
@@ -451,10 +507,14 @@ class AudioFileReassignTest(BaseAPITest):
         super().setUp()
         self.patient = self.create_test_patient('RSG-001')
         self.pre_op_session = RecordingSession.objects.create(
-            patient=self.patient, phase='PRE_OP', session_number=1,
+            patient=self.patient,
+            phase='PRE_OP',
+            session_number=1,
         )
         self.post_op_session = RecordingSession.objects.create(
-            patient=self.patient, phase='POST_OP', session_number=1,
+            patient=self.patient,
+            phase='POST_OP',
+            session_number=1,
         )
         # Create an audio file that is currently in PRE_OP
         self.audio = AudioFile.objects.create(
@@ -477,9 +537,7 @@ class AudioFileReassignTest(BaseAPITest):
         from unittest.mock import patch as mock_patch
 
         with mock_patch('patients.services.move_audio_in_s3', return_value=True) as mock_move:
-            response = self._patch_reassign(
-                self.audio.id, 'POST_OP', str(self.post_op_session.id)
-            )
+            response = self._patch_reassign(self.audio.id, 'POST_OP', str(self.post_op_session.id))
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
@@ -533,9 +591,7 @@ class AudioFileReassignTest(BaseAPITest):
         from unittest.mock import patch as mock_patch
 
         with mock_patch('patients.services.move_audio_in_s3', return_value=False):
-            response = self._patch_reassign(
-                self.audio.id, 'POST_OP', str(self.post_op_session.id)
-            )
+            response = self._patch_reassign(self.audio.id, 'POST_OP', str(self.post_op_session.id))
 
         self.assertEqual(response.status_code, status.HTTP_500_INTERNAL_SERVER_ERROR)
 
@@ -546,6 +602,7 @@ class AudioFileReassignTest(BaseAPITest):
 
     def test_reassign_unknown_file_returns_404(self):
         import uuid
+
         response = self._patch_reassign(str(uuid.uuid4()), 'POST_OP', None)
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
@@ -618,10 +675,13 @@ class PatientActivityAPITest(BaseAPITest):
         old_created = patient.created_at
         new_created = old_created - timedelta(days=5)
 
-        response = self.client.patch(f'/api/patients/{patient.id}/', {
-            'patient_id': 'ACT-EDIT-001-renamed',
-            'created_at': new_created.isoformat(),
-        })
+        response = self.client.patch(
+            f'/api/patients/{patient.id}/',
+            {
+                'patient_id': 'ACT-EDIT-001-renamed',
+                'created_at': new_created.isoformat(),
+            },
+        )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
         patient.refresh_from_db()
@@ -639,35 +699,47 @@ class PatientActivityAPITest(BaseAPITest):
     def test_audit_log_skip_exercise(self):
         """Skipping an exercise creates a PatientAuditLog entry."""
         from patients.models import PatientAuditLog, RecordingSession
+
         patient = self.create_test_patient('ACT-SKIP-001', status='CONSENT_GIVEN')
         # Create session
         RecordingSession.objects.create(patient=patient, phase='PRE_OP', session_number=1)
 
         # Skip a_n
-        response = self.client.post(f'/api/p/{patient.id}/skips/', {
-            'phase': 'PRE_OP',
-            'exercise_id': 'a_n',
-        })
+        response = self.client.post(
+            f'/api/p/{patient.id}/skips/',
+            {
+                'phase': 'PRE_OP',
+                'exercise_id': 'a_n',
+            },
+        )
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
 
         # Check audit log
-        logs = PatientAuditLog.objects.filter(patient=patient, event_type='edit', event='Übung übersprungen')
+        logs = PatientAuditLog.objects.filter(
+            patient=patient, event_type='edit', event='Übung übersprungen'
+        )
         self.assertEqual(logs.count(), 1)
         self.assertIn('Vokal A', logs.first().detail)
 
     def test_audit_log_feedback(self):
         """Submitting feedback creates/updates a PatientAuditLog entry."""
         from patients.models import PatientAuditLog
+
         patient = self.create_test_patient('ACT-FEEDBACK-001', status='POST_OP_STARTED')
 
-        response = self.client.post(f'/api/p/{patient.id}/feedback/', {
-            'phase': 'POST_OP',
-            'rating': 4,
-            'comment': 'Good session',
-        })
+        response = self.client.post(
+            f'/api/p/{patient.id}/feedback/',
+            {
+                'phase': 'POST_OP',
+                'rating': 4,
+                'comment': 'Good session',
+            },
+        )
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
 
-        logs = PatientAuditLog.objects.filter(patient=patient, event_type='edit', event='Feedback eingereicht')
+        logs = PatientAuditLog.objects.filter(
+            patient=patient, event_type='edit', event='Feedback eingereicht'
+        )
         self.assertEqual(logs.count(), 1)
         self.assertIn('4/5 Sterne', logs.first().detail)
         self.assertIn('Good session', logs.first().detail)
@@ -675,13 +747,16 @@ class PatientActivityAPITest(BaseAPITest):
     def test_audit_log_advance(self):
         """Advancing the patient workflow step creates a PatientAuditLog entry."""
         from patients.models import PatientAuditLog
+
         patient = self.create_test_patient('ACT-ADV-001', status='NEW')
 
         # Advance NEW -> CONSENT_GIVEN
         response = self.client.post(f'/api/patients/{patient.id}/advance/')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
-        logs = PatientAuditLog.objects.filter(patient=patient, event_type='edit', event='Status geändert')
+        logs = PatientAuditLog.objects.filter(
+            patient=patient, event_type='edit', event='Status geändert'
+        )
         self.assertEqual(logs.count(), 1)
         self.assertIn('Neu → Einwilligung erteilt', logs.first().detail)
 
@@ -693,10 +768,14 @@ class RecordingSessionVisitDateTest(BaseAPITest):
         super().setUp()
         self.patient = self.create_test_patient('VD-001', status='POST_OP_STARTED')
         self.session1 = RecordingSession.objects.create(
-            patient=self.patient, phase='POST_OP', session_number=1,
+            patient=self.patient,
+            phase='POST_OP',
+            session_number=1,
         )
         self.followup = RecordingSession.objects.create(
-            patient=self.patient, phase='POST_OP', session_number=2,
+            patient=self.patient,
+            phase='POST_OP',
+            session_number=2,
         )
 
     def test_update_visit_date(self):
@@ -723,7 +802,9 @@ class RecordingSessionVisitDateTest(BaseAPITest):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
         logs = PatientAuditLog.objects.filter(
-            patient=self.patient, event_type='edit', event='Besuchsdatum bearbeitet',
+            patient=self.patient,
+            event_type='edit',
+            event='Besuchsdatum bearbeitet',
         )
         self.assertEqual(logs.count(), 1)
         self.assertIn('Follow-up 1', logs.first().detail)
@@ -764,10 +845,14 @@ class AudioUploadSessionTargetingTest(BaseAPITest):
         super().setUp()
         self.patient = self.create_test_patient('UP-001', status='POST_OP_STARTED')
         self.session1 = RecordingSession.objects.create(
-            patient=self.patient, phase='POST_OP', session_number=1,
+            patient=self.patient,
+            phase='POST_OP',
+            session_number=1,
         )
         self.followup = RecordingSession.objects.create(
-            patient=self.patient, phase='POST_OP', session_number=2,
+            patient=self.patient,
+            phase='POST_OP',
+            session_number=2,
         )
 
     def _upload(self, session_id=None, exercise_id='a_n'):
@@ -823,7 +908,8 @@ class AudioUploadSessionTargetingTest(BaseAPITest):
         self.assertTrue(AudioFile.objects.filter(id=first.data['id']).exists())
         self.assertTrue(AudioFile.objects.filter(id=second.data['id']).exists())
         self.assertEqual(
-            AudioFile.objects.filter(patient=self.patient, exercise_id='a_n').count(), 2,
+            AudioFile.objects.filter(patient=self.patient, exercise_id='a_n').count(),
+            2,
         )
 
     def test_reupload_into_same_session_replaces_previous_recording(self):
@@ -840,8 +926,11 @@ class AudioUploadSessionTargetingTest(BaseAPITest):
         self.assertFalse(AudioFile.objects.filter(id=first.data['id']).exists())
         self.assertEqual(
             AudioFile.objects.filter(
-                patient=self.patient, exercise_id='a_n', session=self.followup,
-            ).count(), 1,
+                patient=self.patient,
+                exercise_id='a_n',
+                session=self.followup,
+            ).count(),
+            1,
         )
 
     def test_upload_with_invalid_session_id_returns_400(self):
@@ -862,5 +951,3 @@ class AudioUploadSessionTargetingTest(BaseAPITest):
 
         audio = AudioFile.objects.get(id=response.data['id'])
         self.assertEqual(audio.session_id, self.followup.id)
-
-

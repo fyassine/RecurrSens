@@ -177,10 +177,10 @@ class Patient(models.Model):
 
     # Fallback access path (manual entry) for when QR scanning fails.
     # Not a secret on its own — same access level as the UUID token, just easier to type.
-    access_code = models.CharField(  # noqa: DJ001
+    access_code = models.CharField(
         max_length=ACCESS_CODE_LENGTH,
         unique=True,
-        null=True, 
+        null=True,
         editable=False,
         verbose_name='Zugangscode',
         help_text='Alternativer Zugangscode, falls der QR-Code-Scan fehlschlägt',

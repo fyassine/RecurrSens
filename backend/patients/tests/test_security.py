@@ -6,6 +6,7 @@ Security & access-control tests covering the P0/P1 fixes:
   - presign-confirm S3 existence check
   - race-safe PRE_OP session creation
 """
+
 from unittest import mock
 
 from django.contrib.auth.models import User
@@ -43,7 +44,9 @@ class AudioAccessControlTest(TestCase):
 
         self.patient_a = Patient.objects.create(patient_id='A-001', center=self.center_a)
         self.audio_a = AudioFile.objects.create(
-            patient=self.patient_a, exercise_id='a_n', phase='PRE_OP',
+            patient=self.patient_a,
+            exercise_id='a_n',
+            phase='PRE_OP',
             storage_key=f'{self.patient_a.id}/pre/a_n.webm',
         )
 
@@ -87,7 +90,9 @@ class AudioAccessControlTest(TestCase):
 
     def test_token_for_one_file_rejected_for_another(self):
         other = AudioFile.objects.create(
-            patient=self.patient_a, exercise_id='i_n', phase='PRE_OP',
+            patient=self.patient_a,
+            exercise_id='i_n',
+            phase='PRE_OP',
             storage_key=f'{self.patient_a.id}/pre/i_n.webm',
         )
         token = services.sign_audio_stream_token(self.audio_a.id)
@@ -105,7 +110,8 @@ class AudioAccessControlTest(TestCase):
         self._auth('user_b')
         resp = self.client.patch(
             f'/api/audio/{self.audio_a.id}/reassign/',
-            {'phase': 'POST_OP', 'session': None}, format='json',
+            {'phase': 'POST_OP', 'session': None},
+            format='json',
         )
         self.assertEqual(resp.status_code, status.HTTP_404_NOT_FOUND)
 
@@ -120,7 +126,9 @@ class PatientPatchBypassTest(TestCase):
 
     def test_patient_patch_not_allowed(self):
         resp = self.client.patch(
-            f'/api/p/{self.patient.id}/', {'status': 'POST_OP_DONE'}, format='json',
+            f'/api/p/{self.patient.id}/',
+            {'status': 'POST_OP_DONE'},
+            format='json',
         )
         self.assertEqual(resp.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
         self.patient.refresh_from_db()
@@ -132,7 +140,8 @@ class PatientPatchBypassTest(TestCase):
         self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
         resp = self.client.patch(
             f'/api/patients/{self.patient.id}/',
-            {'status': 'POST_OP_DONE'}, format='json',
+            {'status': 'POST_OP_DONE'},
+            format='json',
         )
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
         self.patient.refresh_from_db()
@@ -176,7 +185,9 @@ class SessionRaceTest(TestCase):
         services.advance_patient_step(patient)  # NEW -> CONSENT_GIVEN, creates session
         # Re-run the auto-create branch directly; must be idempotent.
         RecordingSession.objects.get_or_create(
-            patient=patient, phase=RecordingSession.Phase.PRE_OP, session_number=1,
+            patient=patient,
+            phase=RecordingSession.Phase.PRE_OP,
+            session_number=1,
         )
         self.assertEqual(
             RecordingSession.objects.filter(patient=patient, phase='PRE_OP').count(), 1
@@ -190,7 +201,9 @@ class ExportS3FailureTest(TestCase):
 
         patient = Patient.objects.create(patient_id='EXP-S3')
         AudioFile.objects.create(
-            patient=patient, exercise_id='a_n', phase='PRE_OP',
+            patient=patient,
+            exercise_id='a_n',
+            phase='PRE_OP',
             storage_key=f'{patient.id}/pre/a_n.webm',
         )
 

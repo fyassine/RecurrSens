@@ -8,6 +8,7 @@ migrations or for verifying backup configuration on a deployment server.
 Usage:
     python manage.py backup_database
 """
+
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
@@ -26,4 +27,6 @@ class Command(BaseCommand):
 
         self.stdout.write('Starting database backup...')
         backup_database_snapshot.run()
-        self.stdout.write(self.style.SUCCESS('Database backup task finished — check logs/email for the result.'))
+        self.stdout.write(
+            self.style.SUCCESS('Database backup task finished — check logs/email for the result.')
+        )

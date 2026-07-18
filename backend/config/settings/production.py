@@ -1,6 +1,7 @@
 """
 Production-specific settings.
 """
+
 from decouple import Csv, config
 from django.core.exceptions import ImproperlyConfigured
 
@@ -23,8 +24,10 @@ STORAGES['default']['OPTIONS']['access_key'] = S3_ACCESS_KEY  # noqa: F405
 STORAGES['default']['OPTIONS']['secret_key'] = S3_SECRET_KEY  # noqa: F405
 
 _INSECURE_VALUES = {
-    '', 'change-me-in-production',
-    'django-insecure-dev-key-change-in-production', 'minioadmin',
+    '',
+    'change-me-in-production',
+    'django-insecure-dev-key-change-in-production',
+    'minioadmin',
 }
 for _name, _value in (
     ('DJANGO_SECRET_KEY', SECRET_KEY),

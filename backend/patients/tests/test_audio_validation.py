@@ -4,6 +4,7 @@ Focus: the validator sniffs the format from magic bytes and trusts that over the
 client-supplied filename, so mislabeled uploads (notably iOS WebKit recording
 audio/mp4 but named `recording.webm`) self-correct instead of returning 400.
 """
+
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import SimpleTestCase
