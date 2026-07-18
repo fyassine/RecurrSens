@@ -6,6 +6,7 @@ Provides different serializer variants depending on the consumer:
 - Patient-facing endpoints get restricted (public) serializers
 - Create/update operations get dedicated serializers with validation
 """
+
 from rest_framework import serializers
 
 from .models import AudioFile, Exercise, ExerciseSkip, Patient, PatientFeedback, RecordingSession
@@ -15,15 +16,20 @@ from .services import generate_next_patient_id, get_active_session
 # Exercise Serializers
 # =============================================================================
 
+
 class ExerciseSerializer(serializers.ModelSerializer):
     """Read-only serializer for exercise configuration."""
 
     class Meta:
         model = Exercise
         fields = [
-            'id', 'exercise_id', 'title', 'description',
+            'id',
+            'exercise_id',
+            'title',
+            'description',
             'example_audio_url',
-            'order', 'is_active',
+            'order',
+            'is_active',
         ]
         read_only_fields = fields
 
@@ -31,6 +37,7 @@ class ExerciseSerializer(serializers.ModelSerializer):
 # =============================================================================
 # AudioFile Serializers
 # =============================================================================
+
 
 class RecordingSessionSerializer(serializers.ModelSerializer):
     """Serializer for recording sessions."""
@@ -56,8 +63,13 @@ class AudioFileSerializer(serializers.ModelSerializer):
     class Meta:
         model = AudioFile
         fields = [
-            'id', 'patient', 'session', 'exercise_id', 'phase',
-            'storage_key', 'created_at',
+            'id',
+            'patient',
+            'session',
+            'exercise_id',
+            'phase',
+            'storage_key',
+            'created_at',
         ]
         read_only_fields = ['id', 'created_at']
 
@@ -74,6 +86,7 @@ class AudioFileCompactSerializer(serializers.ModelSerializer):
 # =============================================================================
 # Feedback & Skips
 # =============================================================================
+
 
 class PatientFeedbackSerializer(serializers.ModelSerializer):
     """Read-only serializer for patient feedback entries."""
@@ -127,11 +140,13 @@ class ExerciseSkipCreateSerializer(serializers.ModelSerializer):
 # Patient Serializers
 # =============================================================================
 
+
 class PatientListSerializer(serializers.ModelSerializer):
     """
     Compact serializer for patient list view (admin dashboard).
     Includes audio file counts instead of full audio data.
     """
+
     audio_count_pre = serializers.SerializerMethodField()
     audio_count_post = serializers.SerializerMethodField()
     current_post_op_session_number = serializers.SerializerMethodField()
@@ -141,14 +156,23 @@ class PatientListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Patient
         fields = [
-            'id', 'patient_id', 'center', 'status',
-            'prediction_pre', 'prediction_post',
-            'audio_count_pre', 'audio_count_post',
+            'id',
+            'patient_id',
+            'center',
+            'status',
+            'prediction_pre',
+            'prediction_post',
+            'audio_count_pre',
+            'audio_count_post',
             'current_post_op_session_number',
-            'pre_op_date', 'post_op_date',
+            'pre_op_date',
+            'post_op_date',
             'deleted_at',
-            'expires_at', 'created_at', 'updated_at',
-            'last_activity', 'access_code_formatted',
+            'expires_at',
+            'created_at',
+            'updated_at',
+            'last_activity',
+            'access_code_formatted',
         ]
         read_only_fields = fields
 
@@ -168,6 +192,7 @@ class PatientDetailSerializer(serializers.ModelSerializer):
     Full patient detail serializer (admin view).
     Includes nested audio file data and computed fields.
     """
+
     audio_files = AudioFileCompactSerializer(many=True, read_only=True)
     audio_files_pre = serializers.SerializerMethodField()
     audio_files_post = serializers.SerializerMethodField()
@@ -178,21 +203,34 @@ class PatientDetailSerializer(serializers.ModelSerializer):
     class Meta:
         model = Patient
         fields = [
-            'id', 'patient_id', 'status',
+            'id',
+            'patient_id',
+            'status',
             'access_code_formatted',
-            'pre_op_date', 'post_op_date',
+            'pre_op_date',
+            'post_op_date',
             # Pre-OP AI
-            'prediction_pre', 'ai_percentage_rp_pre',
-            'gradcam_prediction_pre', 'gradcam_percentage_pre',
+            'prediction_pre',
+            'ai_percentage_rp_pre',
+            'gradcam_prediction_pre',
+            'gradcam_percentage_pre',
             'ai_reasoning_pre',
             # Post-OP AI
-            'prediction_post', 'ai_percentage_rp_post',
-            'gradcam_prediction_post', 'gradcam_percentage_post',
+            'prediction_post',
+            'ai_percentage_rp_post',
+            'gradcam_prediction_post',
+            'gradcam_percentage_post',
             'ai_reasoning_post',
             # Metadata
-            'deleted_at', 'expires_at', 'created_at', 'updated_at',
+            'deleted_at',
+            'expires_at',
+            'created_at',
+            'updated_at',
             # Sessions & Audio
-            'sessions', 'audio_files', 'audio_files_pre', 'audio_files_post',
+            'sessions',
+            'audio_files',
+            'audio_files_pre',
+            'audio_files_post',
             'last_activity',
         ]
         read_only_fields = ['id', 'updated_at', 'deleted_at']
@@ -213,6 +251,7 @@ class PatientPublicSerializer(serializers.ModelSerializer):
     Completion and skip tracking are scoped to the active session so that
     longitudinal follow-up sessions always start with a clean slate.
     """
+
     completed_exercise_ids_pre = serializers.SerializerMethodField()
     completed_exercise_ids_post = serializers.SerializerMethodField()
     skipped_exercise_ids_pre = serializers.SerializerMethodField()
@@ -224,10 +263,14 @@ class PatientPublicSerializer(serializers.ModelSerializer):
     class Meta:
         model = Patient
         fields = [
-            'status', 'patient_id',
-            'completed_exercise_ids_pre', 'completed_exercise_ids_post',
-            'skipped_exercise_ids_pre', 'skipped_exercise_ids_post',
-            'feedback_submitted_pre', 'feedback_submitted_post',
+            'status',
+            'patient_id',
+            'completed_exercise_ids_pre',
+            'completed_exercise_ids_post',
+            'skipped_exercise_ids_pre',
+            'skipped_exercise_ids_post',
+            'feedback_submitted_pre',
+            'feedback_submitted_post',
             'current_post_op_session_number',
             'created_at',
         ]
@@ -249,13 +292,17 @@ class PatientPublicSerializer(serializers.ModelSerializer):
         session = get_active_session(obj, 'PRE_OP')
         if not session:
             return []
-        return list(obj.exercise_skips.filter(session=session).values_list('exercise_id', flat=True))
+        return list(
+            obj.exercise_skips.filter(session=session).values_list('exercise_id', flat=True)
+        )
 
     def get_skipped_exercise_ids_post(self, obj):
         session = get_active_session(obj, 'POST_OP')
         if not session:
             return []
-        return list(obj.exercise_skips.filter(session=session).values_list('exercise_id', flat=True))
+        return list(
+            obj.exercise_skips.filter(session=session).values_list('exercise_id', flat=True)
+        )
 
     def get_feedback_submitted_pre(self, obj):
         return obj.feedback_entries.filter(phase='PRE_OP').exists()
@@ -309,6 +356,7 @@ class PatientUpdateSerializer(serializers.ModelSerializer):
     Deliberately excludes the AI prediction fields, which are written exclusively
     by the inference task via the ORM.
     """
+
     created_at = serializers.DateTimeField(required=False)
     expires_at = serializers.DateTimeField(required=False)
 
@@ -317,8 +365,10 @@ class PatientUpdateSerializer(serializers.ModelSerializer):
         fields = [
             'patient_id',
             'status',
-            'pre_op_date', 'post_op_date',
-            'created_at', 'expires_at',
+            'pre_op_date',
+            'post_op_date',
+            'created_at',
+            'expires_at',
         ]
 
     def validate_patient_id(self, value):
@@ -326,7 +376,11 @@ class PatientUpdateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError('Patienten-ID darf nicht leer sein.')
         # Check uniqueness excluding current instance
         instance = self.instance
-        if Patient.objects.filter(patient_id=value).exclude(pk=instance.pk if instance else None).exists():
+        if (
+            Patient.objects.filter(patient_id=value)
+            .exclude(pk=instance.pk if instance else None)
+            .exists()
+        ):
             raise serializers.ValidationError(
                 f'Ein Patient mit der ID "{value}" existiert bereits.'
             )
@@ -336,6 +390,7 @@ class PatientUpdateSerializer(serializers.ModelSerializer):
         import logging
 
         from django.utils import timezone
+
         logger = logging.getLogger(__name__)
 
         old_status = instance.status
@@ -350,6 +405,7 @@ class PatientUpdateSerializer(serializers.ModelSerializer):
         # ── Write audit log entries ──────────────────────────────────────────
         try:
             from .models import PatientAuditLog
+
             changed_fields = []
             if new_status != old_status:
                 status_labels = {
@@ -427,6 +483,7 @@ class PatientUpdateSerializer(serializers.ModelSerializer):
             if new_status in (Patient.Status.PRE_OP_DONE, Patient.Status.POST_OP_DONE):
                 try:
                     from .tasks import run_inference_task
+
                     phase = 'PRE_OP' if new_status == Patient.Status.PRE_OP_DONE else 'POST_OP'
                     run_inference_task.delay(str(instance.id), phase)
                 except Exception as e:
@@ -439,8 +496,10 @@ class PatientUpdateSerializer(serializers.ModelSerializer):
 # Completeness Serializer (read-only response)
 # =============================================================================
 
+
 class CompletenessSerializer(serializers.Serializer):
     """Response serializer for patient completeness check."""
+
     complete = serializers.BooleanField()
     missing = serializers.ListField(child=serializers.CharField())
     warnings = serializers.ListField(child=serializers.CharField())

@@ -9,6 +9,7 @@ Role helpers:
   _get_role(user)   → 'SUPER_ADMIN' | 'CENTER_USER' (falls back to SUPER_ADMIN)
   _get_center(user) → Center instance or None
 """
+
 from rest_framework.permissions import BasePermission, IsAuthenticated
 
 
@@ -33,6 +34,7 @@ class IsAdminUser(IsAuthenticated):
     Standard JWT-authenticated admin user.
     Inherits from IsAuthenticated — requires valid JWT token.
     """
+
     pass
 
 
@@ -54,6 +56,7 @@ class IsPatientTokenValid(BasePermission):
 
     def has_permission(self, request, view):
         from .models import Patient
+
         token = view.kwargs.get('token')
         if not token:
             return False

@@ -6,6 +6,7 @@ Usage:
     python manage.py assign_center "MRI" --all          # assign ALL patients (even those already in a center)
     python manage.py assign_center "MRI" --dry-run      # preview without saving
 """
+
 from django.core.management.base import BaseCommand, CommandError
 
 from patients.models import Center, Patient
@@ -15,7 +16,9 @@ class Command(BaseCommand):
     help = 'Assign unassigned (legacy) patients to a named center'
 
     def add_arguments(self, parser):
-        parser.add_argument('center_name', type=str, help='Exact name of the Center to assign patients to')
+        parser.add_argument(
+            'center_name', type=str, help='Exact name of the Center to assign patients to'
+        )
         parser.add_argument(
             '--all',
             action='store_true',

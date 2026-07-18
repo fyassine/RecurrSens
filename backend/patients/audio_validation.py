@@ -14,6 +14,7 @@ extension + MIME whitelist — rejecting them would block real clinical and mobi
 uploads. A file whose extension claims a *signed* format but whose bytes match no
 known signature is rejected as corrupt/mismatched.
 """
+
 from dataclasses import dataclass
 
 from django.core.exceptions import ValidationError
@@ -134,8 +135,7 @@ def _detect_format_by_magic(head: bytes) -> AudioFormat | None:
         if fmt.magic_signatures is None:
             continue
         if any(
-            head[offset:offset + len(prefix)] == prefix
-            for offset, prefix in fmt.magic_signatures
+            head[offset : offset + len(prefix)] == prefix for offset, prefix in fmt.magic_signatures
         ):
             return fmt
     return None
@@ -152,9 +152,7 @@ def validate_audio_upload(file_obj) -> tuple[str, str]:
     """
     size = getattr(file_obj, 'size', None)
     if size is not None and size > MAX_AUDIO_BYTES:
-        raise ValidationError(
-            f'Datei zu groß (max. {MAX_AUDIO_BYTES // (1024 * 1024)} MB).'
-        )
+        raise ValidationError(f'Datei zu groß (max. {MAX_AUDIO_BYTES // (1024 * 1024)} MB).')
 
     head = file_obj.read(16)
     file_obj.seek(0)

@@ -6,6 +6,7 @@ Primary task: run_inference_task
   - Sends audio keys to the inference service
   - Stores prediction results back on the Patient model
 """
+
 import base64
 import logging
 import os
@@ -51,9 +52,7 @@ def run_inference_task(self, patient_id: str, phase: str):
     keys = list(audio_files.values_list('storage_key', flat=True))
 
     if not keys:
-        logger.warning(
-            f'No audio files for patient {patient.id} phase {phase}'
-        )
+        logger.warning(f'No audio files for patient {patient.id} phase {phase}')
         return
 
     inference_url = settings.INFERENCE_SERVICE_URL
@@ -72,14 +71,9 @@ def run_inference_task(self, patient_id: str, phase: str):
         )
         response.raise_for_status()
         prediction_result = response.json()
-        logger.info(
-            f'Inference prediction for {patient.id} ({phase}): '
-            f'{prediction_result}'
-        )
+        logger.info(f'Inference prediction for {patient.id} ({phase}): {prediction_result}')
     except requests.RequestException as e:
-        logger.error(
-            f'Inference prediction failed for {patient.id} ({phase}): {e}'
-        )
+        logger.error(f'Inference prediction failed for {patient.id} ({phase}): {e}')
         # Retry on failure
         try:
             self.retry(exc=e)
@@ -90,8 +84,7 @@ def run_inference_task(self, patient_id: str, phase: str):
             setattr(patient, field, Patient.PredictionStatus.FAILED)
             patient.save(update_fields=[field])
             logger.error(
-                f'Max retries exceeded for prediction {patient.id} ({phase}); '
-                f'marked {field}=FAILED'
+                f'Max retries exceeded for prediction {patient.id} ({phase}); marked {field}=FAILED'
             )
             return
 
@@ -105,14 +98,9 @@ def run_inference_task(self, patient_id: str, phase: str):
         )
         response.raise_for_status()
         reasoning_result = response.json()
-        logger.info(
-            f'Inference reasoning for {patient.id} ({phase}): '
-            f'{reasoning_result}'
-        )
+        logger.info(f'Inference reasoning for {patient.id} ({phase}): {reasoning_result}')
     except requests.RequestException as e:
-        logger.error(
-            f'Inference reasoning failed for {patient.id} ({phase}): {e}'
-        )
+        logger.error(f'Inference reasoning failed for {patient.id} ({phase}): {e}')
 
     # --- Store results ---
     update_fields = []
@@ -126,19 +114,27 @@ def run_inference_task(self, patient_id: str, phase: str):
             patient.ai_percentage_rp_pre = film.get('percentage')
             patient.gradcam_prediction_pre = gradcam.get('prediction', '')
             patient.gradcam_percentage_pre = gradcam.get('percentage')
-            update_fields.extend([
-                'prediction_pre', 'ai_percentage_rp_pre',
-                'gradcam_prediction_pre', 'gradcam_percentage_pre',
-            ])
+            update_fields.extend(
+                [
+                    'prediction_pre',
+                    'ai_percentage_rp_pre',
+                    'gradcam_prediction_pre',
+                    'gradcam_percentage_pre',
+                ]
+            )
         else:
             patient.prediction_post = film.get('prediction', 'TODO')
             patient.ai_percentage_rp_post = film.get('percentage')
             patient.gradcam_prediction_post = gradcam.get('prediction', '')
             patient.gradcam_percentage_post = gradcam.get('percentage')
-            update_fields.extend([
-                'prediction_post', 'ai_percentage_rp_post',
-                'gradcam_prediction_post', 'gradcam_percentage_post',
-            ])
+            update_fields.extend(
+                [
+                    'prediction_post',
+                    'ai_percentage_rp_post',
+                    'gradcam_prediction_post',
+                    'gradcam_percentage_post',
+                ]
+            )
 
     if reasoning_result:
         text = reasoning_result.get('text', '')
@@ -151,10 +147,7 @@ def run_inference_task(self, patient_id: str, phase: str):
 
     if update_fields:
         patient.save(update_fields=update_fields)
-        logger.info(
-            f'Saved inference results for {patient.id} ({phase}): '
-            f'updated {update_fields}'
-        )
+        logger.info(f'Saved inference results for {patient.id} ({phase}): updated {update_fields}')
 
 
 @shared_task
@@ -200,8 +193,7 @@ def check_data_expiry():
             )
         except Exception as e:
             logger.warning(
-                f'Expiry email failed for patient {patient.id}; '
-                f'recording notification anyway: {e}'
+                f'Expiry email failed for patient {patient.id}; recording notification anyway: {e}'
             )
 
         patient.notification_sent_at = now
@@ -210,6 +202,7 @@ def check_data_expiry():
 
     # --- Pass 2: auto-delete expired patients that have been downloaded ---
     from .services import delete_patient_with_files
+
     to_delete = Patient.objects.filter(
         expires_at__lte=now,
         last_exported_at__isnull=False,
@@ -243,7 +236,7 @@ def backup_database_snapshot(self):
     db = settings.DATABASES['default']
     timestamp = timezone.now().strftime('%Y-%m-%d_%H-%M-%S')
     work_dir = tempfile.mkdtemp(prefix='db-backup-')
-    dump_path = os.path.join(work_dir, f"{db['NAME']}_{timestamp}.dump")
+    dump_path = os.path.join(work_dir, f'{db["NAME"]}_{timestamp}.dump')
     enc_path = f'{dump_path}.gpg'
 
     try:
@@ -268,8 +261,7 @@ def backup_database_snapshot(self):
         shutil.rmtree(work_dir, ignore_errors=True)
 
     logger.info(
-        f'backup_database_snapshot: uploaded {s3_key} ({size} bytes), '
-        f'pruned {pruned} old backup(s)'
+        f'backup_database_snapshot: uploaded {s3_key} ({size} bytes), pruned {pruned} old backup(s)'
     )
     _send_backup_email(
         success=True,
@@ -290,13 +282,17 @@ def _run_pg_dump(db: dict, dump_path: str):
     subprocess.run(
         [
             'pg_dump',
-            '--host', db['HOST'],
-            '--port', str(db['PORT']),
-            '--username', db['USER'],
+            '--host',
+            db['HOST'],
+            '--port',
+            str(db['PORT']),
+            '--username',
+            db['USER'],
             '--format=custom',
             '--compress=9',
             '--no-password',
-            '--file', dump_path,
+            '--file',
+            dump_path,
             db['NAME'],
         ],
         env=env,
@@ -330,9 +326,17 @@ def _gpg_encrypt(dump_path: str, enc_path: str, work_dir: str):
 
     subprocess.run(
         [
-            'gpg', '--batch', '--yes', '--trust-model', 'always',
-            '--encrypt', '--recipient', settings.DB_BACKUP_GPG_RECIPIENT,
-            '--output', enc_path, dump_path,
+            'gpg',
+            '--batch',
+            '--yes',
+            '--trust-model',
+            'always',
+            '--encrypt',
+            '--recipient',
+            settings.DB_BACKUP_GPG_RECIPIENT,
+            '--output',
+            enc_path,
+            dump_path,
         ],
         env=env,
         check=True,

@@ -1,6 +1,7 @@
 """
 Celery configuration for the project.
 """
+
 import os
 
 from celery import Celery

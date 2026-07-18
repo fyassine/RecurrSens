@@ -1,6 +1,7 @@
 """
 Base settings shared across all environments.
 """
+
 import os
 from datetime import timedelta
 from pathlib import Path
@@ -206,9 +207,7 @@ ADMIN_NOTIFICATION_EMAIL = config('ADMIN_NOTIFICATION_EMAIL', default='admin@exa
 # ==============================================================================
 # Defaults to the console backend so dev/tests never attempt a real SMTP
 # connection. Set EMAIL_BACKEND + EMAIL_HOST/PORT/credentials in production.
-EMAIL_BACKEND = config(
-    'EMAIL_BACKEND', default='django.core.mail.backends.console.EmailBackend'
-)
+EMAIL_BACKEND = config('EMAIL_BACKEND', default='django.core.mail.backends.console.EmailBackend')
 EMAIL_HOST = config('EMAIL_HOST', default='')
 EMAIL_PORT = config('EMAIL_PORT', default=587, cast=int)
 EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='')

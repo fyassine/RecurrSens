@@ -31,6 +31,7 @@ Safety:
     - Does not touch Patient.post_op_date, ExerciseSkip, or S3 storage keys —
       only RecordingSession.session_number and AudioFile.session are changed.
 """
+
 from datetime import timedelta
 
 from django.core.management.base import BaseCommand
@@ -45,15 +46,20 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument(
-            '--patient', type=str, default=None,
+            '--patient',
+            type=str,
+            default=None,
             help='Limit to a single patient_id (e.g. 0025)',
         )
         parser.add_argument(
-            '--gap-hours', type=float, default=4.0,
+            '--gap-hours',
+            type=float,
+            default=4.0,
             help='Time gap (hours) between recordings that marks a new visit (default: 4)',
         )
         parser.add_argument(
-            '--apply', action='store_true',
+            '--apply',
+            action='store_true',
             help='Write the changes. Without this flag, only a report is printed.',
         )
 
@@ -98,30 +104,42 @@ class Command(BaseCommand):
             self.stdout.write(self.style.NOTICE(f'=== Patient {patient.patient_id} ==='))
 
             if conflict:
-                self.stdout.write(self.style.ERROR(
-                    '  SKIPPED: a cluster spans more than one existing RecordingSession — '
-                    'needs manual review, not auto-fixable.'
-                ))
+                self.stdout.write(
+                    self.style.ERROR(
+                        '  SKIPPED: a cluster spans more than one existing RecordingSession — '
+                        'needs manual review, not auto-fixable.'
+                    )
+                )
                 skipped += 1
                 continue
 
             for p in plan:
                 first, last = p['files'][0].created_at, p['files'][-1].created_at
-                old_ids = sorted({str(f.session_id) if f.session_id else 'NULL' for f in p['files']})
+                old_ids = sorted(
+                    {str(f.session_id) if f.session_id else 'NULL' for f in p['files']}
+                )
                 self.stdout.write(
-                    f"  visit {p['number']}: {len(p['files'])} file(s), "
-                    f"{first:%Y-%m-%d %H:%M} - {last:%H:%M}, "
-                    f"old session(s)={old_ids} -> session_number={p['number']}"
+                    f'  visit {p["number"]}: {len(p["files"])} file(s), '
+                    f'{first:%Y-%m-%d %H:%M} - {last:%H:%M}, '
+                    f'old session(s)={old_ids} -> session_number={p["number"]}'
                 )
 
-            stray = set(existing_sessions) - {p['target_session_id'] for p in plan if p['target_session_id']}
+            stray = set(existing_sessions) - {
+                p['target_session_id'] for p in plan if p['target_session_id']
+            }
             for sid in stray:
                 s = existing_sessions[sid]
                 skip_count = s.exercise_skips.count()
-                note = f' ({skip_count} exercise_skip row(s) will lose their session link)' if skip_count else ''
-                self.stdout.write(self.style.WARNING(
-                    f'  stray empty session_number={s.session_number} (id={sid}) will be deleted{note}'
-                ))
+                note = (
+                    f' ({skip_count} exercise_skip row(s) will lose their session link)'
+                    if skip_count
+                    else ''
+                )
+                self.stdout.write(
+                    self.style.WARNING(
+                        f'  stray empty session_number={s.session_number} (id={sid}) will be deleted{note}'
+                    )
+                )
 
             touched += 1
 
@@ -132,12 +150,16 @@ class Command(BaseCommand):
 
         self.stdout.write('')
         if apply_changes:
-            self.stdout.write(self.style.SUCCESS(f'Done. {touched} patient(s) updated, {skipped} skipped.'))
+            self.stdout.write(
+                self.style.SUCCESS(f'Done. {touched} patient(s) updated, {skipped} skipped.')
+            )
         else:
-            self.stdout.write(self.style.NOTICE(
-                f'[dry-run] {touched} patient(s) would be updated, {skipped} would be skipped. '
-                f'Re-run with --apply to write.'
-            ))
+            self.stdout.write(
+                self.style.NOTICE(
+                    f'[dry-run] {touched} patient(s) would be updated, {skipped} would be skipped. '
+                    f'Re-run with --apply to write.'
+                )
+            )
 
     @staticmethod
     def _cluster(files, gap):

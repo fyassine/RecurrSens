@@ -7,6 +7,7 @@ Routes are organized into three groups:
 3. Public endpoints (/api/exercises/, /api/audio/...) — no auth
 4. Export (/api/export/) — JWT required
 """
+
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
@@ -23,7 +24,6 @@ urlpatterns = [
     # Admin endpoints (JWT)
     # =========================================================================
     path('', include(router.urls)),
-
     # =========================================================================
     # Patient-facing endpoints (UUID token)
     # =========================================================================
@@ -67,7 +67,6 @@ urlpatterns = [
         views.AudioPresignConfirmView.as_view(),
         name='audio-presign-confirm',
     ),
-
     # =========================================================================
     # Audio streaming & download (public / JWT)
     # =========================================================================
@@ -91,7 +90,6 @@ urlpatterns = [
         views.AudioDownloadUrlView.as_view(),
         name='audio-download-url',
     ),
-
     # =========================================================================
     # Exercises (public)
     # =========================================================================
@@ -100,7 +98,6 @@ urlpatterns = [
         views.ExerciseListView.as_view(),
         name='exercise-list',
     ),
-
     # =========================================================================
     # Export (SUPER_ADMIN only)
     # =========================================================================
@@ -109,7 +106,6 @@ urlpatterns = [
         views.ExportView.as_view(),
         name='export',
     ),
-
     # =========================================================================
     # Current user info (JWT)
     # =========================================================================

@@ -7,6 +7,7 @@ Ported from the deprecated Next.js app (lib/api.ts):
 - generate_patient_pdf: QR code PDF generation
 - export_patients_data: CSV + audio ZIP export
 """
+
 import base64
 import csv
 import io
@@ -46,7 +47,9 @@ def get_s3_client():
     )
 
 
-def generate_presigned_upload_url(key: str, content_type: str = 'audio/webm', expires_in: int = 3600) -> str:
+def generate_presigned_upload_url(
+    key: str, content_type: str = 'audio/webm', expires_in: int = 3600
+) -> str:
     """
     Generate a pre-signed URL for direct client upload to S3/MinIO.
     The client can PUT a file directly to this URL without going through Django.
@@ -193,9 +196,7 @@ def verify_audio_stream_token(file_id, token: str) -> bool:
     if not token:
         return False
     try:
-        value = signing.loads(
-            token, salt=_AUDIO_STREAM_SALT, max_age=AUDIO_STREAM_TOKEN_MAX_AGE
-        )
+        value = signing.loads(token, salt=_AUDIO_STREAM_SALT, max_age=AUDIO_STREAM_TOKEN_MAX_AGE)
     except signing.BadSignature:
         return False
     return value == str(file_id)
@@ -204,6 +205,7 @@ def verify_audio_stream_token(file_id, token: str) -> bool:
 # =============================================================================
 # Patient Creation
 # =============================================================================
+
 
 def generate_next_patient_id() -> str | None:
     """
@@ -240,14 +242,14 @@ STATUS_TRANSITIONS = {
 # Recording Session Management
 # =============================================================================
 
+
 def create_recording_session(patient: Patient, phase: str) -> RecordingSession:
     """
     Create a new recording session for a patient.
     Auto-increments session_number per patient and phase.
     """
     last_session = (
-        RecordingSession.objects
-        .filter(patient=patient, phase=phase)
+        RecordingSession.objects.filter(patient=patient, phase=phase)
         .order_by('-session_number')
         .first()
     )
@@ -258,9 +260,7 @@ def create_recording_session(patient: Patient, phase: str) -> RecordingSession:
         phase=phase,
         session_number=next_number,
     )
-    logger.info(
-        f'Created {phase} session {next_number} for patient {patient.id}'
-    )
+    logger.info(f'Created {phase} session {next_number} for patient {patient.id}')
     # TODO: Send email notification with QR code / recording link to patient
     # Requires SMTP configuration. See tasks.py send_session_email() stub.
     return session
@@ -272,8 +272,7 @@ def get_active_session(patient: Patient, phase: str) -> RecordingSession | None:
     This is the session that audio uploads will be assigned to.
     """
     return (
-        RecordingSession.objects
-        .filter(patient=patient, phase=phase)
+        RecordingSession.objects.filter(patient=patient, phase=phase)
         .order_by('-session_number')
         .first()
     )
@@ -323,6 +322,7 @@ def advance_patient_step(patient: Patient) -> Patient:
     # Log status change in PatientAuditLog
     try:
         from .models import PatientAuditLog
+
         status_labels = {
             'NEW': 'Neu',
             'CONSENT_GIVEN': 'Einwilligung erteilt',
@@ -368,14 +368,13 @@ def advance_patient_step(patient: Patient) -> Patient:
     if next_status in (Patient.Status.PRE_OP_DONE, Patient.Status.POST_OP_DONE):
         try:
             from .tasks import run_inference_task
+
             phase = 'PRE_OP' if next_status == Patient.Status.PRE_OP_DONE else 'POST_OP'
             run_inference_task.delay(str(patient.id), phase)
         except Exception as e:
             logger.error(f'Failed to trigger inference for patient {patient.id}: {e}')
 
-    logger.info(
-        f'Patient {patient.id} advanced from {current} to {next_status}'
-    )
+    logger.info(f'Patient {patient.id} advanced from {current} to {next_status}')
     return patient
 
 
@@ -402,15 +401,14 @@ def init_post_op_patient(patient: Patient) -> Patient:
 
     create_recording_session(patient, RecordingSession.Phase.POST_OP)
 
-    logger.info(
-        f'Patient {patient.id} initialised directly as POST_OP_STARTED'
-    )
+    logger.info(f'Patient {patient.id} initialised directly as POST_OP_STARTED')
     return patient
 
 
 # =============================================================================
 # Completeness Check
 # =============================================================================
+
 
 def check_completeness(patient: Patient) -> dict:
     """
@@ -502,15 +500,18 @@ def generate_patient_pdf(patient: Patient) -> bytes:
     qr_data_uri = f'data:image/png;base64,{base64.b64encode(qr_buffer.getvalue()).decode("ascii")}'
 
     app_url = settings.APP_URL.rstrip('/')
-    html = render_to_string('patients/patient_invite.html', {
-        'logo_data_uri': _file_to_data_uri(_LOGO_PATH, 'image/png'),
-        'qr_data_uri': qr_data_uri,
-        'patient_id': patient.patient_id,
-        'access_code_formatted': patient.access_code_formatted,
-        'fallback_url': f'{app_url}/code',
-        'app_url': app_url,
-        'created_at': datetime.now().strftime('%d.%m.%Y %H:%M'),
-    })
+    html = render_to_string(
+        'patients/patient_invite.html',
+        {
+            'logo_data_uri': _file_to_data_uri(_LOGO_PATH, 'image/png'),
+            'qr_data_uri': qr_data_uri,
+            'patient_id': patient.patient_id,
+            'access_code_formatted': patient.access_code_formatted,
+            'fallback_url': f'{app_url}/code',
+            'app_url': app_url,
+            'created_at': datetime.now().strftime('%d.%m.%Y %H:%M'),
+        },
+    )
 
     return HTML(string=html).write_pdf()
 
@@ -518,6 +519,7 @@ def generate_patient_pdf(patient: Patient) -> bytes:
 # =============================================================================
 # Data Export
 # =============================================================================
+
 
 def _format_date(dt) -> str:
     """Format a date/datetime for CSV export."""
@@ -560,11 +562,17 @@ def export_patients_zip(patient_ids: list | None = None) -> bytes:
         # Build metadata CSV (one row per patient)
         csv_buffer = io.StringIO()
         writer = csv.writer(csv_buffer)
-        writer.writerow([
-            'PatientenID', 'Status', 'PraeOP_Datum', 'PostOP_Datum',
-            'Anzahl_PraeOP_Aufnahmen', 'Anzahl_PostOP_Aufnahmen',
-            'Erstellt_am',
-        ])
+        writer.writerow(
+            [
+                'PatientenID',
+                'Status',
+                'PraeOP_Datum',
+                'PostOP_Datum',
+                'Anzahl_PraeOP_Aufnahmen',
+                'Anzahl_PostOP_Aufnahmen',
+                'Erstellt_am',
+            ]
+        )
 
         s3 = get_s3_client()
         export_time = timezone.now()
@@ -574,15 +582,17 @@ def export_patients_zip(patient_ids: list | None = None) -> bytes:
             audio_files = list(patient.audio_files.all())
             pre_count = sum(1 for f in audio_files if f.phase == 'PRE_OP')
             post_count = sum(1 for f in audio_files if f.phase == 'POST_OP')
-            writer.writerow([
-                patient.patient_id,
-                patient.get_status_display(),
-                _format_date(patient.pre_op_date),
-                _format_date(patient.post_op_date),
-                pre_count,
-                post_count,
-                _format_date(patient.created_at),
-            ])
+            writer.writerow(
+                [
+                    patient.patient_id,
+                    patient.get_status_display(),
+                    _format_date(patient.pre_op_date),
+                    _format_date(patient.post_op_date),
+                    pre_count,
+                    post_count,
+                    _format_date(patient.created_at),
+                ]
+            )
 
             # Add audio files under per-patient directories
             for audio_file in audio_files:
@@ -623,6 +633,7 @@ def export_patients_zip(patient_ids: list | None = None) -> bytes:
 # Delete Patient (with S3 cleanup)
 # =============================================================================
 
+
 def delete_patient_with_files(patient: Patient) -> None:
     """
     Soft-delete a patient: remove audio data but keep metadata.
@@ -657,8 +668,7 @@ def delete_patient_with_files(patient: Patient) -> None:
     patient.save()
 
     logger.info(
-        f'Soft-deleted patient {patient.patient_id}: '
-        f'audio files removed, metadata preserved'
+        f'Soft-deleted patient {patient.patient_id}: audio files removed, metadata preserved'
     )
 
 

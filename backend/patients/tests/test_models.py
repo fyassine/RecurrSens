@@ -1,4 +1,5 @@
 """Model tests for the patients app."""
+
 from django.db import IntegrityError
 from django.test import TestCase
 from django.utils import timezone
@@ -29,8 +30,10 @@ class ExerciseModelTest(TestCase):
 
     def test_exercise_single_example_audio(self):
         exercise = Exercise.objects.create(
-            exercise_id='i_h', title='Vokal I hoch',
-            description='Test', order=1,
+            exercise_id='i_h',
+            title='Vokal I hoch',
+            description='Test',
+            order=1,
             example_audio_url='/examples/i_h.flac',
         )
         self.assertEqual(exercise.example_audio_url, '/examples/i_h.flac')
@@ -50,6 +53,7 @@ class PatientModelTest(TestCase):
 
     def test_patient_expires_at_auto_set(self):
         from django.conf import settings
+
         patient = Patient.objects.create(patient_id='EXP-001')
         retention = getattr(settings, 'DATA_RETENTION_DAYS', 3)
         delta = patient.expires_at - patient.created_at
@@ -57,6 +61,7 @@ class PatientModelTest(TestCase):
 
     def test_is_expiring_soon(self):
         from datetime import timedelta
+
         patient = Patient.objects.create(patient_id='SOON-001')
         patient.expires_at = timezone.now() + timedelta(hours=12)
         self.assertTrue(patient.is_expiring_soon)
@@ -154,9 +159,7 @@ class RecordingSessionModelTest(TestCase):
             phase=RecordingSession.Phase.PRE_OP,
             session_number=1,
         )
-        self.assertEqual(
-            self.patient.sessions.filter(phase='PRE_OP').count(), 1
-        )
+        self.assertEqual(self.patient.sessions.filter(phase='PRE_OP').count(), 1)
 
 
 class AudioFileModelTest(TestCase):
@@ -231,9 +234,7 @@ class AudioFileModelTest(TestCase):
             storage_key='token/post/i_n.webm',
         )
         self.assertEqual(self.patient.audio_files.count(), 2)
-        self.assertEqual(
-            self.patient.audio_files.filter(phase='PRE_OP').count(), 1
-        )
+        self.assertEqual(self.patient.audio_files.filter(phase='PRE_OP').count(), 1)
 
 
 class PatientAuditLogModelTest(TestCase):
@@ -253,4 +254,3 @@ class PatientAuditLogModelTest(TestCase):
         self.assertEqual(log.actor, 'admin')
         self.assertEqual(log.actor_name, 'test-admin')
         self.assertIsNotNone(log.id)
-
