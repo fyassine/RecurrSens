@@ -33,7 +33,7 @@ import {
   ChevronDown,
 } from 'lucide-react';
 import type { Patient, PatientStatus } from '../types';
-import { StatusBadge, FollowUpBadge } from './Badges';
+import { StatusBadge, PostOpSessionBadge } from './Badges';
 import { deletePatient, advancePatient, createSession, downloadPatientPdf, exportPatients } from '../api/client';
 import { formatDate, formatDateTime, NO_RECORDING_DATE } from '../utils';
 import ConfirmDialog from './ConfirmDialog';
@@ -475,9 +475,9 @@ export default function PatientList({
                           </Tooltip>
                         )}
                         {p.status === 'POST_OP_DONE' && (
-                          <Tooltip label="Neue Follow-Up Sitzung starten">
+                          <Tooltip label="Neue Post-OP Sitzung starten">
                             <ActionIcon
-                              aria-label="Neue Follow-Up Sitzung starten"
+                              aria-label="Neue Post-OP Sitzung starten"
                               size="sm"
                               variant="subtle"
                               color="cyan"
@@ -641,10 +641,10 @@ function PatientStatusCell({ patient }: { patient: Patient }) {
   const showLock = status === 'PRE_OP_DONE' || status === 'POST_OP_DONE';
 
   let badge: ReactNode;
-  if (sessionNum != null && sessionNum >= 2 && status === 'POST_OP_STARTED') {
-    badge = <FollowUpBadge sessionNumber={sessionNum - 1} complete={false} />;
-  } else if (sessionNum != null && sessionNum >= 2 && status === 'POST_OP_DONE') {
-    badge = <FollowUpBadge sessionNumber={sessionNum - 1} complete />;
+  if (sessionNum != null && status === 'POST_OP_STARTED') {
+    badge = <PostOpSessionBadge sessionNumber={sessionNum} complete={false} />;
+  } else if (sessionNum != null && status === 'POST_OP_DONE') {
+    badge = <PostOpSessionBadge sessionNumber={sessionNum} complete />;
   } else {
     badge = <StatusBadge status={status as PatientStatus} />;
   }

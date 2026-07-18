@@ -344,14 +344,23 @@ def advance_patient_step(patient: Patient) -> Patient:
     except Exception:
         logger.exception('Failed to write advance audit log for patient %s', patient.id)
 
-    # Auto-create first PRE_OP session when patient starts.
+    # Auto-create the first session for each phase when the patient enters it.
     # get_or_create is race-safe: the unique_together (patient, phase,
     # session_number) constraint prevents duplicate sessions under concurrent
-    # /advance/ requests.
+    # /advance/ requests. Without this, the first POST_OP recording bout has
+    # no session to attach to (session=NULL) until an admin manually starts a
+    # follow-up session, which then wrongly absorbs those orphaned files as
+    # if they were the same visit (see PatientDetailsPage buildPostOpSections).
     if next_status == Patient.Status.CONSENT_GIVEN:
         RecordingSession.objects.get_or_create(
             patient=patient,
             phase=RecordingSession.Phase.PRE_OP,
+            session_number=1,
+        )
+    elif next_status == Patient.Status.POST_OP_STARTED:
+        RecordingSession.objects.get_or_create(
+            patient=patient,
+            phase=RecordingSession.Phase.POST_OP,
             session_number=1,
         )
 

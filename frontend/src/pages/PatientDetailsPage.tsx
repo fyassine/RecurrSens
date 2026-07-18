@@ -43,7 +43,7 @@ import {
   AUDIO_ACCEPT_ATTR,
   isAllowedAudioFile,
 } from '../api/client';
-import { StatusBadge, FollowUpBadge } from '../components/Badges';
+import { StatusBadge, PostOpSessionBadge } from '../components/Badges';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { AudioPlayer } from '../components/AudioPlayer';
 import { formatDate, formatDateTime, NO_RECORDING_DATE } from '../utils';
@@ -295,9 +295,10 @@ function PatientInfoCard({
               size="xs"
               allowDeselect={false}
             />
-          ) : patient.current_post_op_session_number != null && patient.current_post_op_session_number >= 2 ? (
-            <FollowUpBadge
-              sessionNumber={patient.current_post_op_session_number - 1}
+          ) : (patient.status === 'POST_OP_STARTED' || patient.status === 'POST_OP_DONE') &&
+            patient.current_post_op_session_number != null ? (
+            <PostOpSessionBadge
+              sessionNumber={patient.current_post_op_session_number}
               complete={patient.status === 'POST_OP_DONE'}
             />
           ) : (
@@ -536,9 +537,8 @@ function AudioSection({
 }
 
 function sessionLabel(s: RecordingSession): string {
-  if (s.phase === 'PRE_OP') return `Prä-OP (Sitzung ${s.session_number})`;
-  if (s.session_number === 1) return 'Post-OP';
-  return `Follow-up ${s.session_number - 1} (Post-OP Sitzung ${s.session_number})`;
+  if (s.phase === 'PRE_OP') return 'Prä-OP';
+  return `Post-OP ${s.session_number}`;
 }
 
 interface AudioSectionData {
@@ -551,11 +551,12 @@ interface AudioSectionData {
   isActiveSession: boolean;
 }
 
-// Each POST_OP RecordingSession gets its own card ("Post-OP Aufnahmen" for
-// session 1, "Follow-up N Aufnahmen" for session N+1). Patients who haven't
-// had a real session_number=1 RecordingSession created yet (the common case
-// for the normal pre-op -> post-op flow) get a single virtual section holding
-// their session-less recordings, so they render exactly as before.
+// Each POST_OP RecordingSession gets its own card ("Post-OP N Aufnahmen",
+// numbered the same way as the post_op_N export folders). Patients who
+// haven't had a real session_number=1 RecordingSession created yet (should
+// no longer happen now that advance_patient_step auto-creates it, but kept
+// as a fallback) get a single virtual section holding their session-less
+// recordings, so they still render instead of disappearing.
 function buildPostOpSections(patient: PatientDetail): AudioSectionData[] {
   const postOpSessions = patient.sessions
     .filter((s) => s.phase === 'POST_OP')
@@ -567,7 +568,7 @@ function buildPostOpSections(patient: PatientDetail): AudioSectionData[] {
   if (!sessionOne) {
     sections.push({
       key: 'post-op-virtual',
-      title: 'Post-OP Aufnahmen',
+      title: 'Post-OP 1 Aufnahmen',
       audioFiles: patient.audio_files_post.filter((f) => f.session === null),
       date: patient.post_op_date,
       sessionId: undefined,
@@ -585,9 +586,7 @@ function buildPostOpSections(patient: PatientDetail): AudioSectionData[] {
       : [];
     sections.push({
       key: session.id,
-      title: session.session_number === 1
-        ? 'Post-OP Aufnahmen'
-        : `Follow-up ${session.session_number - 1} Aufnahmen`,
+      title: `Post-OP ${session.session_number} Aufnahmen`,
       audioFiles: [...ownFiles, ...legacyFiles],
       date: session.session_number === 1 ? patient.post_op_date : session.visit_date,
       sessionId: session.id,
@@ -640,7 +639,6 @@ function BulkReassignDialog({
     return (nums.length > 0 ? Math.max(...nums) : 0) + 1;
   }, [sessions]);
 
-  const nextFollowUpNumber = nextPostOpSessionNumber - 1;
   const isNewFollowup = selectedSession === 'NEW_FOLLOWUP';
   const showSessionDropdown =
     selectedPhase === 'POST_OP' && nextPostOpSessionNumber >= 2;
@@ -649,7 +647,7 @@ function BulkReassignDialog({
     { value: '', label: 'Keine Sitzung' },
     ...filteredSessions.map((s) => ({ value: s.id, label: sessionLabel(s) })),
     ...(selectedPhase === 'POST_OP' && nextPostOpSessionNumber >= 2
-      ? [{ value: 'NEW_FOLLOWUP', label: '+ Neue Follow-up Sitzung anlegen' }]
+      ? [{ value: 'NEW_FOLLOWUP', label: '+ Neue Post-OP Sitzung anlegen' }]
       : []),
   ];
 
@@ -722,8 +720,7 @@ function BulkReassignDialog({
             />
             {isNewFollowup && (
               <Alert color="cyan">
-                Es wird automatisch <strong>Post-OP Sitzung {nextPostOpSessionNumber}</strong>
-                {nextFollowUpNumber >= 1 ? ` (Follow-up ${nextFollowUpNumber})` : ''} angelegt.
+                Es wird automatisch <strong>Post-OP {nextPostOpSessionNumber}</strong> angelegt.
               </Alert>
             )}
           </>
