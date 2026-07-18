@@ -55,11 +55,7 @@ export default function RecordingScreen({
   const showCannotDo = qualityFailCount >= 2 && !!audioQualityError;
 
   const title =
-    phase === 'PRE_OP'
-      ? 'Prä-OP Aufnahme'
-      : sessionNumber > 1
-        ? `Post-OP Aufnahme (Sitzung ${sessionNumber})`
-        : 'Post-OP Aufnahme';
+    phase === 'PRE_OP' ? 'Prä-OP Aufnahme' : `Post-OP ${sessionNumber} Aufnahme`;
 
   return (
     <Card withBorder radius="md" maw={640} mx="auto" p="lg">

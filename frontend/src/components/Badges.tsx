@@ -1,7 +1,7 @@
 import { Badge, useMantineColorScheme } from '@mantine/core';
 import type { PatientStatus, PredictionStatus } from '../types';
 
-export function FollowUpBadge({ sessionNumber, complete }: { sessionNumber: number; complete: boolean }) {
+export function PostOpSessionBadge({ sessionNumber, complete }: { sessionNumber: number; complete: boolean }) {
   const { colorScheme } = useMantineColorScheme();
   const isDark = colorScheme === 'dark';
   const color = complete
@@ -17,7 +17,7 @@ export function FollowUpBadge({ sessionNumber, complete }: { sessionNumber: numb
       radius="sm"
       style={{ backgroundColor: bg, color, fontWeight: 500, textTransform: 'none' }}
     >
-      Follow-up ({sessionNumber}) {complete ? 'vollständig' : 'unvollständig'}
+      Post-OP {sessionNumber} {complete ? 'vollständig' : 'unvollständig'}
     </Badge>
   );
 }
