@@ -196,7 +196,9 @@ STORAGES = {
 # ==============================================================================
 # DATA RETENTION
 # ==============================================================================
-# Number of days before patient data is considered expired for retention handling.
+# Number of days after which patient data is *flagged* as expired. This drives
+# warnings and dashboard badges only — nothing is deleted automatically. See the
+# docstring of patients.tasks.check_data_expiry for why.
 DATA_RETENTION_DAYS = config('DATA_RETENTION_DAYS', default=7, cast=int)
 
 # Admin email that receives an expiry-warning notification.
@@ -248,6 +250,11 @@ DB_BACKUP_GPG_RECIPIENT = config('GPG_RECIPIENT_KEY', default='')
 # Base64-encoded ASCII-armored public key (single-line, .env-safe). Generate with:
 #   gpg --export --armor <recipient> | base64 -w0
 DB_BACKUP_GPG_PUBLIC_KEY = config('GPG_PUBLIC_KEY', default='')
+
+# Nightly incremental copy of every audio object into <BACKUP_S3_PREFIX>/audio/.
+# Never pruned — the DB dump holds metadata only, so this is the sole recovery
+# path for a deleted recording. Runs as part of backup_database_snapshot.
+AUDIO_BACKUP_ENABLED = config('AUDIO_BACKUP_ENABLED', default=True, cast=bool)
 
 if DB_BACKUP_ENABLED:
     CELERY_BEAT_SCHEDULE['db-backup-nightly'] = {

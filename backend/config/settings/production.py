@@ -2,6 +2,8 @@
 Production-specific settings.
 """
 
+import warnings
+
 from decouple import Csv, config
 from django.core.exceptions import ImproperlyConfigured
 
@@ -52,6 +54,21 @@ if DB_BACKUP_ENABLED and not (DB_BACKUP_GPG_RECIPIENT and DB_BACKUP_GPG_PUBLIC_K
     raise ImproperlyConfigured(
         'DB_BACKUP_ENABLED=true requires both GPG_RECIPIENT_KEY and '
         'GPG_PUBLIC_KEY to be set (database backups must be encrypted).'
+    )
+
+# ==============================================================================
+# Notification email — production ran for months on the console backend with
+# ADMIN_NOTIFICATION_EMAIL left at admin@example.com, so every retention warning
+# was written to container stdout and no human ever saw one. Warn loudly rather
+# than pretending the notifications are being delivered.
+# ==============================================================================
+if 'console' in EMAIL_BACKEND or ADMIN_NOTIFICATION_EMAIL.endswith('@example.com'):  # noqa: F405
+    warnings.warn(
+        'Notification email is not configured (EMAIL_BACKEND='
+        f'{EMAIL_BACKEND!r}, ADMIN_NOTIFICATION_EMAIL={ADMIN_NOTIFICATION_EMAIL!r}). '  # noqa: F405
+        'Expiry and backup notifications will be discarded to stdout.',
+        RuntimeWarning,
+        stacklevel=2,
     )
 
 # Security settings

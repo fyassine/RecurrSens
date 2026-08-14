@@ -153,12 +153,25 @@ def run_inference_task(self, patient_id: str, phase: str):
 @shared_task
 def check_data_expiry():
     """
-    Periodic task: enforce data-retention policy.
+    Periodic task: warn about patients whose retention period has elapsed.
 
     Runs daily (configured via CELERY_BEAT_SCHEDULE in settings).
-    Two passes:
-      1. Notify admin for patients expiring within 24 hours.
-      2. Auto-delete expired patients that have already been exported.
+
+    This task NEVER deletes anything. It only notifies. Deletion of patient
+    audio is a deliberate manual action (DELETE /api/patients/{token}/), by
+    decision of 2026-08-15.
+
+    Why: `Patient.expires_at` is fixed at creation time and is never extended
+    when new recordings arrive, so an automatic purge keyed on it destroyed
+    freshly-recorded post-op audio together with the expired pre-op audio —
+    a patient created on 06.08 expired on 13.08 and lost recordings made on
+    12.08. Ten patients lost recordings younger than the retention window
+    before this was caught, with no recovery path (the object store has no
+    versioning and the nightly backup covered Postgres only).
+
+    Do not reintroduce automatic deletion here without first giving each
+    AudioFile its own expiry clock; the patient-level date is not a safe
+    signal for destroying data.
     """
     from django.utils import timezone
 
@@ -200,17 +213,17 @@ def check_data_expiry():
         patient.save(update_fields=['notification_sent_at'])
         logger.info(f'Expiry notification recorded for patient {patient.id}')
 
-    # --- Pass 2: auto-delete expired patients that have been downloaded ---
-    from .services import delete_patient_with_files
-
-    to_delete = Patient.objects.filter(
+    # --- Pass 2: report what is due for manual review (no deletion) ---
+    overdue = Patient.objects.filter(
         expires_at__lte=now,
-        last_exported_at__isnull=False,
         deleted_at__isnull=True,
     )
-    for patient in to_delete:
-        delete_patient_with_files(patient)
-        logger.info(f'Auto-deleted patient {patient.id} (expired + downloaded)')
+    if overdue.exists():
+        logger.info(
+            'check_data_expiry: %d patient(s) past their retention date and awaiting '
+            'manual review; automatic deletion is disabled by design',
+            overdue.count(),
+        )
 
 
 @shared_task(bind=True, max_retries=2, default_retry_delay=300)
@@ -227,7 +240,11 @@ def backup_database_snapshot(self):
          this task is enabled — enforced at boot in config.settings.production)
       3. Upload to S3_BUCKET under DB_BACKUP_S3_PREFIX/DB_BACKUP_ENV_LABEL/
       4. Prune old backups beyond DB_BACKUP_RETENTION
-      5. Email ADMIN_NOTIFICATION_EMAIL with the result
+      5. Copy any new audio objects into the audio backup (kept indefinitely)
+      6. Email ADMIN_NOTIFICATION_EMAIL with the result
+
+    Note that step 5 is deliberately NOT pruned: the dump in steps 1-4 contains
+    metadata only, so without it a deleted recording is unrecoverable.
     """
     if not settings.DB_BACKUP_ENABLED:
         logger.info('backup_database_snapshot: DB_BACKUP_ENABLED=False; skipping')
@@ -250,6 +267,7 @@ def backup_database_snapshot(self):
         size = os.path.getsize(enc_path)
         _upload_to_s3(enc_path, s3_key)
         pruned = _prune_old_backups()
+        copied, archived_total = _backup_audio_objects()
     except Exception as exc:
         logger.error(f'backup_database_snapshot failed: {exc}')
         try:
@@ -261,7 +279,8 @@ def backup_database_snapshot(self):
         shutil.rmtree(work_dir, ignore_errors=True)
 
     logger.info(
-        f'backup_database_snapshot: uploaded {s3_key} ({size} bytes), pruned {pruned} old backup(s)'
+        f'backup_database_snapshot: uploaded {s3_key} ({size} bytes), pruned {pruned} '
+        f'old backup(s), archived {copied} new audio object(s) ({archived_total} total)'
     )
     _send_backup_email(
         success=True,
@@ -271,6 +290,7 @@ def backup_database_snapshot(self):
             f'S3 key   : {s3_key}\n'
             f'Size     : {size} bytes\n'
             f'Pruned   : {pruned} old backup(s) (retention: {settings.DB_BACKUP_RETENTION})\n'
+            f'Audio    : {copied} new object(s) archived, {archived_total} held in total\n'
             f'Time     : {timezone.now().isoformat()}\n'
         ),
     )
@@ -378,6 +398,63 @@ def _prune_old_backups() -> int:
     for key in keys[:excess]:
         client.delete_object(Bucket=settings.S3_BUCKET, Key=key)
     return excess
+
+
+def _audio_backup_prefix() -> str:
+    return f'{settings.DB_BACKUP_S3_PREFIX}/audio/'
+
+
+def _backup_audio_objects() -> tuple[int, int]:
+    """
+    Copy every audio object into the audio-backup prefix, server-side.
+
+    Returns (newly_copied, total_held).
+
+    The copy is incremental — an object already present in the archive is left
+    alone — and nothing is ever removed from it. Deleting a recording through
+    the app therefore no longer destroys the only copy.
+
+    Deliberately unpruned: see the note in `backup_database_snapshot`. Storage
+    grows without bound, which is the accepted trade-off for recoverability;
+    the retention concept must state that audio copies are kept indefinitely.
+    """
+    if not getattr(settings, 'AUDIO_BACKUP_ENABLED', True):
+        logger.info('_backup_audio_objects: AUDIO_BACKUP_ENABLED=False; skipping')
+        return 0, 0
+
+    client = _s3_client()
+    bucket = settings.S3_BUCKET
+    archive_prefix = _audio_backup_prefix()
+    # Everything the backup machinery itself owns; never archive our own archive.
+    reserved = (f'{settings.DB_BACKUP_S3_PREFIX}/', '_recovery_backups/')
+
+    paginator = client.get_paginator('list_objects_v2')
+
+    archived = set()
+    for page in paginator.paginate(Bucket=bucket, Prefix=archive_prefix):
+        for obj in page.get('Contents', []):
+            archived.add(obj['Key'][len(archive_prefix) :])
+
+    copied = 0
+    for page in paginator.paginate(Bucket=bucket):
+        for obj in page.get('Contents', []):
+            key = obj['Key']
+            if key.startswith(reserved) or key in archived:
+                continue
+            try:
+                client.copy_object(
+                    Bucket=bucket,
+                    Key=f'{archive_prefix}{key}',
+                    CopySource={'Bucket': bucket, 'Key': key},
+                )
+            except Exception as exc:
+                # One unreadable object must not abort the whole nightly backup.
+                logger.warning(f'_backup_audio_objects: could not archive {key}: {exc}')
+                continue
+            archived.add(key)
+            copied += 1
+
+    return copied, len(archived)
 
 
 def _send_backup_email(success: bool, detail: str):

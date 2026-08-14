@@ -15,8 +15,10 @@ from django.core import mail
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
-from patients.models import AudioFile, Patient
+from patients import signals
+from patients.models import AudioFile, Patient, PatientAuditLog
 from patients.tasks import (
+    _backup_audio_objects,
     backup_database_snapshot,
     check_data_expiry,
     run_inference_task,
@@ -118,6 +120,133 @@ class CheckDataExpiryTest(TestCase):
 
         patient.refresh_from_db()
         self.assertIsNotNone(patient.notification_sent_at)
+
+    def test_expired_exported_patient_is_never_auto_deleted(self):
+        """
+        Regression: this exact combination used to trigger an automatic purge of
+        every recording the patient had, including ones made the day before.
+        """
+        patient = Patient.objects.create(
+            patient_id='EXP-003',
+            expires_at=timezone.now() - timezone.timedelta(days=2),
+            last_exported_at=timezone.now() - timezone.timedelta(days=1),
+        )
+        fresh = AudioFile.objects.create(
+            patient=patient,
+            exercise_id='a_n',
+            phase='POST_OP',
+            storage_key=f'{patient.id}/post_op/a_n.webm',
+        )
+
+        with mock.patch('patients.services.delete_audio_from_s3') as mock_delete:
+            check_data_expiry()
+
+        patient.refresh_from_db()
+        self.assertIsNone(patient.deleted_at, 'expired patient must not be soft-deleted')
+        self.assertTrue(AudioFile.objects.filter(pk=fresh.pk).exists())
+        mock_delete.assert_not_called()
+
+
+class DeletionAuditAttributionTest(TestCase):
+    """The audit trail must name the real cause of a deletion, not always 'admin'."""
+
+    def setUp(self):
+        self.patient = Patient.objects.create(
+            patient_id='AUD-001',
+            expires_at=timezone.now() + timezone.timedelta(days=7),
+        )
+
+    def _audio(self):
+        return AudioFile.objects.create(
+            patient=self.patient,
+            exercise_id='a_n',
+            phase='PRE_OP',
+            storage_key=f'{self.patient.id}/prae_op/a_n.webm',
+        )
+
+    def test_manual_delete_is_attributed_to_admin(self):
+        self._audio().delete()
+        entry = PatientAuditLog.objects.filter(event_type='delete').latest('created_at')
+        self.assertEqual(entry.actor, PatientAuditLog.Actor.ADMIN)
+        self.assertIn('manuell entfernt', entry.detail)
+
+    def test_rerecord_is_attributed_to_the_patient(self):
+        with signals.deletion_reason('rerecord'):
+            self._audio().delete()
+        entry = PatientAuditLog.objects.filter(event_type='delete').latest('created_at')
+        self.assertEqual(entry.actor, PatientAuditLog.Actor.PATIENT)
+        self.assertNotIn('manuell', entry.detail)
+
+    def test_retention_delete_is_attributed_to_the_system(self):
+        with signals.deletion_reason('retention'):
+            self._audio().delete()
+        entry = PatientAuditLog.objects.filter(event_type='delete').latest('created_at')
+        self.assertEqual(entry.actor, PatientAuditLog.Actor.SYSTEM)
+        self.assertIn('Ablauffrist', entry.detail)
+
+    def test_reason_is_reset_after_the_context_exits(self):
+        with signals.deletion_reason('retention'):
+            pass
+        self._audio().delete()
+        entry = PatientAuditLog.objects.filter(event_type='delete').latest('created_at')
+        self.assertEqual(entry.actor, PatientAuditLog.Actor.ADMIN)
+
+
+class BackupAudioObjectsTest(TestCase):
+    """The nightly audio archive is incremental and never prunes."""
+
+    @override_settings(S3_BUCKET='test-bucket', DB_BACKUP_S3_PREFIX='backups')
+    def test_copies_only_unarchived_objects_and_skips_reserved_prefixes(self):
+        client = mock.MagicMock()
+        pages = {
+            'backups/audio/': [{'Contents': [{'Key': 'backups/audio/uuid-a/prae_op/a_n.webm'}]}],
+            None: [
+                {
+                    'Contents': [
+                        {'Key': 'uuid-a/prae_op/a_n.webm'},  # already archived
+                        {'Key': 'uuid-b/post_op/i_h.webm'},  # new -> copy
+                        {'Key': 'backups/production/db.dump.gpg'},  # reserved
+                        {'Key': 'backups/audio/uuid-a/prae_op/a_n.webm'},  # our own archive
+                        {'Key': '_recovery_backups/2026-06-11/x/a_n.webm'},  # reserved
+                    ]
+                }
+            ],
+        }
+
+        def paginate(**kwargs):
+            return pages['backups/audio/' if kwargs.get('Prefix') else None]
+
+        client.get_paginator.return_value.paginate.side_effect = paginate
+
+        with mock.patch('patients.tasks._s3_client', return_value=client):
+            copied, total = _backup_audio_objects()
+
+        self.assertEqual(copied, 1)
+        self.assertEqual(total, 2)
+        client.copy_object.assert_called_once_with(
+            Bucket='test-bucket',
+            Key='backups/audio/uuid-b/post_op/i_h.webm',
+            CopySource={'Bucket': 'test-bucket', 'Key': 'uuid-b/post_op/i_h.webm'},
+        )
+
+    @override_settings(AUDIO_BACKUP_ENABLED=False)
+    def test_disabled_is_noop(self):
+        with mock.patch('patients.tasks._s3_client') as mock_client:
+            self.assertEqual(_backup_audio_objects(), (0, 0))
+        mock_client.assert_not_called()
+
+    @override_settings(S3_BUCKET='test-bucket', DB_BACKUP_S3_PREFIX='backups')
+    def test_one_bad_object_does_not_abort_the_run(self):
+        client = mock.MagicMock()
+        client.get_paginator.return_value.paginate.side_effect = lambda **kw: (
+            [] if kw.get('Prefix') else [{'Contents': [{'Key': 'a/x.webm'}, {'Key': 'b/y.webm'}]}]
+        )
+        client.copy_object.side_effect = [Exception('gone'), None]
+
+        with mock.patch('patients.tasks._s3_client', return_value=client):
+            copied, _ = _backup_audio_objects()
+
+        self.assertEqual(copied, 1)
 
 
 class BackupDatabaseSnapshotTest(TestCase):
