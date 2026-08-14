@@ -42,7 +42,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
-from . import services
+from . import services, signals
 from .audio_validation import (
     ALLOWED_EXTENSIONS,
     extension_for_content_type,
@@ -751,12 +751,13 @@ class AudioUploadView(APIView):
             )
 
         # Replace any existing record for this exercise/phase/session before creating the new one.
-        AudioFile.objects.filter(
-            patient=patient,
-            exercise_id=exercise_id,
-            phase=phase,
-            session=session,
-        ).delete()
+        with signals.deletion_reason('rerecord'):
+            AudioFile.objects.filter(
+                patient=patient,
+                exercise_id=exercise_id,
+                phase=phase,
+                session=session,
+            ).delete()
 
         # Create DB record
         try:

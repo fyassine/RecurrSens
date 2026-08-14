@@ -634,7 +634,7 @@ def export_patients_zip(patient_ids: list | None = None) -> bytes:
 # =============================================================================
 
 
-def delete_patient_with_files(patient: Patient) -> None:
+def delete_patient_with_files(patient: Patient, reason: str = 'admin') -> None:
     """
     Soft-delete a patient: remove audio data but keep metadata.
 
@@ -643,13 +643,23 @@ def delete_patient_with_files(patient: Patient) -> None:
     3. Clear AI prediction fields
     4. Set deleted_at timestamp
     5. Keep: patient_id, timestamps, session metadata
-    """
-    # Delete audio files from S3
-    for audio_file in patient.audio_files.all():
-        delete_audio_from_s3(audio_file.storage_key)
 
-    # Delete AudioFile DB records
-    patient.audio_files.all().delete()
+    `reason` is recorded in the audit trail (see patients.signals.DELETION_LABELS);
+    the default assumes a deliberate admin action, which since 2026-08-15 is the
+    only way patient audio is ever removed.
+
+    Copies made by the nightly audio backup are intentionally left untouched —
+    they live under a separate prefix and are what makes this recoverable.
+    """
+    from .signals import deletion_reason
+
+    with deletion_reason(reason):
+        # Delete audio files from S3
+        for audio_file in patient.audio_files.all():
+            delete_audio_from_s3(audio_file.storage_key)
+
+        # Delete AudioFile DB records
+        patient.audio_files.all().delete()
 
     # Clear AI prediction fields
     patient.prediction_pre = Patient.PredictionStatus.TODO

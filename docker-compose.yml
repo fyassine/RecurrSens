@@ -132,7 +132,9 @@ services:
       S3_SECRET_KEY: ${S3_SECRET_KEY:?S3_SECRET_KEY must be set}
       CELERY_BROKER_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set}@redis:6379/0
       ADMIN_NOTIFICATION_EMAIL: ${ADMIN_NOTIFICATION_EMAIL:-admin@example.com}
-      DATA_RETENTION_DAYS: ${DATA_RETENTION_DAYS:-3}
+      # Keep in sync with config/settings/base.py (7). A lower value here only
+      # made data look expired sooner in the UI.
+      DATA_RETENTION_DAYS: ${DATA_RETENTION_DAYS:-7}
       # Nightly DB backup schedule registration (must match the celery worker's
       # DB_BACKUP_ENABLED so the periodic task is created/skipped consistently;
       # GPG_* vars are required here too because production.py validates them

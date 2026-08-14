@@ -11,7 +11,9 @@ code because they carry richer context (actor username, changed fields, etc.)
 that signals cannot easily access.
 """
 
+import contextlib
 import logging
+from contextvars import ContextVar
 
 from django.db.models.signals import post_save, pre_delete
 from django.dispatch import receiver
@@ -19,6 +21,37 @@ from django.dispatch import receiver
 from .models import AudioFile, Patient, PatientAuditLog
 
 logger = logging.getLogger(__name__)
+
+# Why the AudioFile currently being deleted is going away. The pre_delete signal
+# cannot see the caller, and every deletion used to be logged as "manually
+# removed by admin" — which misattributed both automatic purges and a patient
+# re-recording an exercise to a human administrator. Callers declare intent via
+# `deletion_reason(...)`; anything undeclared is a genuine admin action.
+_deletion_reason: ContextVar[str] = ContextVar('deletion_reason', default='admin')
+
+DELETION_LABELS = {
+    'admin': ('1 {phase} Aufnahme manuell entfernt', PatientAuditLog.Actor.ADMIN, 'admin'),
+    'rerecord': (
+        '1 {phase} Aufnahme durch neue Aufnahme ersetzt',
+        PatientAuditLog.Actor.PATIENT,
+        'Patient (Neuaufnahme)',
+    ),
+    'retention': (
+        '1 {phase} Aufnahme automatisch gelöscht (Ablauffrist)',
+        PatientAuditLog.Actor.SYSTEM,
+        'System (Ablauffrist)',
+    ),
+}
+
+
+@contextlib.contextmanager
+def deletion_reason(reason: str):
+    """Declare why audio is being deleted, so the audit entry attributes it correctly."""
+    token = _deletion_reason.set(reason)
+    try:
+        yield
+    finally:
+        _deletion_reason.reset(token)
 
 
 # ---------------------------------------------------------------------------
@@ -104,14 +137,17 @@ def log_audio_delete(sender, instance: AudioFile, **kwargs):
             f'{exercise_label.lower()}.audio' if exercise_label else 'Aufnahme'
         )
 
+        reason = _deletion_reason.get()
+        detail_tpl, actor, actor_name = DELETION_LABELS.get(reason, DELETION_LABELS['admin'])
+
         PatientAuditLog.objects.create(
             patient=instance.patient,
             event_type=PatientAuditLog.EventType.DELETE,
             event='Aufnahme gelöscht',
-            detail=f'1 {phase_label} Aufnahme manuell entfernt',
+            detail=detail_tpl.format(phase=phase_label),
             files=[file_name],
-            actor=PatientAuditLog.Actor.ADMIN,
-            actor_name='admin',
+            actor=actor,
+            actor_name=actor_name,
         )
     except Exception:
         logger.exception('Failed to write delete audit log for audio file %s', instance.id)
