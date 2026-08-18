@@ -1,0 +1,8 @@
+# Reference audio preprocessing — runtime deps.
+# Deliberately minimal: no librosa, no torchaudio, so these modules drop into
+# the inference service's existing environment without pulling a stack in.
+numpy>=1.24.0
+scipy>=1.10.0
+
+# Test-only.
+pytest>=7.0.0
