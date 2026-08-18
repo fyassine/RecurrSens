@@ -37,14 +37,14 @@ Internal only (not exposed):
 
 ## Server Specifications
 
-*(Verified 2026-06-11 — server was upgraded from the original VC1-1 spec at some point; figures below are current.)*
+*(Verified 2026-08-18 — server was upgraded from the original VC1-1 spec at some point; figures below are current.)*
 
 - **Provider:** Strato VPS
 - **IP:** 31.70.77.124
 - **OS:** Ubuntu 24.04.4 LTS
 - **CPU:** 2 vCPU (AMD EPYC-Milan)
 - **RAM:** 3868MB (~3.8GB) + 2047MB (~2GB) swap
-- **Disk:** 116GB (6.5GB used, 109GB available)
+- **Disk:** 116GB (7.7GB used, 106GB available)
 - **SSH:** `ssh -i ~/.ssh/id_ed25519 flakhal@31.70.77.124`
 
 ## Container Memory Limits
@@ -220,59 +220,7 @@ ssh flakhal@31.70.77.124 "cd ~/recurrsens-staging && docker compose -p recurrsen
 
 ### Deploy / Update
 
-From local machine (macOS):
-
-```bash
-cd /Users/flakhal/Developer/stimmbandlaesion
-
-# 1. Build images for linux/amd64
-docker build -t ghcr.io/fyassine/stimmbandlaesion-backend:latest --platform linux/amd64 ./backend
-docker build -t ghcr.io/fyassine/stimmbandlaesion-nginx:latest --platform linux/amd64 -f nginx/Dockerfile .
-
-# 2. Push to ghcr.io
-source .env
-echo "$CR_PAT" | docker login ghcr.io -u fyassine --password-stdin
-docker push ghcr.io/fyassine/stimmbandlaesion-backend:latest
-docker push ghcr.io/fyassine/stimmbandlaesion-nginx:latest
-
-# 3. Copy compose files (only if changed)
-scp -i ~/.ssh/id_ed25519 docker-compose.yml docker-compose.prod.yml flakhal@31.70.77.124:~/stimmbandlaesion/
-
-# 4. Pull and restart on server
-ssh -i ~/.ssh/id_ed25519 flakhal@31.70.77.124 \
-  "cd ~/stimmbandlaesion && docker compose -f docker-compose.yml -f docker-compose.prod.yml pull && docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d"
-```
-
-### Monitoring
-
-```bash
-# Container status
-ssh flakhal@31.70.77.124 "cd ~/stimmbandlaesion && docker compose -f docker-compose.yml -f docker-compose.prod.yml ps"
-
-# Memory usage
-ssh flakhal@31.70.77.124 "cd ~/stimmbandlaesion && docker stats --no-stream"
-
-# Logs (all services)
-ssh flakhal@31.70.77.124 "cd ~/stimmbandlaesion && docker compose -f docker-compose.yml -f docker-compose.prod.yml logs --tail=50"
-
-# Logs (specific service)
-ssh flakhal@31.70.77.124 "cd ~/stimmbandlaesion && docker compose -f docker-compose.yml -f docker-compose.prod.yml logs backend --tail=50"
-
-# System resources
-ssh flakhal@31.70.77.124 "free -h && df -h /"
-```
-
-### Restart Services
-
-```bash
-ssh flakhal@31.70.77.124 "cd ~/stimmbandlaesion && docker compose -f docker-compose.yml -f docker-compose.prod.yml restart"
-```
-
-### Run Django Management Commands
-
-```bash
-ssh flakhal@31.70.77.124 "cd ~/stimmbandlaesion && docker compose -f docker-compose.yml -f docker-compose.prod.yml exec backend python manage.py <command>"
-```
+Deploys go through CI/CD (`.github/workflows/deploy.yml`) on merge to `main` — no local build/push step. See [server.md § CI/CD](server.md#ci--cd) for the full workflow, and [server.md § Deployment Commands](server.md#deployment-commands) for monitoring, restart, and Django management command reference (container/path naming there — `recurrsens-*`, `~/recurrsens/` — is current; this file previously described a stale pre-CI/CD, pre-rename manual workflow).
 
 ## Database Backups & Data Access
 

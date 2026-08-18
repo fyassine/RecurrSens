@@ -40,14 +40,14 @@ Internal only (not exposed):
 
 ## Server Specifications
 
-*(Verified 2026-06-11 — server was upgraded from the original VC1-1 plan; figures below are current.)*
+*(Verified 2026-08-18 — server was upgraded from the original VC1-1 plan; figures below are current.)*
 
 | | |
 |---|---|
 | **Provider** | Strato VPS |
 | **CPU** | 2 vCPU (AMD EPYC-Milan) |
 | **RAM** | 3868 MB (~3.8 GB) |
-| **Disk** | 116 GB (6.5 GB used) |
+| **Disk** | 116 GB (7.7 GB used) |
 | **IP** | `31.70.77.124` |
 | **OS** | Ubuntu 24.04.4 LTS |
 | **Swap** | 2047 MB (~2 GB) |

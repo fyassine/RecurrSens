@@ -96,7 +96,7 @@ docker compose -p recurrsens-staging -f docker-compose.staging.yml down
 
 ## Current VPS Resources
 
-*(Verified 2026-06-11)*
+*(Verified 2026-08-18)*
 
 | | |
 |---|---|
@@ -104,7 +104,7 @@ docker compose -p recurrsens-staging -f docker-compose.staging.yml down
 | **CPU** | 2 vCPU (AMD EPYC-Milan) |
 | **RAM** | 3868 MB (~3.8 GB) |
 | **Swap** | 2047 MB (~2 GB) |
-| **Disk** | 116 GB (6.5 GB used) |
+| **Disk** | 116 GB (7.7 GB used) |
 | **OS** | Ubuntu 24.04.4 LTS |
 
 Reserved memory limits: production ~1136MB + staging ~784MB ≈ **1.9GB**, comfortably within the 3.8GB RAM + 2GB swap available. See [docs/deployment.md](docs/deployment.md#container-memory-limits) for the full per-service breakdown.
