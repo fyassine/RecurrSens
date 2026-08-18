@@ -1,5 +1,4 @@
-```python?code_reference&code_event_index=2
-md_content = """# Stimmbandläsion Web Tool
+# RecurrSens
 ## Architecture Documentation
 
 **Date:** April 13, 2026
@@ -8,7 +7,7 @@ md_content = """# Stimmbandläsion Web Tool
 
 ## 1. Introduction
 
-The *Stimmbandläsion* web tool is a medical data-collection platform for vocal cord lesion (recurrent laryngeal nerve paresis) diagnosis. It manages patient records, collects voice audio recordings for pre-operative and post-operative phases, integrates an AI inference service for automated prediction, and provides data export functionality for clinical research.
+*RecurrSens* is a medical data-collection platform for vocal cord lesion (recurrent laryngeal nerve paresis) diagnosis. It manages patient records, collects voice audio recordings for pre-operative and post-operative phases, integrates an AI inference service for automated prediction, and provides data export functionality for clinical research.
 
 The application follows a containerised microservice architecture orchestrated with Docker Compose, comprising a Django REST back-end, a React single-page application front-end, an Nginx reverse proxy, and supporting infrastructure services (PostgreSQL, MinIO / S3, Redis).
 
@@ -17,10 +16,6 @@ The application follows a containerised microservice architecture orchestrated w
 ## 2. System Overview
 
 The following diagram illustrates the high-level request flow and service topology.
-
-```
-```text?code_stdout&code_event_index=2
-Markdown file successfully generated.
 
 ```mermaid
 graph TD
@@ -405,17 +400,4 @@ This supports offline analysis and integration with external research tools.
 
 ## 11. Summary
 
-The Stimmbandläsion web tool provides a complete clinical data-collection pipeline: clinicians create patient records via an authenticated dashboard, patients complete a guided wizard to provide demographic information and voice recordings, an AI inference service analyses the recordings asynchronously, and all data can be exported for research purposes. The fully containerised architecture ensures reproducible deployments across development and production environments.
-"""
-
-with open('stimmbandlaesion_architecture.md', 'w', encoding='utf-8') as f:
-    f.write(md_content)
-
-print("Markdown file successfully generated.")
-
-
-```
-Your Markdown file is ready
-[file-tag: code-generated-file-0-1776097897470188699]
-
-I have converted the LaTeX documentation for the Stimmbandläsion Web Tool into a fully formatted Markdown file. All sections, tables, lists, and code blocks have been preserved. Additionally, I converted the TikZ diagrams into Mermaid flowcharts and entity-relationship diagrams, ensuring they will render beautifully in compatible Markdown viewers. Let me know if you need any adjustments!
+RecurrSens provides a complete clinical data-collection pipeline: clinicians create patient records via an authenticated dashboard, patients complete a guided wizard to provide demographic information and voice recordings, an AI inference service analyses the recordings asynchronously, and all data can be exported for research purposes. The fully containerised architecture ensures reproducible deployments across development and production environments.
