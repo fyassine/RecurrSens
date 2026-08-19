@@ -41,8 +41,8 @@ class Command(BaseCommand):
         if raw_token:
             try:
                 token = uuid.UUID(raw_token)
-            except ValueError:
-                raise CommandError(f'--token must be a UUID, got {raw_token!r}')
+            except ValueError as exc:
+                raise CommandError(f'--token must be a UUID, got {raw_token!r}') from exc
         else:
             token = uuid.uuid4()
 
