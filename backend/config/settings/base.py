@@ -130,6 +130,9 @@ REST_FRAMEWORK = {
         # Applied per-view via throttle_scope (e.g. patient audio uploads).
         'audio_upload': '120/hour',
         'access_code_lookup': '20/hour',
+        # Live demo. Generous because a conference booth NATs every visitor
+        # behind one public IP, and DRF throttles anonymous callers by IP.
+        'demo_inference': config('DEMO_THROTTLE_RATE', default='300/hour'),
     },
 }
 
@@ -271,3 +274,41 @@ INFERENCE_SERVICE_URL = config('INFERENCE_SERVICE_URL', default='http://localhos
 # APP URL (for QR code generation)
 # ==============================================================================
 APP_URL = config('APP_URL', default='http://localhost:5173')
+
+# ==============================================================================
+# LIVE DEMO (QR-code booth flow) — EPHEMERAL, PERSISTS NOTHING
+#
+# This flow is a deliberate exception to the "audio always goes to MinIO/S3"
+# rule: a demo recording exists only in memory for the duration of one request.
+# See backend/patients/demo_views.py and docs/research/live-demo-qr-flow.md.
+# ==============================================================================
+
+# Off by default. Turn it on only while a demo is actually running — it exposes
+# an unauthenticated endpoint that spends inference capacity.
+DEMO_MODE_ENABLED = config('DEMO_MODE_ENABLED', default=False, cast=bool)
+
+# 'stub' → fabricated score, no external call (works with no model deployed).
+# 'http' → POST the in-memory audio to the real inference service.
+DEMO_INFERENCE_BACKEND = config('DEMO_INFERENCE_BACKEND', default='stub')
+
+# Multipart endpoint on the inference service used by the 'http' backend. The
+# service's existing /predict takes S3 keys, which this flow cannot use because
+# it never puts the audio in a bucket. See the docs for the handler to add.
+DEMO_INFERENCE_PREDICT_PATH = config('DEMO_INFERENCE_PREDICT_PATH', default='/predict-upload')
+
+# Short on purpose: the whole interaction has a sub-minute budget, so a hanging
+# inference call must fail fast rather than strand a visitor at the booth.
+DEMO_INFERENCE_TIMEOUT = config('DEMO_INFERENCE_TIMEOUT', default=20, cast=int)
+
+# Ceiling for a demo recording. Well under the 50 MB upload limit because the
+# demo asks for a few seconds of a sustained vowel, and the body is held in RAM.
+DEMO_MAX_AUDIO_BYTES = config('DEMO_MAX_AUDIO_BYTES', default=10 * 1024 * 1024, cast=int)
+
+# The real model is conditioned on sex and age, which the demo UI does not ask
+# for (it would cost more time than the budget allows). These stand in.
+DEMO_DEFAULT_GENDER = config('DEMO_DEFAULT_GENDER', default='M')
+DEMO_DEFAULT_AGE = config('DEMO_DEFAULT_AGE', default=45, cast=int)
+
+# Pin the stub's verdict ('HEALTHY' / 'INFECTED') for a rehearsed walk-through.
+# Empty → derived from the recording. Has no effect on the 'http' backend.
+DEMO_STUB_FORCE_PREDICTION = config('DEMO_STUB_FORCE_PREDICTION', default='')

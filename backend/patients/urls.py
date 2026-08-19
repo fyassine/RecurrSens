@@ -6,12 +6,13 @@ Routes are organized into three groups:
 2. Patient-facing endpoints (/api/p/{token}/...) — UUID token auth
 3. Public endpoints (/api/exercises/, /api/audio/...) — no auth
 4. Export (/api/export/) — JWT required
+5. Live demo (/api/demo/...) — no auth, stores nothing (see demo_views.py)
 """
 
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
-from . import views
+from . import demo_views, views
 
 app_name = 'patients'
 
@@ -89,6 +90,18 @@ urlpatterns = [
         'audio/<uuid:file_id>/url/',
         views.AudioDownloadUrlView.as_view(),
         name='audio-download-url',
+    ),
+    # =========================================================================
+    # Live demo (QR-code booth flow) — EPHEMERAL, PERSISTS NOTHING
+    #
+    # Deliberately NOT under /api/p/{token}/: that prefix means "a real patient
+    # record identified by its UUID", and this token identifies no record at
+    # all. See demo_views.py and docs/research/live-demo-qr-flow.md.
+    # =========================================================================
+    path(
+        'demo/<uuid:token>/analyze/',
+        demo_views.LiveDemoAnalyzeView.as_view(),
+        name='live-demo-analyze',
     ),
     # =========================================================================
     # Exercises (public)

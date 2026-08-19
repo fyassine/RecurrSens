@@ -21,6 +21,11 @@ REST_FRAMEWORK['DEFAULT_RENDERER_CLASSES'] = [  # noqa: F405
 # CORS: Allow all in dev
 CORS_ALLOW_ALL_ORIGINS = True
 
+# Live demo on by default in dev so the booth flow is testable without extra
+# setup. Production keeps the base default (off) unless DEMO_MODE_ENABLED is set
+# for the duration of an actual demo.
+DEMO_MODE_ENABLED = config('DEMO_MODE_ENABLED', default=True, cast=bool)  # noqa: F405
+
 # Logging
 LOGGING = {
     'version': 1,

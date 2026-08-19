@@ -336,6 +336,15 @@ const AUDIO_MIME_TO_EXT: Record<string, string> = {
   'audio/x-aiff': 'aiff',
 };
 
+// Picks a filename whose extension matches the blob's actual MIME type, so the
+// backend's magic-byte check agrees with the name it was given.
+function audioFilename(file: Blob, stem = 'recording'): string {
+  if (file instanceof File) return file.name;
+  const baseType = file.type.split(';')[0].trim().toLowerCase();
+  const ext = AUDIO_MIME_TO_EXT[baseType] ?? 'webm';
+  return `${stem}.${ext}`;
+}
+
 export async function uploadAudio(
   token: string,
   file: Blob,
@@ -343,20 +352,43 @@ export async function uploadAudio(
   sessionId?: string,
 ): Promise<void> {
   const formData = new FormData();
-  let filename: string;
-  if (file instanceof File) {
-    filename = file.name;
-  } else {
-    const baseType = file.type.split(';')[0].trim().toLowerCase();
-    const ext = AUDIO_MIME_TO_EXT[baseType] ?? 'webm';
-    filename = `recording.${ext}`;
-  }
+  const filename = audioFilename(file);
   formData.append('file', file, filename);
   formData.append('exercise_id', exerciseId);
   if (sessionId) {
     formData.append('session_id', sessionId);
   }
   await publicApi.post(`/p/${token}/audio/upload/`, formData);
+}
+
+// ---------------------------------------------------------------------------
+// Live demo (QR-code booth flow)
+//
+// PRIVACY EXCEPTION — unlike `uploadAudio` above, this does NOT store anything.
+// The blob is posted, classified in memory on the backend, and discarded; no
+// patient record, no S3 object, no database row is created. `token` is an
+// opaque booth id from the QR code, not a patient UUID.
+// See docs/research/live-demo-qr-flow.md before changing this.
+// ---------------------------------------------------------------------------
+
+export type DemoAnalysis = {
+  prediction: string;
+  confidence: number;
+  favorable: boolean;
+  gradcam: { prediction: string; confidence: number } | null;
+  backend: string;
+  /** Always false — the endpoint has no branch that persists. */
+  stored: boolean;
+};
+
+export async function analyzeDemoRecording(
+  token: string,
+  file: Blob,
+): Promise<DemoAnalysis> {
+  const formData = new FormData();
+  formData.append('file', file, audioFilename(file, 'demo'));
+  const { data } = await publicApi.post(`/demo/${token}/analyze/`, formData);
+  return data;
 }
 
 export type FeedbackPayload = {
