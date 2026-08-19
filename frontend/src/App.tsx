@@ -8,6 +8,7 @@ import DashboardPage from './pages/DashboardPage';
 import PatientDetailsPage from './pages/PatientDetailsPage';
 import PatientWizardPage from './pages/PatientWizardPage';
 import AccessCodePage from './pages/AccessCodePage';
+import LiveDemo from './pages/LiveDemo';
 import AnalytikPage from './pages/AnalytikPage';
 import EinstellungenPage from './pages/EinstellungenPage';
 import AppShell from './components/layout/AppShell';
@@ -81,6 +82,11 @@ export default function App() {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/code" element={<AccessCodePage />} />
           <Route path="/p/:token" element={<PatientWizardPage />} />
+          {/* Live demo (QR-code booth flow). Separate from /p/:token on
+              purpose: that route means "a real patient record", this one is
+              tied to no record and stores nothing. See LiveDemo.tsx. */}
+          <Route path="/demo" element={<LiveDemo />} />
+          <Route path="/demo/:token" element={<LiveDemo />} />
           <Route
             path="/"
             element={
