@@ -11,6 +11,7 @@ FROM nginx:alpine
 COPY --from=frontend-build /app/dist /usr/share/nginx/html
 COPY nginx/default.conf /etc/nginx/conf.d/default.conf
 COPY nginx/staging-proxy.conf.template /etc/nginx/staging-proxy.conf.template
+COPY nginx/demo-proxy.conf.template /etc/nginx/demo-proxy.conf.template
 COPY nginx/docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh
 EXPOSE 80 443

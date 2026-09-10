@@ -61,3 +61,5 @@ docs/conversation
 
 # tmp files
 __artifacts__/
+.history/
+mlops/

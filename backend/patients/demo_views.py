@@ -19,7 +19,8 @@ modules are full of S3 and ORM helpers, and the demo flow must not grow a
 convenient call into any of them. See docs/research/live-demo-qr-flow.md.
 ================================================================================
 
-    POST /api/demo/{demo_token}/analyze/   multipart: file=<recording>
+    POST /api/demo/{demo_token}/analyze/   multipart: file=<recording> (repeated,
+                                            one per vowel; up to DEMO_MAX_RECORDINGS)
 """
 
 import logging
@@ -36,7 +37,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .audio_validation import validate_audio_upload
-from .demo_inference import DemoInferenceError, get_demo_inference_backend
+from .demo_inference import DemoAudio, DemoInferenceError, get_demo_inference_backend
 
 logger = logging.getLogger(__name__)
 
@@ -71,11 +72,13 @@ class MemoryOnlyAudioUploadHandler(MemoryFileUploadHandler):
 
 class LiveDemoAnalyzeView(APIView):
     """
-    Classify a single demo recording without storing it.
+    Classify a small set of demo recordings (one per vowel) without storing
+    them.
 
     Unauthenticated by design — a booth visitor scans a QR code and records;
     there is no account and no patient record. Abuse is bounded by the
-    `demo_inference` throttle scope, the `DEMO_MAX_AUDIO_BYTES` ceiling, and
+    `demo_inference` throttle scope, the `DEMO_MAX_AUDIO_BYTES` ceiling (applied
+    to the combined size of all recordings), `DEMO_MAX_RECORDINGS`, and
     `DEMO_MODE_ENABLED` (off unless a demo is actually running).
     """
 
@@ -115,33 +118,50 @@ class LiveDemoAnalyzeView(APIView):
         intentionally NOT resolved against the Patient table — the demo is not
         tied to any patient record, and no row is created for this interaction.
         """
-        file = request.FILES.get('file')
-        if not file:
+        files = request.FILES.getlist('file')
+        if not files:
             return Response(
                 {'error': 'Keine Aufnahme empfangen.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        if file.size > settings.DEMO_MAX_AUDIO_BYTES:
+        if len(files) > settings.DEMO_MAX_RECORDINGS:
+            return Response(
+                {'error': 'Zu viele Aufnahmen.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if sum(f.size for f in files) > settings.DEMO_MAX_AUDIO_BYTES:
             # Second line of defence: a chunked request arrives without a usable
-            # Content-Length, so the check in `initial` cannot see its size.
+            # Content-Length, so the check in `initial` cannot see the total size.
             return Response(
                 {'error': 'Aufnahme zu groß.'},
                 status=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
             )
 
         # Same whitelist and magic-byte sniffing as the real upload path — the
-        # demo relaxes the storage rule, not the input validation.
-        try:
-            extension, content_type = validate_audio_upload(file)
-        except ValidationError as e:
-            return Response(
-                {'error': e.message if hasattr(e, 'message') else str(e)},
-                status=status.HTTP_400_BAD_REQUEST,
+        # demo relaxes the storage rule, not the input validation. Every
+        # recording is read into memory here; none of it is ever written to
+        # disk, S3, or the database.
+        recordings = []
+        for index, file in enumerate(files):
+            try:
+                extension, content_type = validate_audio_upload(file)
+            except ValidationError as e:
+                return Response(
+                    {'error': e.message if hasattr(e, 'message') else str(e)},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            recordings.append(
+                DemoAudio(
+                    data=file.read(),
+                    # Deliberately never "phrase" — the inference service's
+                    # `prepare_files_for_inference()` treats a filename
+                    # containing that word differently.
+                    filename=f'demo_{index}.{extension}',
+                    content_type=content_type,
+                )
             )
-
-        # The one and only copy of the audio, held on this thread's stack.
-        audio = file.read()
 
         # The real model is FiLM-conditioned on sex and age, so the fields are
         # wired through even though the demo UI does not ask for them (it has a
@@ -156,9 +176,7 @@ class LiveDemoAnalyzeView(APIView):
         backend = get_demo_inference_backend()
         try:
             result = backend.analyze(
-                audio=audio,
-                filename=f'demo.{extension}',
-                content_type=content_type,
+                recordings=recordings,
                 gender=gender,
                 age=age,
             )
@@ -168,19 +186,20 @@ class LiveDemoAnalyzeView(APIView):
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
         finally:
-            # Drop this frame's reference. Python frees the buffer once the
+            # Drop this frame's references. Python frees the buffers once the
             # request objects go out of scope regardless; this is here so the
             # intent survives future edits to the code below.
-            del audio
+            del recordings
 
         film = result.film_classifier
         gradcam = result.gradcam_pro
 
         # Deliberately free of anything that could tie back to a person: the
-        # booth token and the verdict, nothing else.
+        # booth token, the recording count, and the verdict, nothing else.
         logger.info(
-            f'Live demo analysis for booth token {token} via {result.backend} backend: '
-            f'{film.prediction} ({film.percentage}%) — nothing persisted'
+            f'Live demo analysis for booth token {token} via {result.backend} backend '
+            f'({len(files)} recordings): {film.prediction} ({film.percentage}%) — '
+            f'nothing persisted'
         )
 
         return Response(
@@ -194,6 +213,7 @@ class LiveDemoAnalyzeView(APIView):
                     else None
                 ),
                 'backend': result.backend,
+                'recordings': len(files),
                 # Read by the UI to show the visitor that nothing was kept.
                 # Hardcoded because this endpoint has no branch that stores.
                 'stored': False,

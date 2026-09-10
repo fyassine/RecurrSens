@@ -8,6 +8,7 @@ fail first.
 """
 
 import uuid
+from unittest import mock
 
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
@@ -17,6 +18,7 @@ from rest_framework.test import APIClient
 from patients.demo_inference import (
     HEALTHY,
     INFECTED,
+    DemoAudio,
     DemoInferenceError,
     HttpDemoInferenceBackend,
     StubDemoInferenceBackend,
@@ -31,6 +33,11 @@ WEBM_BYTES = b'\x1a\x45\xdf\xa3' + b'\x00' * 2048
 
 def demo_upload(name='demo.webm', content=None):
     return SimpleUploadedFile(name, content or WEBM_BYTES, content_type='audio/webm')
+
+
+def demo_uploads(count=3):
+    """Distinct-content uploads, standing in for the i_n/a_n/u_n recordings."""
+    return [demo_upload(f'demo_{i}.webm', WEBM_BYTES + bytes([i])) for i in range(count)]
 
 
 @override_settings(DEMO_MODE_ENABLED=True, DEMO_INFERENCE_BACKEND='stub')
@@ -49,6 +56,7 @@ class LiveDemoAnalyzeTest(TestCase):
         self.assertEqual(response.data['favorable'], response.data['prediction'] == HEALTHY)
         self.assertFalse(response.data['stored'])
         self.assertEqual(response.data['backend'], 'stub')
+        self.assertEqual(response.data['recordings'], 1)
 
     def test_analyze_persists_nothing(self):
         """The whole reason this flow exists. Do not relax this test."""
@@ -57,6 +65,43 @@ class LiveDemoAnalyzeTest(TestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(Patient.objects.count(), 0)
         self.assertEqual(AudioFile.objects.count(), 0)
+
+    def test_analyze_accepts_three_recordings_in_one_request(self):
+        """The demo now records i_n/a_n/u_n and sends them together."""
+        response = self.client.post(
+            self.url, {'file': demo_uploads(3)}, format='multipart'
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['recordings'], 3)
+        self.assertEqual(Patient.objects.count(), 0)
+        self.assertEqual(AudioFile.objects.count(), 0)
+
+    @override_settings(DEMO_MAX_RECORDINGS=3)
+    def test_too_many_recordings_rejected(self):
+        response = self.client.post(
+            self.url, {'file': demo_uploads(4)}, format='multipart'
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    @override_settings(DEMO_MAX_AUDIO_BYTES=128)
+    def test_combined_size_of_multiple_recordings_enforced(self):
+        """Each file alone fits under the ceiling; together they don't."""
+        response = self.client.post(
+            self.url, {'file': demo_uploads(3)}, format='multipart'
+        )
+        self.assertEqual(response.status_code, status.HTTP_413_REQUEST_ENTITY_TOO_LARGE)
+
+    def test_one_bad_file_among_several_rejects_the_whole_request(self):
+        bad = SimpleUploadedFile(
+            'evil.exe', b'MZ' + b'\x00' * 64, content_type='application/x-msdownload'
+        )
+        response = self.client.post(
+            self.url,
+            {'file': [demo_upload(), bad]},
+            format='multipart',
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_demo_token_is_not_a_patient_lookup(self):
         """An unknown token must work — the demo is tied to no record."""
@@ -108,22 +153,25 @@ class LiveDemoAnalyzeTest(TestCase):
         self.assertEqual(AudioFile.objects.count(), 0)
 
 
+def demo_audio(data=WEBM_BYTES, filename='demo_0.webm'):
+    return DemoAudio(data=data, filename=filename, content_type='audio/webm')
+
+
 class StubBackendTest(TestCase):
     def setUp(self):
         self.backend = StubDemoInferenceBackend()
 
-    def kwargs(self, audio=WEBM_BYTES):
+    def kwargs(self, recordings=None):
         return dict(
-            audio=audio,
-            filename='demo.webm',
-            content_type='audio/webm',
+            recordings=recordings if recordings is not None else [demo_audio()],
             gender='M',
             age=45,
         )
 
-    def test_result_is_deterministic_for_the_same_audio(self):
-        first = self.backend.analyze(**self.kwargs())
-        second = self.backend.analyze(**self.kwargs())
+    def test_result_is_deterministic_for_the_same_recordings(self):
+        recordings = [demo_audio(WEBM_BYTES + bytes([i]), f'demo_{i}.webm') for i in range(3)]
+        first = self.backend.analyze(**self.kwargs(recordings))
+        second = self.backend.analyze(**self.kwargs(recordings))
         self.assertEqual(first.film_classifier, second.film_classifier)
 
     def test_confidence_stays_in_a_plausible_range(self):
@@ -131,9 +179,13 @@ class StubBackendTest(TestCase):
         self.assertGreaterEqual(result.film_classifier.percentage, self.backend.MIN_PERCENTAGE)
         self.assertLessEqual(result.film_classifier.percentage, self.backend.MAX_PERCENTAGE)
 
-    def test_empty_audio_raises(self):
+    def test_empty_recordings_list_raises(self):
         with self.assertRaises(DemoInferenceError):
-            self.backend.analyze(**self.kwargs(audio=b''))
+            self.backend.analyze(**self.kwargs(recordings=[]))
+
+    def test_any_empty_recording_raises(self):
+        with self.assertRaises(DemoInferenceError):
+            self.backend.analyze(**self.kwargs(recordings=[demo_audio(b'')]))
 
     @override_settings(DEMO_STUB_FORCE_PREDICTION='INFECTED')
     def test_prediction_can_be_pinned_for_a_rehearsed_demo(self):
@@ -183,3 +235,17 @@ class HttpBackendParsingTest(TestCase):
     def test_missing_film_block_raises(self):
         with self.assertRaises(DemoInferenceError):
             self.backend._parse({'gradcam_pro': {'prediction': 'HEALTHY', 'percentage': 90.0}})
+
+    @mock.patch('patients.demo_inference.requests.post')
+    def test_sends_one_file_part_per_recording(self, mock_post):
+        mock_post.return_value.raise_for_status.return_value = None
+        mock_post.return_value.json.return_value = {
+            'film_classifier': {'prediction': 'HEALTHY', 'percentage': 90.0}
+        }
+
+        recordings = [demo_audio(WEBM_BYTES + bytes([i]), f'demo_{i}.webm') for i in range(3)]
+        self.backend.analyze(recordings=recordings, gender='M', age=45)
+
+        sent_files = mock_post.call_args.kwargs['files']
+        self.assertEqual(len(sent_files), 3)
+        self.assertTrue(all(field_name == 'file' for field_name, _ in sent_files))
