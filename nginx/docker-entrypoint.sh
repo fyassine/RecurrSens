@@ -15,4 +15,16 @@ else
     : > "$STAGING_CONF"
 fi
 
+DEMO_CERT="/etc/letsencrypt/live/demo.recurrsens.eu/fullchain.pem"
+DEMO_TEMPLATE="/etc/nginx/demo-proxy.conf.template"
+DEMO_CONF="/etc/nginx/conf.d/demo.conf"
+
+if [ -f "$DEMO_CERT" ] && [ -f "$DEMO_TEMPLATE" ]; then
+    echo "[entrypoint] Demo SSL cert found — enabling demo proxy"
+    cp "$DEMO_TEMPLATE" "$DEMO_CONF"
+else
+    echo "[entrypoint] No demo SSL cert — demo proxy disabled"
+    : > "$DEMO_CONF"
+fi
+
 exec "$@"

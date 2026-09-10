@@ -30,16 +30,18 @@ Swapping in the real inference service
 --------------------------------------
 `DemoInferenceBackend` is the seam. `StubDemoInferenceBackend` fabricates a
 plausible score so the flow is demonstrable today;`HttpDemoInferenceBackend`
-posts the same audio to the real service and parses the same response shape.
-Both return `DemoInferenceResult`, whose field names mirror the real service's
-`/predict` response (`film_classifier` / `gradcam_pro`, each with `prediction`
-and `percentage`) so the swap is a settings change, not a refactor.
+posts the same recordings (three neutral-pitch vowels — i_n, a_n, u_n) to the
+real service and parses the same response shape. Both return
+`DemoInferenceResult`, whose field names mirror the real service's `/predict`
+response (`film_classifier` / `gradcam_pro`, each with `prediction` and
+`percentage`) so the swap is a settings change, not a refactor.
 
 Selection is via `DEMO_INFERENCE_BACKEND` ('stub' | 'http').
 """
 
 import hashlib
 import logging
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -59,6 +61,20 @@ FAVORABLE_PREDICTION = HEALTHY
 
 class DemoInferenceError(Exception):
     """Raised when a demo inference attempt fails. Carries no audio content."""
+
+
+@dataclass(frozen=True)
+class DemoAudio:
+    """
+    One in-memory recording handed to a backend. The demo now records three
+    neutral-pitch vowels (i_n, a_n, u_n) instead of one, so the exercise the
+    patient wizard treats as a list of `AudioFile` rows is here just a list of
+    these — never written anywhere, held only for the duration of `analyze()`.
+    """
+
+    data: bytes
+    filename: str
+    content_type: str
 
 
 @dataclass(frozen=True)
@@ -89,7 +105,7 @@ class DemoInferenceResult:
 class DemoInferenceBackend(Protocol):
     """The seam between the demo flow and whatever actually scores the audio.
 
-    Implementations MUST NOT persist `audio` anywhere.
+    Implementations MUST NOT persist any `DemoAudio.data` anywhere.
     """
 
     name: str
@@ -97,9 +113,7 @@ class DemoInferenceBackend(Protocol):
     def analyze(
         self,
         *,
-        audio: bytes,
-        filename: str,
-        content_type: str,
+        recordings: Sequence[DemoAudio],
         gender: str,
         age: int,
     ) -> DemoInferenceResult: ...
@@ -115,11 +129,11 @@ class StubDemoInferenceBackend:
     Fabricates a plausible classification so the booth flow is demonstrable
     without the real model being reachable.
 
-    The verdict is derived deterministically from a digest of the audio bytes,
-    so the same recording always yields the same answer — which makes the demo
-    reproducible when rehearsing, and makes a "record twice, get two different
-    numbers" bug obvious. The digest is computed, used, and dropped inside this
-    call; it is never stored or logged.
+    The verdict is derived deterministically from a digest of the concatenated
+    recording bytes, so the same three recordings always yield the same answer —
+    which makes the demo reproducible when rehearsing, and makes a "record
+    twice, get two different numbers" bug obvious. The digest is computed, used,
+    and dropped inside this call; it is never stored or logged.
 
     THIS IS NOT A MODEL. The number it returns carries no clinical meaning
     whatsoever, which is why the demo UI labels itself as a demonstration and
@@ -138,17 +152,15 @@ class StubDemoInferenceBackend:
     def analyze(
         self,
         *,
-        audio: bytes,
-        filename: str,
-        content_type: str,
+        recordings: Sequence[DemoAudio],
         gender: str,
         age: int,
     ) -> DemoInferenceResult:
-        if not audio:
+        if not recordings or any(not r.data for r in recordings):
             raise DemoInferenceError('Leere Aufnahme.')
 
         # Transient, local, never persisted or logged.
-        digest = hashlib.sha256(audio).digest()
+        digest = hashlib.sha256(b''.join(r.data for r in recordings)).digest()
 
         forced = (getattr(settings, 'DEMO_STUB_FORCE_PREDICTION', '') or '').upper()
         if forced in (HEALTHY, INFECTED):
@@ -202,9 +214,7 @@ class HttpDemoInferenceBackend:
     def analyze(
         self,
         *,
-        audio: bytes,
-        filename: str,
-        content_type: str,
+        recordings: Sequence[DemoAudio],
         gender: str,
         age: int,
     ) -> DemoInferenceResult:
@@ -214,8 +224,13 @@ class HttpDemoInferenceBackend:
             response = requests.post(
                 url,
                 # Streamed straight out of memory — nothing is spooled to disk
-                # on the way, and `audio` is not retained after this call.
-                files={'file': (filename, audio, content_type)},
+                # on the way, and none of `recordings` is retained after this
+                # call. `requests` sends repeated 'file' parts for a list of
+                # tuples under the same key, matching `predict-upload`'s
+                # `files: list[UploadFile]`.
+                files=[
+                    ('file', (r.filename, r.data, r.content_type)) for r in recordings
+                ],
                 data={'gender': gender, 'age': str(age)},
                 timeout=settings.DEMO_INFERENCE_TIMEOUT,
             )

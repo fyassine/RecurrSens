@@ -8,34 +8,58 @@
  * exercise set and uploads every recording to MinIO/S3 against a Patient
  * record. THIS PAGE DOES NEITHER.
  *
- * It takes one short sustained-vowel recording, posts it to an endpoint that
- * classifies it in memory and stores nothing, and shows the result. There is no
- * patient record, no upload, no persistence — on the client or the server. The
- * `token` in the URL is an opaque booth id printed on the QR poster; it
- * identifies no one and is never looked up in the database.
+ * It takes three short sustained-vowel recordings (i_n, a_n, u_n — the same
+ * neutral pitch the real model averages over), posts them together to an
+ * endpoint that classifies them in memory and stores nothing, and shows the
+ * result. There is no patient record, no upload, no persistence — on the
+ * client or the server. The `token` in the URL is an opaque booth id printed
+ * on the QR poster; it identifies no one and is never looked up in the
+ * database.
  *
  * Design constraint: the whole interaction — scan to result — must fit inside
- * one minute, which is why there is a single exercise, no demographics form and
- * no consent flow. See docs/research/live-demo-qr-flow.md.
+ * roughly one minute, which is why there are only three exercises (not the
+ * wizard's full fifteen), no demographics form and no consent flow. See
+ * docs/research/live-demo-qr-flow.md.
  * ===========================================================================
  */
 
 import { useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { Alert, Button, Card, Loader, Progress, Stack, Text, Title } from '@mantine/core';
+import { Alert, Anchor, Button, Card, Loader, Progress, Stack, Text, Title } from '@mantine/core';
 import { AlertTriangle, CheckCircle2, RotateCcw, ShieldCheck, Timer } from 'lucide-react';
 import AudioRecorder from '../components/AudioRecorder';
-import { analyzeDemoRecording, type DemoAnalysis } from '../api/client';
+import { analyzeDemoRecording, type DemoAnalysis, type DemoRecording } from '../api/client';
 import { calculateRMS, getAudioDuration } from '../utils';
 
-// The single exercise the demo asks for. Mirrors the `a_n` entry in
+// The three exercises the demo asks for, in the same order as the patient
+// wizard. Mirrors the `i_n`/`a_n`/`u_n` entries in
 // backend/patients/fixtures/exercises.json — copied rather than fetched from
-// /api/exercises/ to save a round trip inside the sub-minute budget.
-const DEMO_EXERCISE = {
-  title: 'Vokal A (normale Tonlage)',
-  description: 'Sagen Sie ca. 3 Sekunden lang ein klares "Aaaaa" in normaler Tonlage.',
-  minSeconds: 2,
-};
+// /api/exercises/ to save a round trip inside the sub-minute budget. The real
+// model averages its verdict over every recording it receives, so asking for
+// all three neutral-pitch vowels (instead of just `a_n`) gives it the input
+// shape it was designed for.
+type DemoExercise = { exerciseId: string; title: string; description: string; minSeconds: number };
+
+const DEMO_EXERCISES: DemoExercise[] = [
+  {
+    exerciseId: 'i_n',
+    title: 'Vokal I (normale Tonlage)',
+    description: 'Sagen Sie ca. 2 Sekunden lang ein klares "Iiiii" in normaler Tonlage.',
+    minSeconds: 2,
+  },
+  {
+    exerciseId: 'a_n',
+    title: 'Vokal A (normale Tonlage)',
+    description: 'Sagen Sie ca. 2 Sekunden lang ein klares "Aaaaa" in normaler Tonlage.',
+    minSeconds: 2,
+  },
+  {
+    exerciseId: 'u_n',
+    title: 'Vokal U (normale Tonlage)',
+    description: 'Sagen Sie ca. 2 Sekunden lang ein klares "Uuuuu" in normaler Tonlage.',
+    minSeconds: 2,
+  },
+];
 
 // Same thresholds as the patient wizard (useExerciseSession), so a demo
 // recording is held to the same signal quality as a clinical one.
@@ -56,21 +80,24 @@ export default function LiveDemo() {
   );
 
   const [phase, setPhase] = useState<Phase>('record');
-  const [blob, setBlob] = useState<Blob | null>(null);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [blobs, setBlobs] = useState<(Blob | null)[]>(() => DEMO_EXERCISES.map(() => null));
   const [qualityError, setQualityError] = useState<string | null>(null);
   const [requestError, setRequestError] = useState<string | null>(null);
   const [result, setResult] = useState<DemoAnalysis | null>(null);
+
+  const currentExercise = DEMO_EXERCISES[currentIndex];
+  const isLastExercise = currentIndex === DEMO_EXERCISES.length - 1;
+  const currentBlob = blobs[currentIndex];
 
   const handleRecordingComplete = async (recorded: Blob) => {
     setRequestError(null);
 
     if (recorded.size === 0) {
-      setBlob(null);
       setQualityError(TOO_QUIET);
       return;
     }
 
-    setBlob(recorded);
     setQualityError(null);
 
     try {
@@ -85,22 +112,46 @@ export default function LiveDemo() {
       }
 
       const duration = await getAudioDuration(recorded);
-      if (duration < DEMO_EXERCISE.minSeconds) {
+      if (duration < currentExercise.minSeconds) {
         setQualityError(
-          `Die Aufnahme ist zu kurz (${duration.toFixed(1)}s). Bitte mindestens ${DEMO_EXERCISE.minSeconds} Sekunden aufnehmen.`,
+          `Die Aufnahme ist zu kurz (${duration.toFixed(1)}s). Bitte mindestens ${currentExercise.minSeconds} Sekunden aufnehmen.`,
         );
+        return;
       }
     } catch {
       setQualityError(TOO_QUIET);
+      return;
     }
+
+    setBlobs((prev) => {
+      const next = [...prev];
+      next[currentIndex] = recorded;
+      return next;
+    });
+  };
+
+  const handleNext = () => {
+    if (isLastExercise) return;
+    setCurrentIndex((i) => i + 1);
+    setQualityError(null);
+  };
+
+  const handleBack = () => {
+    if (currentIndex === 0) return;
+    setCurrentIndex((i) => i - 1);
+    setQualityError(null);
   };
 
   const handleAnalyze = async () => {
-    if (!blob) return;
+    if (blobs.some((b) => !b)) return;
     setPhase('analyzing');
     setRequestError(null);
     try {
-      const analysis = await analyzeDemoRecording(token, blob);
+      const recordings: DemoRecording[] = DEMO_EXERCISES.map((exercise, i) => ({
+        exerciseId: exercise.exerciseId,
+        blob: blobs[i] as Blob,
+      }));
+      const analysis = await analyzeDemoRecording(token, recordings);
       setResult(analysis);
       setPhase('result');
     } catch (err: unknown) {
@@ -110,15 +161,17 @@ export default function LiveDemo() {
       setRequestError(detail);
       setPhase('record');
     } finally {
-      // The recording is dropped as soon as it has been sent — the browser tab
-      // keeps no copy either.
-      setBlob(null);
+      // The recordings are dropped as soon as they have been sent — the
+      // browser tab keeps no copy either.
+      setBlobs(DEMO_EXERCISES.map(() => null));
+      setCurrentIndex(0);
     }
   };
 
   const restart = () => {
     setPhase('record');
-    setBlob(null);
+    setCurrentIndex(0);
+    setBlobs(DEMO_EXERCISES.map(() => null));
     setResult(null);
     setQualityError(null);
     setRequestError(null);
@@ -131,23 +184,31 @@ export default function LiveDemo() {
           RecurrSens — Live-Demo
         </Title>
         <Text size="sm" c="dimmed" mb="lg">
-          Eine kurze Aufnahme, ein Ergebnis. Ihre Stimme wird nicht gespeichert.
+          Drei kurze Aufnahmen, ein Ergebnis. Ihre Stimme wird nicht gespeichert.
         </Text>
 
         {phase === 'record' && (
           <RecordStep
+            exercise={currentExercise}
+            stepNumber={currentIndex + 1}
+            stepCount={DEMO_EXERCISES.length}
+            isLastExercise={isLastExercise}
+            hasBlob={!!currentBlob}
+            canGoBack={currentIndex > 0}
             qualityError={qualityError}
             requestError={requestError}
-            canAnalyze={!!blob && !qualityError}
             onRecordingComplete={handleRecordingComplete}
-            onRecordingError={(message) => {
-              setBlob(null);
-              setQualityError(message);
-            }}
+            onRecordingError={(message) => setQualityError(message)}
             onRecordingReset={() => {
-              setBlob(null);
+              setBlobs((prev) => {
+                const next = [...prev];
+                next[currentIndex] = null;
+                return next;
+              });
               setQualityError(null);
             }}
+            onBack={handleBack}
+            onNext={handleNext}
             onAnalyze={handleAnalyze}
           />
         )}
@@ -156,7 +217,7 @@ export default function LiveDemo() {
           <Stack align="center" gap="md" py="xl">
             <Loader />
             <Text size="sm" c="dimmed">
-              Aufnahme wird analysiert…
+              Aufnahmen werden analysiert…
             </Text>
           </Stack>
         )}
@@ -170,38 +231,69 @@ export default function LiveDemo() {
 }
 
 function RecordStep({
+  exercise,
+  stepNumber,
+  stepCount,
+  isLastExercise,
+  hasBlob,
+  canGoBack,
   qualityError,
   requestError,
-  canAnalyze,
   onRecordingComplete,
   onRecordingError,
   onRecordingReset,
+  onBack,
+  onNext,
   onAnalyze,
 }: {
+  exercise: DemoExercise;
+  stepNumber: number;
+  stepCount: number;
+  isLastExercise: boolean;
+  hasBlob: boolean;
+  canGoBack: boolean;
   qualityError: string | null;
   requestError: string | null;
-  canAnalyze: boolean;
   onRecordingComplete: (blob: Blob) => void;
   onRecordingError: (message: string) => void;
   onRecordingReset: () => void;
+  onBack: () => void;
+  onNext: () => void;
   onAnalyze: () => void;
 }) {
+  const canAdvance = hasBlob && !qualityError;
+
   return (
     <Stack gap="lg">
+      <div>
+        <div className="mb-2 flex items-center justify-between">
+          <Text size="xs" c="dimmed" fw={600}>
+            Aufnahme {stepNumber} von {stepCount}
+          </Text>
+          {canGoBack && (
+            <Anchor size="xs" component="button" type="button" onClick={onBack}>
+              Zurück
+            </Anchor>
+          )}
+        </div>
+        <Progress value={(stepNumber / stepCount) * 100} size="xs" mb="md" />
+      </div>
+
       <div className="rounded-lg bg-blue-50 p-4 dark:bg-blue-950/30">
         <Text fw={600} size="md" mb="xs">
-          {DEMO_EXERCISE.title}
+          {exercise.title}
         </Text>
-        <Text size="sm">{DEMO_EXERCISE.description}</Text>
+        <Text size="sm">{exercise.description}</Text>
         <div className="mt-3 flex items-center gap-2">
           <Timer size={14} />
           <Text size="xs" c="dimmed">
-            Mind. {DEMO_EXERCISE.minSeconds} Sek. · Aufnahmetaste gedrückt halten
+            Mind. {exercise.minSeconds} Sek. · Aufnahmetaste gedrückt halten
           </Text>
         </div>
       </div>
 
       <AudioRecorder
+        key={exercise.exerciseId}
         hasQualityError={!!qualityError}
         onRecordingComplete={onRecordingComplete}
         onRecordingError={onRecordingError}
@@ -215,8 +307,13 @@ function RecordStep({
       )}
       {requestError && <Alert color="red">{requestError}</Alert>}
 
-      <Button size="lg" fullWidth disabled={!canAnalyze} onClick={onAnalyze}>
-        Auswerten
+      <Button
+        size="lg"
+        fullWidth
+        disabled={!canAdvance}
+        onClick={isLastExercise ? onAnalyze : onNext}
+      >
+        {isLastExercise ? 'Auswerten' : 'Weiter'}
       </Button>
     </Stack>
   );
@@ -260,6 +357,10 @@ function ResultStep({ result, onRestart }: { result: DemoAnalysis; onRestart: ()
           w="100%"
           mt="xs"
         />
+
+        <Text size="xs" c="dimmed" mt={4}>
+          Gemittelt über {result.recordings} Aufnahmen (I, A, U)
+        </Text>
       </div>
 
       {/* Framing borrowed from the reference paper ("Identifying bias in models
@@ -273,7 +374,7 @@ function ResultStep({ result, onRestart }: { result: DemoAnalysis; onRestart: ()
       </Text>
 
       <Alert color="gray" icon={<ShieldCheck size={18} />}>
-        Ihre Aufnahme wurde ausschließlich im Arbeitsspeicher verarbeitet und ist bereits
+        Ihre Aufnahmen wurden ausschließlich im Arbeitsspeicher verarbeitet und sind bereits
         gelöscht. Es wurde nichts gespeichert.
       </Alert>
 

@@ -300,9 +300,15 @@ DEMO_INFERENCE_PREDICT_PATH = config('DEMO_INFERENCE_PREDICT_PATH', default='/pr
 # inference call must fail fast rather than strand a visitor at the booth.
 DEMO_INFERENCE_TIMEOUT = config('DEMO_INFERENCE_TIMEOUT', default=20, cast=int)
 
-# Ceiling for a demo recording. Well under the 50 MB upload limit because the
-# demo asks for a few seconds of a sustained vowel, and the body is held in RAM.
-DEMO_MAX_AUDIO_BYTES = config('DEMO_MAX_AUDIO_BYTES', default=10 * 1024 * 1024, cast=int)
+# The demo records three short sustained vowels (i_n, a_n, u_n) in one request
+# so the model averages over them the same way it does for a real patient,
+# rather than judging a booth visitor off a single recording.
+DEMO_MAX_RECORDINGS = config('DEMO_MAX_RECORDINGS', default=3, cast=int)
+
+# Ceiling for a demo request's combined audio size, across all recordings. Well
+# under the 50 MB upload limit because the demo asks for a few seconds per
+# vowel, and the whole body is held in RAM.
+DEMO_MAX_AUDIO_BYTES = config('DEMO_MAX_AUDIO_BYTES', default=15 * 1024 * 1024, cast=int)
 
 # The real model is conditioned on sex and age, which the demo UI does not ask
 # for (it would cost more time than the budget allows). These stand in.

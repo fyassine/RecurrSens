@@ -9,10 +9,11 @@
 
 ## 1. What this is
 
-A visitor at a booth scans a QR code, records about three seconds of a sustained
-vowel on their own phone, and sees a classification result with a confidence
-value. The whole thing takes well under a minute and leaves no trace: no patient
-record, no audio file, no database row.
+A visitor at a booth scans a QR code, records three short sustained vowels
+(I, A, U — the same neutral pitch the real model averages over) on their own
+phone, and sees a classification result with a confidence value. The whole
+thing takes well under a minute and leaves no trace: no patient record, no
+audio file, no database row.
 
 It is **not** the patient wizard with fewer steps. It is a separate flow with a
 different data-protection contract, and the two must not be merged.
@@ -49,8 +50,9 @@ not in the database. Concretely, a demo recording:
 | Log lines | metadata only | verdict + booth token only |
 | Lifetime | retention period | one HTTP request |
 
-The recording exists as a `bytes` object on the request-handling thread, is
-handed to the inference backend, and is dropped when the request returns.
+Each recording exists as a `bytes` object on the request-handling thread, is
+handed to the inference backend together with the other two, and is dropped
+when the request returns.
 
 ### 2.3 Why
 
@@ -156,22 +158,23 @@ patient record to authenticate against. It is bounded by:
 That constraint is what drives the design. The patient wizard has 15 exercises,
 a consent screen, a demographics form and per-exercise example playback; running
 it at a booth would take ten minutes and the queue would collapse. So the demo
-keeps exactly one exercise and drops everything that is not needed to produce a
-number.
+keeps three neutral-pitch vowels — the minimum the real model's multi-file
+averaging can meaningfully work with (§3.2) — and drops everything else that is
+not needed to produce a number.
 
 ### 3.1 Budget breakdown
 
 | Step | Budget | Notes |
 |---|---|---|
 | Scan QR, browser opens the page | ~5 s | Static SPA route, no API call on load |
-| Read the instruction | ~8 s | One sentence, one exercise, no consent wall |
+| Read the instruction | ~8 s | One sentence per exercise, no consent wall |
 | Grant microphone permission | ~5 s | First-time visitors only; browser prompt |
-| Record the sustained vowel | ~3–5 s | Press-and-hold; `a_n`, min. 2 s |
-| Client-side quality check | <1 s | RMS in dBFS + duration, in the browser |
-| Tap "Auswerten", upload | ~2 s | A few hundred KB over booth wifi |
+| Record three sustained vowels | ~3 × 3–5 s | Press-and-hold; `i_n`, `a_n`, `u_n`, min. 2 s each |
+| Client-side quality check | <1 s ×3 | RMS in dBFS + duration, in the browser |
+| Tap "Auswerten", upload | ~2 s | All three recordings in one request, a few hundred KB combined over booth wifi |
 | Inference | ~1 s stub / ~5–15 s real | See the note below |
 | Read the result | ~10 s | Colour, percentage, privacy confirmation |
-| **Total** | **~35 s stub / ~45–55 s real** | |
+| **Total** | **~45 s stub / ~55–65 s real** | |
 
 ### 3.2 What the budget cost
 
@@ -188,9 +191,14 @@ Three things were deliberately cut, and each is a real trade-off:
   slow demo.
 - **No example playback.** The wizard lets patients hear a reference recording.
   At a booth the presenter says "say aaah" out loud, which is faster.
-- **One exercise, not the full set.** The real model averages over several
-  recordings; one sustained vowel is a weaker input. This is acceptable only
-  because the demo makes no clinical claim (§4).
+- **Three neutral vowels, not the full set.** The real model averages its
+  pathology probability over every recording it receives
+  (`inference-service/inference.py: run_inference`), so sending it `i_n`,
+  `a_n`, and `u_n` together — rather than one lone `a_n` — gives it something
+  closer to the input shape it was designed for. It is still a much weaker
+  input than the wizard's fifteen exercises (high/low pitch, pitch glides, the
+  phrase, the song are all cut), which is acceptable only because the demo
+  makes no clinical claim (§4).
 
 ### 3.3 The one number to watch
 
@@ -229,8 +237,8 @@ substitute for it.
 
 Two further elements:
 
-4. **A privacy confirmation** — "Ihre Aufnahme wurde ausschließlich im
-   Arbeitsspeicher verarbeitet und ist bereits gelöscht." Driven by the API's
+4. **A privacy confirmation** — "Ihre Aufnahmen wurden ausschließlich im
+   Arbeitsspeicher verarbeitet und sind bereits gelöscht." Driven by the API's
    `stored: false` field, which is hardcoded because the endpoint has no branch
    that stores.
 5. **A standing disclaimer** in the footer: demonstration without diagnostic
@@ -246,10 +254,11 @@ Two further elements:
 Two implementations ship:
 
 - `StubDemoInferenceBackend` (default) — fabricates a verdict deterministically
-  from a SHA-256 digest of the audio bytes, so the same recording always yields
-  the same number (reproducible rehearsals; an obvious signal if something is
-  non-deterministic). Confidence lands in 71–96 %, biased towards `HEALTHY`.
-  The digest is computed, used and dropped inside the call; it is never stored
+  from a SHA-256 digest of the concatenated recording bytes, so the same three
+  recordings always yield the same number (reproducible rehearsals; an obvious
+  signal if something is non-deterministic). Confidence lands in 71–96 %,
+  biased towards `HEALTHY`. The digest is computed, used and dropped inside the
+  call; it is never stored
   or logged. **It is not a model and the number has no clinical meaning.**
 - `HttpDemoInferenceBackend` — posts the in-memory bytes to the real service.
 
@@ -264,7 +273,7 @@ value logs a warning and falls back to the stub.
 The real service's `POST /predict` takes:
 
 ```json
-{"bucket": "...", "keys": ["patient-uuid/pre_1/a_n.webm"], "gender": "M", "age": 45}
+{"bucket": "...", "keys": ["patient-uuid/pre_1/i_n.webm", "patient-uuid/pre_1/a_n.webm", "patient-uuid/pre_1/u_n.webm"], "gender": "M", "age": 45}
 ```
 
 and downloads the audio from S3 by key (`main.py: download_files`). **That is
@@ -279,14 +288,16 @@ directly. **This endpoint does not exist yet.** Until it ships, leave
 ### 5.3 The handler to add on the ENT-Diagnostics side
 
 Roughly twenty lines, reusing everything `/predict` already does. Response body
-unchanged, so nothing here needs to change:
+unchanged, so nothing here needs to change. Takes a *list* of files — the demo
+now sends three recordings (i_n, a_n, u_n) in one request, same as `/predict`
+takes a list of S3 keys:
 
 ```python
 from fastapi import File, Form, UploadFile
 
 @app.post("/predict-upload", response_model=InferenceResult)
 async def predict_upload(
-    file: UploadFile = File(...),
+    files: list[UploadFile] = File(...),
     gender: str = Form("M"),
     age: int = Form(45),
 ):
@@ -299,15 +310,18 @@ async def predict_upload(
         raise HTTPException(status_code=503, detail="Inference engine not initialized")
 
     with tempfile.TemporaryDirectory() as temp_dir:
-        # Keep the suffix: prepare_files_for_inference() decides whether to
-        # transcode from the extension, and treats a name containing "phrase"
-        # differently. A demo file must not be called *phrase*.
-        suffix = os.path.splitext(file.filename or "demo.webm")[1] or ".webm"
-        local_path = os.path.join(temp_dir, f"demo{suffix}")
-        with open(local_path, "wb") as fh:
-            fh.write(await file.read())
+        local_paths = []
+        for i, file in enumerate(files):
+            # Keep the suffix: prepare_files_for_inference() decides whether to
+            # transcode from the extension, and treats a name containing
+            # "phrase" differently. A demo file must not be called *phrase*.
+            suffix = os.path.splitext(file.filename or "demo.webm")[1] or ".webm"
+            local_path = os.path.join(temp_dir, f"demo_{i}{suffix}")
+            with open(local_path, "wb") as fh:
+                fh.write(await file.read())
+            local_paths.append(local_path)
 
-        processed = prepare_files_for_inference([local_path])
+        processed = prepare_files_for_inference(local_paths)
         sex_int = 1 if gender.upper() in ["W", "F", "FEMALE"] else 0
         result = inference_engine.run_inference(processed, age, sex_int)
 
@@ -328,9 +342,10 @@ No code change. Re-read §2.5 and §3.2 before demoing with the real model.
 
 ### 5.4 Adding a different backend
 
-Implement `analyze(*, audio, filename, content_type, gender, age)` returning a
-`DemoInferenceResult`, and register the class in `_BACKENDS`. The only hard
-requirement: **it must not persist `audio` anywhere.**
+Implement `analyze(*, recordings, gender, age)` — `recordings` is a sequence of
+`DemoAudio` (one per vowel) — returning a `DemoInferenceResult`, and register
+the class in `_BACKENDS`. The only hard requirement: **it must not persist any
+recording's bytes anywhere.**
 
 ---
 
@@ -375,6 +390,6 @@ patient to create, and no cleanup afterwards, because nothing was kept.
 | `backend/patients/demo_views.py` | `POST /api/demo/{token}/analyze/`, memory-only upload handler |
 | `backend/patients/tests/test_demo.py` | Privacy regression tests |
 | `backend/patients/management/commands/demo_qr.py` | Booth QR / URL generation |
-| `frontend/src/pages/LiveDemo.tsx` | One-recording page + result visualisation |
+| `frontend/src/pages/LiveDemo.tsx` | Three-vowel recording flow + result visualisation |
 | `frontend/src/api/client.ts` | `analyzeDemoRecording()` |
 | `backend/config/settings/base.py` | `DEMO_*` settings |

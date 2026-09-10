@@ -377,16 +377,25 @@ export type DemoAnalysis = {
   favorable: boolean;
   gradcam: { prediction: string; confidence: number } | null;
   backend: string;
+  /** Number of recordings the verdict was averaged over (one per vowel). */
+  recordings: number;
   /** Always false — the endpoint has no branch that persists. */
   stored: boolean;
 };
 
+// One vowel's recording, tagged so the filename sent to the backend stays
+// legible ("demo_i_n.webm" rather than "demo_0.webm") without ever containing
+// "phrase" — the inference service treats that word specially.
+export type DemoRecording = { exerciseId: string; blob: Blob };
+
 export async function analyzeDemoRecording(
   token: string,
-  file: Blob,
+  recordings: DemoRecording[],
 ): Promise<DemoAnalysis> {
   const formData = new FormData();
-  formData.append('file', file, audioFilename(file, 'demo'));
+  for (const { exerciseId, blob } of recordings) {
+    formData.append('file', blob, audioFilename(blob, `demo_${exerciseId}`));
+  }
   const { data } = await publicApi.post(`/demo/${token}/analyze/`, formData);
   return data;
 }
