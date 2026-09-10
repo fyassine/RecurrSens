@@ -1,0 +1,194 @@
+name: Deploy to Demo
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "Branch to deploy to demo"
+        required: true
+        default: "feature/live-demo-ephemeral"
+      reason:
+        description: "Deploy reason (optional note)"
+        required: false
+
+concurrency:
+  group: demo
+  cancel-in-progress: true
+
+jobs:
+  # ── 1. CI gate ──────────────────────────────────────────────────────────────
+  test:
+    name: Run backend tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: test_db
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.branch || github.ref }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r backend/requirements.txt
+
+      - name: Run tests
+        working-directory: backend
+        env:
+          DJANGO_SETTINGS_MODULE: config.settings.development
+          DJANGO_SECRET_KEY: ci-secret-key
+          DB_NAME: test_db
+          DB_USER: postgres
+          DB_PASSWORD: postgres
+          DB_HOST: localhost
+          DB_PORT: 5432
+          S3_ENDPOINT: http://localhost:9000
+          S3_ACCESS_KEY: minioadmin
+          S3_SECRET_KEY: minioadmin
+          S3_BUCKET: test
+          S3_REGION: us-east-1
+          CELERY_BROKER_URL: memory://
+          APP_URL: http://localhost
+        run: python manage.py test --verbosity=2
+
+  # ── 2. Build & push :demo images ───────────────────────────────────────────
+  build:
+    name: Build & push demo images
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.branch || github.ref }}
+
+      - name: Log in to ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build & push backend (:demo)
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: true
+          platforms: linux/amd64
+          tags: ghcr.io/${{ github.repository_owner }}/recurrsens-backend:demo
+          cache-from: type=gha,scope=demo-backend
+          cache-to: type=gha,mode=max,scope=demo-backend
+
+      - name: Build & push nginx (:demo)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./nginx/Dockerfile.demo
+          push: true
+          platforms: linux/amd64
+          tags: ghcr.io/${{ github.repository_owner }}/recurrsens-nginx:demo
+          cache-from: type=gha,scope=demo-nginx
+          cache-to: type=gha,mode=max,scope=demo-nginx
+
+  # ── 3. Deploy to demo on VPS ────────────────────────────────────────────────
+  deploy:
+    name: Deploy demo to VPS
+    needs: build
+    runs-on: ubuntu-latest
+    environment: staging
+    permissions:
+      contents: read
+      packages: read
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.branch || github.ref }}
+
+      - name: Copy demo compose file to VPS
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: "docker-compose.demo.yml"
+          target: ~/recurrsens-demo
+
+      - name: Deploy demo via SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            set -e
+            cd ~/recurrsens-demo
+
+            echo "=== Ensuring .env exists ==="
+            if [ ! -f .env ]; then
+              DB_PASS=$(openssl rand -hex 16)
+              SECRET_KEY=$(openssl rand -hex 32)
+              cat << EOF > .env
+            DB_NAME=recurrsens_demo
+            DB_USER=demo_user
+            DB_PASSWORD=${DB_PASS}
+            DJANGO_SECRET_KEY=${SECRET_KEY}
+            ALLOWED_HOSTS=demo.recurrsens.eu,recurrsens-demo-backend-1,backend,localhost
+            DEMO_MODE_ENABLED=true
+            DEMO_INFERENCE_BACKEND=stub
+            DEMO_MAX_RECORDINGS=3
+            CORS_ALLOWED_ORIGINS=https://demo.recurrsens.eu
+            APP_URL=https://demo.recurrsens.eu
+            EOF
+              chmod 600 .env
+            fi
+
+            echo "=== Pulling demo images ==="
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            docker compose -p recurrsens-demo -f docker-compose.demo.yml pull
+
+            echo "=== Starting demo containers ==="
+            docker compose -p recurrsens-demo -f docker-compose.demo.yml up -d
+
+            echo "=== Running migrations on demo DB ==="
+            docker compose -p recurrsens-demo -f docker-compose.demo.yml exec -T backend python manage.py migrate --noinput
+
+            echo "=== Pruning old images ==="
+            docker image prune -f
+
+            echo "=== Reloading production nginx to pick up demo upstream ==="
+            docker compose -p recurrsens -f ~/recurrsens/docker-compose.yml -f ~/recurrsens/docker-compose.prod.yml exec -T nginx nginx -s reload 2>/dev/null || true
+
+            echo "=== Demo health check ==="
+            sleep 5
+            docker compose -p recurrsens-demo -f docker-compose.demo.yml ps --format "table {{.Name}}\t{{.Status}}"
+
+            echo "=== Deploy info ==="
+            echo "Branch: ${{ github.event.inputs.branch || github.ref_name }}"
+            echo "Reason: ${{ github.event.inputs.reason || 'manual demo deploy' }}"
+            echo "Deployed at: $(date -u)"
