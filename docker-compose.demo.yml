@@ -63,6 +63,7 @@ services:
         condition: service_healthy
     networks:
       - default
+      - recurrsens_default     # Joined so the demo backend can reach recurrsens-ml-serving
     deploy:
       resources:
         limits:
