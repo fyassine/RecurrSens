@@ -77,6 +77,27 @@ Internal only (not exposed):
 
 Combined (production + staging) reserved limit ≈ **1.9GB**, well within the 3.8GB physical RAM + 2GB swap available.
 
+### ML Serving (`recurrsens-ml` project)
+
+A single `serving` container (`recurrsens-ml-serving`) from the independent
+[`recurrsens-ml`](https://github.com/fyassine/recurrsens-ml) repo — FastAPI +
+ONNX Runtime, no torch, no public port. It joins the `recurrsens_default`
+network so `recurrsens-backend-1` (Celery) and the demo backend can both
+reach it at `http://recurrsens-ml-serving:8100`; nothing else talks to it.
+
+| Service | Limit | Measured steady-state |
+|---------|-------|---------------|
+| ML Serving | 1152MB | ~816MB (see `mlops/README.md`'s Phase B entries for the benchmark this was derived from — 768MB OOM-kills, 1024MB is stable, 1152MB adds margin) |
+
+Combined (production + staging + ML serving) reserved limit ≈ **3.1GB**,
+still within the 3.8GB physical RAM (2GB swap as a cushion, not a plan to
+rely on it under load — see the mlops benchmark's own note that swapping the
+model graph would blow the demo's inference-latency budget).
+
+Both `recurrsens` (Celery, `INFERENCE_SERVICE_URL=http://recurrsens-ml-serving:8100`)
+and `recurrsens-demo` (backend, same var) reach it over `recurrsens_default` —
+no other service needs to.
+
 ## Staging Environment
 
 ### Architecture
@@ -179,9 +200,13 @@ ssh flakhal@31.70.77.124 "cd ~/recurrsens-staging && docker compose -p recurrsen
 │   ├── dozzle-users.yml            # Dozzle auth config
 │   └── .env                        # Production secrets (chmod 600)
 │
-└── recurrsens-staging/             # Staging (self-contained, isolated db/redis/minio)
-    ├── docker-compose.staging.yml  # Full staging compose config
-    └── .env                        # Staging secrets (chmod 600)
+├── recurrsens-staging/             # Staging (self-contained, isolated db/redis/minio)
+│   ├── docker-compose.staging.yml  # Full staging compose config
+│   └── .env                        # Staging secrets (chmod 600)
+│
+└── recurrsens-ml/                  # ML serving (independent repo, see mlops/README.md)
+    ├── compose.vps.yml             # Single `serving` container, no port published
+    └── .env                        # S3 + serving config secrets (chmod 600)
 ```
 
 ## Deployment Commands
