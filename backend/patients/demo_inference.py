@@ -29,12 +29,12 @@ for the full rationale and for how to swap the stub for the real service.
 Swapping in the real inference service
 --------------------------------------
 `DemoInferenceBackend` is the seam. `StubDemoInferenceBackend` fabricates a
-plausible score so the flow is demonstrable today;`HttpDemoInferenceBackend`
-posts the same recordings (three neutral-pitch vowels — i_n, a_n, u_n) to the
-real service and parses the same response shape. Both return
-`DemoInferenceResult`, whose field names mirror the real service's `/predict`
-response (`film_classifier` / `gradcam_pro`, each with `prediction` and
-`percentage`) so the swap is a settings change, not a refactor.
+plausible score so the flow is demonstrable without the real model reachable;
+`HttpDemoInferenceBackend` posts the same recordings (three neutral-pitch vowels
+— i_n, a_n, u_n) to the real service's `/predict-upload` and parses the same
+response shape. Both return `DemoInferenceResult`, whose field names mirror the
+real service's `/predict` response (`film_classifier` / `gradcam_pro`, each with
+`prediction` and `percentage`) so the swap is a settings change, not a refactor.
 
 Selection is via `DEMO_INFERENCE_BACKEND` ('stub' | 'http').
 """
@@ -191,22 +191,27 @@ class StubDemoInferenceBackend:
 # ==============================================================================
 
 
+def _service_sex(gender: str) -> str:
+    """Map the single-letter gender code `demo_views.py` produces (`'M'`/`'F'`/`'W'`)
+    to the full lowercase word `recurrsens-ml-serving`'s `Sex` enum accepts
+    (`recurrsens_ml.sex.Sex`: `'female'` | `'male'`). `'W'` (weiblich) is accepted
+    alongside `'F'` since it's the raw SVD/German spelling `Sex.from_svd_code` also
+    recognises.
+    """
+    return 'female' if gender.strip().upper() in ('F', 'W') else 'male'
+
+
 class HttpDemoInferenceBackend:
     """
     Posts the in-memory recording to the real inference service and returns its
     verdict.
 
-    NOTE — this needs an inference-service endpoint that does not exist yet.
-    The service's current `POST /predict` takes `{bucket, keys, gender, age}`
-    and downloads the audio from S3 by key, which is fundamentally incompatible
-    with "the audio is never stored anywhere": using it would mean writing the
-    demo recording to the bucket first. So this backend targets a multipart
-    upload variant (`DEMO_INFERENCE_PREDICT_PATH`, default `/predict-upload`)
-    that accepts the bytes directly. docs/research/live-demo-qr-flow.md contains
-    the ~20-line FastAPI handler that needs to be added on the ENT-Diagnostics
-    side; the response body is unchanged from `/predict`.
-
-    Until that endpoint ships, leave DEMO_INFERENCE_BACKEND='stub'.
+    Targets the multipart upload variant (`DEMO_INFERENCE_PREDICT_PATH`, default
+    `/predict-upload`) rather than the JSON `/predict`, which takes `{bucket, keys,
+    sex, age}` and downloads the audio from S3 by key — fundamentally incompatible
+    with "the audio is never stored anywhere". `/predict-upload` accepts the bytes
+    directly and shares the same response body shape as `/predict`
+    (see `recurrsens-ml`'s `serving/app/main.py`).
     """
 
     name = 'http'
@@ -231,7 +236,7 @@ class HttpDemoInferenceBackend:
                 files=[
                     ('file', (r.filename, r.data, r.content_type)) for r in recordings
                 ],
-                data={'gender': gender, 'age': str(age)},
+                data={'sex': _service_sex(gender), 'age': str(age)},
                 timeout=settings.DEMO_INFERENCE_TIMEOUT,
             )
             response.raise_for_status()
@@ -266,9 +271,23 @@ class HttpDemoInferenceBackend:
         if not prediction or percentage is None:
             return None
         try:
-            return DemoPrediction(prediction=str(prediction), percentage=float(percentage))
+            prediction = str(prediction)
+            percentage = float(percentage)
         except (TypeError, ValueError):
             return None
+
+        # The service's percentage is always P(INFECTED) x 100, regardless of which
+        # label won (see recurrsens-ml's film_runtime.py: `prediction` is just a
+        # >= 0.5 threshold on the same probability `percentage` reports). The demo
+        # UI shows this number as "confidence in the verdict above it", so invert
+        # it to confidence-in-the-shown-label when that label is HEALTHY. Production
+        # deliberately does NOT do this (see demo_inference.py's module docstring
+        # cross-reference in the design doc) — ai_percentage_rp_* means "probability
+        # of recurrent paresis" there, which should stay raw regardless of label.
+        if prediction == HEALTHY:
+            percentage = round(100 - percentage, 1)
+
+        return DemoPrediction(prediction=prediction, percentage=percentage)
 
 
 # ==============================================================================

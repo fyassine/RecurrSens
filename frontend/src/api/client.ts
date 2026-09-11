@@ -388,13 +388,22 @@ export type DemoAnalysis = {
 // "phrase" — the inference service treats that word specially.
 export type DemoRecording = { exerciseId: string; blob: Blob };
 
+// The real model is FiLM-conditioned on sex/age; the demo UI collects both via
+// two quick chip selections before recording starts (see LiveDemo.tsx).
+export type DemoDemographics = { gender: 'M' | 'F'; age: number };
+
 export async function analyzeDemoRecording(
   token: string,
   recordings: DemoRecording[],
+  demographics?: DemoDemographics,
 ): Promise<DemoAnalysis> {
   const formData = new FormData();
   for (const { exerciseId, blob } of recordings) {
     formData.append('file', blob, audioFilename(blob, `demo_${exerciseId}`));
+  }
+  if (demographics) {
+    formData.append('gender', demographics.gender);
+    formData.append('age', String(demographics.age));
   }
   const { data } = await publicApi.post(`/demo/${token}/analyze/`, formData);
   return data;

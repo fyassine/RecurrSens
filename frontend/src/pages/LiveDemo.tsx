@@ -25,11 +25,34 @@
 
 import { useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { Alert, Anchor, Button, Card, Loader, Progress, Stack, Text, Title } from '@mantine/core';
+import {
+  Alert,
+  Anchor,
+  Button,
+  Card,
+  Chip,
+  Group,
+  Loader,
+  Progress,
+  Stack,
+  Text,
+  Title,
+} from '@mantine/core';
 import { AlertTriangle, CheckCircle2, RotateCcw, ShieldCheck, Timer } from 'lucide-react';
 import AudioRecorder from '../components/AudioRecorder';
 import { analyzeDemoRecording, type DemoAnalysis, type DemoRecording } from '../api/client';
 import { calculateRMS, getAudioDuration } from '../utils';
+
+// Representative ages sent to the FiLM model for each age-band chip — the demo
+// only has budget for a coarse band, not an exact age (see the design doc's
+// §3.2 call-out: wrong conditioning produces a confidently wrong number, so
+// this must be collected, just cheaply).
+const AGE_BANDS: { label: string; age: number }[] = [
+  { label: '18–35', age: 27 },
+  { label: '36–55', age: 46 },
+  { label: '56–70', age: 63 },
+  { label: '70+', age: 75 },
+];
 
 // The three exercises the demo asks for, in the same order as the patient
 // wizard. Mirrors the `i_n`/`a_n`/`u_n` entries in
@@ -85,6 +108,8 @@ export default function LiveDemo() {
   const [qualityError, setQualityError] = useState<string | null>(null);
   const [requestError, setRequestError] = useState<string | null>(null);
   const [result, setResult] = useState<DemoAnalysis | null>(null);
+  const [sex, setSex] = useState<'M' | 'F' | null>(null);
+  const [ageBand, setAgeBand] = useState<string | null>(null);
 
   const currentExercise = DEMO_EXERCISES[currentIndex];
   const isLastExercise = currentIndex === DEMO_EXERCISES.length - 1;
@@ -143,7 +168,7 @@ export default function LiveDemo() {
   };
 
   const handleAnalyze = async () => {
-    if (blobs.some((b) => !b)) return;
+    if (blobs.some((b) => !b) || !sex || !ageBand) return;
     setPhase('analyzing');
     setRequestError(null);
     try {
@@ -151,7 +176,12 @@ export default function LiveDemo() {
         exerciseId: exercise.exerciseId,
         blob: blobs[i] as Blob,
       }));
-      const analysis = await analyzeDemoRecording(token, recordings);
+      const age = AGE_BANDS.find((band) => band.label === ageBand)?.age;
+      const analysis = await analyzeDemoRecording(
+        token,
+        recordings,
+        age !== undefined ? { gender: sex, age } : undefined,
+      );
       setResult(analysis);
       setPhase('result');
     } catch (err: unknown) {
@@ -175,6 +205,8 @@ export default function LiveDemo() {
     setResult(null);
     setQualityError(null);
     setRequestError(null);
+    setSex(null);
+    setAgeBand(null);
   };
 
   return (
@@ -197,6 +229,10 @@ export default function LiveDemo() {
             canGoBack={currentIndex > 0}
             qualityError={qualityError}
             requestError={requestError}
+            sex={sex}
+            ageBand={ageBand}
+            onSexChange={setSex}
+            onAgeBandChange={setAgeBand}
             onRecordingComplete={handleRecordingComplete}
             onRecordingError={(message) => setQualityError(message)}
             onRecordingReset={() => {
@@ -239,6 +275,10 @@ function RecordStep({
   canGoBack,
   qualityError,
   requestError,
+  sex,
+  ageBand,
+  onSexChange,
+  onAgeBandChange,
   onRecordingComplete,
   onRecordingError,
   onRecordingReset,
@@ -254,6 +294,10 @@ function RecordStep({
   canGoBack: boolean;
   qualityError: string | null;
   requestError: string | null;
+  sex: 'M' | 'F' | null;
+  ageBand: string | null;
+  onSexChange: (sex: 'M' | 'F') => void;
+  onAgeBandChange: (band: string) => void;
   onRecordingComplete: (blob: Blob) => void;
   onRecordingError: (message: string) => void;
   onRecordingReset: () => void;
@@ -261,7 +305,9 @@ function RecordStep({
   onNext: () => void;
   onAnalyze: () => void;
 }) {
-  const canAdvance = hasBlob && !qualityError;
+  const isFirstStep = stepNumber === 1;
+  const demographicsComplete = !!sex && !!ageBand;
+  const canAdvance = hasBlob && !qualityError && (!isFirstStep || demographicsComplete);
 
   return (
     <Stack gap="lg">
@@ -278,6 +324,34 @@ function RecordStep({
         </div>
         <Progress value={(stepNumber / stepCount) * 100} size="xs" mb="md" />
       </div>
+
+      {isFirstStep && (
+        <Stack gap="xs">
+          <Text size="xs" c="dimmed" fw={600}>
+            Für eine genauere Analyse: Geschlecht und Altersgruppe
+          </Text>
+          <Group gap="xs">
+            <Chip checked={sex === 'M'} onChange={() => onSexChange('M')} size="sm">
+              Männlich
+            </Chip>
+            <Chip checked={sex === 'F'} onChange={() => onSexChange('F')} size="sm">
+              Weiblich
+            </Chip>
+          </Group>
+          <Group gap="xs">
+            {AGE_BANDS.map((band) => (
+              <Chip
+                key={band.label}
+                checked={ageBand === band.label}
+                onChange={() => onAgeBandChange(band.label)}
+                size="sm"
+              >
+                {band.label}
+              </Chip>
+            ))}
+          </Group>
+        </Stack>
+      )}
 
       <div className="rounded-lg bg-blue-50 p-4 dark:bg-blue-950/30">
         <Text fw={600} size="md" mb="xs">
