@@ -1,12 +1,15 @@
 name: Deploy to Demo
 
 on:
+  push:
+    branches:
+      - demo
   workflow_dispatch:
     inputs:
       branch:
         description: "Branch to deploy to demo"
         required: true
-        default: "feature/live-demo-ephemeral"
+        default: "demo"
       reason:
         description: "Deploy reason (optional note)"
         required: false
@@ -149,11 +152,20 @@ jobs:
             set -e
             cd ~/recurrsens-demo
 
-            echo "=== Ensuring .env exists ==="
-            if [ ! -f .env ]; then
-              DB_PASS=$(openssl rand -hex 16)
-              SECRET_KEY=$(openssl rand -hex 32)
-              cat << EOF > .env
+            echo "=== Writing .env ==="
+            # Always rewritten so config changes (e.g. DEMO_INFERENCE_BACKEND,
+            # INFERENCE_SERVICE_URL) actually reach the running container on every
+            # deploy. DB_PASSWORD/DJANGO_SECRET_KEY are the exception: they're
+            # baked into the already-initialized Postgres volume from the first
+            # deploy, so they're read back out of the existing file (if any)
+            # rather than regenerated, which would break DB auth.
+            if [ -f .env ]; then
+              DB_PASS=$(grep -m1 '^DB_PASSWORD=' .env | cut -d= -f2-)
+              SECRET_KEY=$(grep -m1 '^DJANGO_SECRET_KEY=' .env | cut -d= -f2-)
+            fi
+            DB_PASS=${DB_PASS:-$(openssl rand -hex 16)}
+            SECRET_KEY=${SECRET_KEY:-$(openssl rand -hex 32)}
+            cat << EOF > .env
             DB_NAME=recurrsens_demo
             DB_USER=demo_user
             DB_PASSWORD=${DB_PASS}
@@ -171,8 +183,7 @@ jobs:
             S3_REGION=us-east-1
             CELERY_BROKER_URL=memory://
             EOF
-              chmod 600 .env
-            fi
+            chmod 600 .env
 
             echo "=== Pulling demo images ==="
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
