@@ -22,6 +22,7 @@ from patients.demo_inference import (
     DemoInferenceError,
     HttpDemoInferenceBackend,
     StubDemoInferenceBackend,
+    _service_sex,
     get_demo_inference_backend,
 )
 from patients.models import AudioFile, Patient
@@ -215,16 +216,28 @@ class HttpBackendParsingTest(TestCase):
         self.backend = HttpDemoInferenceBackend()
 
     def test_parses_real_service_response_shape(self):
+        # The service always reports percentage = P(INFECTED) x 100, regardless of
+        # which label won (see recurrsens-ml's film_runtime.py). A HEALTHY verdict
+        # with a raw 12.6% P(INFECTED) should surface as 87.4% confidence in the
+        # HEALTHY label shown.
         result = self.backend._parse(
             {
-                'film_classifier': {'prediction': 'HEALTHY', 'percentage': 87.4},
-                'gradcam_pro': {'prediction': 'HEALTHY', 'percentage': 81.2},
+                'film_classifier': {'prediction': 'HEALTHY', 'percentage': 12.6},
+                'gradcam_pro': {'prediction': 'HEALTHY', 'percentage': 18.8},
             }
         )
         self.assertEqual(result.film_classifier.prediction, HEALTHY)
         self.assertEqual(result.film_classifier.percentage, 87.4)
         self.assertEqual(result.gradcam_pro.percentage, 81.2)
         self.assertEqual(result.backend, 'http')
+
+    def test_infected_percentage_is_not_inverted(self):
+        # An INFECTED verdict's percentage already is confidence-in-the-shown-label
+        # (it IS P(INFECTED)), so it must pass through unchanged.
+        result = self.backend._parse(
+            {'film_classifier': {'prediction': 'INFECTED', 'percentage': 62.0}, 'gradcam_pro': None}
+        )
+        self.assertEqual(result.film_classifier.percentage, 62.0)
 
     def test_gradcam_is_optional(self):
         result = self.backend._parse(
@@ -249,3 +262,18 @@ class HttpBackendParsingTest(TestCase):
         sent_files = mock_post.call_args.kwargs['files']
         self.assertEqual(len(sent_files), 3)
         self.assertTrue(all(field_name == 'file' for field_name, _ in sent_files))
+
+        sent_data = mock_post.call_args.kwargs['data']
+        self.assertEqual(sent_data, {'sex': 'male', 'age': '45'})
+
+
+class ServiceSexMappingTest(TestCase):
+    def test_female_codes_map_to_female(self):
+        self.assertEqual(_service_sex('F'), 'female')
+        self.assertEqual(_service_sex('W'), 'female')
+        self.assertEqual(_service_sex('f'), 'female')
+
+    def test_anything_else_maps_to_male(self):
+        self.assertEqual(_service_sex('M'), 'male')
+        self.assertEqual(_service_sex('m'), 'male')
+        self.assertEqual(_service_sex('X'), 'male')
