@@ -56,4 +56,17 @@ describe('uploadAudio — filename extension matches blob MIME type', () => {
     await uploadAudio('tok', file, 'vowel_i');
     expect(uploadedFilename()).toBe('clinical.wav');
   });
+
+  it('serializes device_info into FormData when provided', async () => {
+    const blob = new Blob([new Uint8Array(16)], { type: 'audio/webm' });
+    const deviceInfo = {
+      microphone: { label: 'AirPods Pro', sample_rate: 48000 },
+      device: { type: 'Mobil' as const, family: 'iPhone' },
+      browser: { name: 'Mobile Safari', version: '17.4' },
+    };
+    await uploadAudio('tok', blob, 'vowel_a', 'session-123', deviceInfo);
+    const form = vi.mocked(instancePost).mock.calls.at(-1)![1] as FormData;
+    expect(form.get('session_id')).toBe('session-123');
+    expect(form.get('device_info')).toBe(JSON.stringify(deviceInfo));
+  });
 });

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { uploadAudio, advancePublicPatient, getExercises, skipExercise } from '../api/client';
 import { calculateRMS, getAudioDuration } from '../utils';
+import { getRecordingDeviceInfo } from '../utils/deviceInfo';
 import type { Exercise } from '../types';
 
 const THRESHOLDS = { MIN_DBFS: -30, MAX_DBFS: -6 };
@@ -17,6 +18,7 @@ export function useExerciseSession(
   phase: 'PRE_OP' | 'POST_OP',
   onComplete: () => void,
   completedExerciseIds: string[] = [],
+  micStream?: MediaStream | null,
 ) {
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -119,7 +121,8 @@ export function useExerciseSession(
     setIsUploading(true);
     try {
       const exerciseId = exercises[currentIndex].exercise_id;
-      await uploadAudio(token, currentBlob, exerciseId);
+      const deviceInfo = getRecordingDeviceInfo(micStream, currentBlob.type);
+      await uploadAudio(token, currentBlob, exerciseId, undefined, deviceInfo);
 
       const nextCompleted = new Set(completedIds);
       nextCompleted.add(exerciseId);

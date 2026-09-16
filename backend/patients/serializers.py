@@ -69,6 +69,7 @@ class AudioFileSerializer(serializers.ModelSerializer):
             'exercise_id',
             'phase',
             'storage_key',
+            'device_info',
             'created_at',
         ]
         read_only_fields = ['id', 'created_at']
@@ -79,7 +80,7 @@ class AudioFileCompactSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = AudioFile
-        fields = ['id', 'exercise_id', 'phase', 'session', 'created_at']
+        fields = ['id', 'exercise_id', 'phase', 'session', 'device_info', 'created_at']
         read_only_fields = fields
 
 

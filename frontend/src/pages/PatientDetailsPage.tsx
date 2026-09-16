@@ -46,6 +46,8 @@ import {
 import { StatusBadge, PostOpSessionBadge } from '../components/Badges';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { AudioPlayer } from '../components/AudioPlayer';
+import AudioDeviceInfoBadge from '../components/AudioDeviceInfoBadge';
+import { getRecordingDeviceInfo } from '../utils/deviceInfo';
 import { formatDate, formatDateTime, NO_RECORDING_DATE } from '../utils';
 import type { Exercise, AudioFile as AudioFileType } from '../types';
 import PatientHistorySidebar from '../components/PatientHistorySidebar';
@@ -510,12 +512,15 @@ function AudioSection({
                   : 'var(--mantine-color-default-border)',
               }}
             >
-              <Group gap={4} mb="xs">
-                <Checkbox size="xs" checked={selectedIds.has(f.id)} onChange={() => toggleSelect(f.id)} />
-                <Text size="sm" fw={500}>
-                  Aufnahme {i + 1}
-                  {f.exercise_id && <Badge ml="xs" size="sm" variant="light">{f.exercise_id}</Badge>}
-                </Text>
+              <Group justify="space-between" mb="xs">
+                <Group gap={4}>
+                  <Checkbox size="xs" checked={selectedIds.has(f.id)} onChange={() => toggleSelect(f.id)} />
+                  <Text size="sm" fw={500}>
+                    Aufnahme {i + 1}
+                    {f.exercise_id && <Badge ml="xs" size="sm" variant="light">{f.exercise_id}</Badge>}
+                  </Text>
+                </Group>
+                <AudioDeviceInfoBadge info={f.device_info} />
               </Group>
               <AudioPlayer fileId={f.id} />
             </div>
@@ -810,10 +815,14 @@ function ManualUpload({
       if (phase === 'POST_OP' && patientStatus === 'PRE_OP_DONE' && isActiveSession) {
         await advancePatient(patientId);
       }
+      const adminDeviceInfo = getRecordingDeviceInfo(null);
+      if (adminDeviceInfo.microphone) {
+        adminDeviceInfo.microphone.label = 'Manuell hochgeladen (Admin)';
+      }
       for (const exercise of exercises) {
         const file = files[exercise.exercise_id];
         if (!file) continue;
-        await uploadAudio(patientId, file, exercise.exercise_id, sessionId);
+        await uploadAudio(patientId, file, exercise.exercise_id, sessionId, adminDeviceInfo);
       }
       const shouldAdvance = isActiveSession && (
         (phase === 'PRE_OP' && patientStatus === 'CONSENT_GIVEN') ||

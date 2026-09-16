@@ -19,6 +19,7 @@ from django.db.models.signals import post_save, pre_delete
 from django.dispatch import receiver
 
 from .models import AudioFile, Patient, PatientAuditLog
+from .services import summarize_device_info
 
 logger = logging.getLogger(__name__)
 
@@ -107,11 +108,16 @@ def log_audio_upload(sender, instance: AudioFile, created: bool, **kwargs):
         exercise_label = instance.exercise_id.upper() if instance.exercise_id else ''
         file_name = f'Aufnahme [{exercise_label}]' if exercise_label else 'Aufnahme'
 
+        device_summary = summarize_device_info(instance.device_info)
+        detail_msg = f'1 Aufnahme hinzugefügt — {phase_label} Sektion'
+        if device_summary:
+            detail_msg += f' ({device_summary})'
+
         PatientAuditLog.objects.create(
             patient=instance.patient,
             event_type=PatientAuditLog.EventType.UPLOAD,
             event=f'{phase_label} Aufnahme hochgeladen',
-            detail=f'1 Aufnahme hinzugefügt — {phase_label} Sektion',
+            detail=detail_msg,
             files=[file_name],
             actor=PatientAuditLog.Actor.PATIENT,
             actor_name=f'{instance.patient.patient_id} (Patient)',

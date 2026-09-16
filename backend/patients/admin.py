@@ -159,11 +159,23 @@ class RecordingSessionAdmin(admin.ModelAdmin):
 class AudioFileAdmin(admin.ModelAdmin):
     """Admin configuration for AudioFile model."""
 
-    list_display = ('patient', 'exercise_id', 'phase', 'session', 'storage_key', 'created_at')
+    list_display = (
+        'patient',
+        'exercise_id',
+        'phase',
+        'session',
+        'device_summary',
+        'storage_key',
+        'created_at',
+    )
     list_filter = ('phase', 'exercise_id')
     search_fields = ('patient__patient_id', 'exercise_id', 'storage_key')
     readonly_fields = ('id', 'created_at')
     raw_id_fields = ('patient', 'session')
+
+    @admin.display(description='Gerät / Mikrofon')
+    def device_summary(self, obj):
+        return services.summarize_device_info(obj.device_info) or '—'
 
 
 @admin.register(Exercise)

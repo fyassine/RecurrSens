@@ -37,7 +37,7 @@ export default function RecordingScreen({
     isLoading,
     isUploading,
     isSkipping,
-  } = useExerciseSession(token, phase, onComplete, completedExerciseIds);
+  } = useExerciseSession(token, phase, onComplete, completedExerciseIds, micStream);
 
   if (isLoading) {
     return (
