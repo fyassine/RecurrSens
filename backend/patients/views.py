@@ -759,6 +759,10 @@ class AudioUploadView(APIView):
                 session=session,
             ).delete()
 
+        device_info_raw = request.data.get('device_info')
+        ua_header = request.META.get('HTTP_USER_AGENT', '')
+        device_info = services.enrich_device_info(device_info_raw, ua_header)
+
         # Create DB record
         try:
             audio_file = AudioFile.objects.create(
@@ -767,6 +771,7 @@ class AudioUploadView(APIView):
                 exercise_id=exercise_id,
                 phase=phase,
                 storage_key=key,
+                device_info=device_info,
             )
         except Exception as e:
             # Cleanup S3 if DB save fails
@@ -895,11 +900,16 @@ class AudioPresignConfirmView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        device_info_raw = request.data.get('device_info')
+        ua_header = request.META.get('HTTP_USER_AGENT', '')
+        device_info = services.enrich_device_info(device_info_raw, ua_header)
+
         audio_file = AudioFile.objects.create(
             patient=patient,
             exercise_id=exercise_id,
             phase=phase,
             storage_key=storage_key,
+            device_info=device_info,
         )
 
         return Response(

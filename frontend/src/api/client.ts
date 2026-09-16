@@ -7,6 +7,7 @@ import type {
   Completeness,
   RecordingSession,
 } from '../types';
+import type { RecordingDeviceInfo } from '../utils/deviceInfo';
 
 const api = axios.create({
   baseURL: '/api',
@@ -350,6 +351,7 @@ export async function uploadAudio(
   file: Blob,
   exerciseId: string,
   sessionId?: string,
+  deviceInfo?: RecordingDeviceInfo,
 ): Promise<void> {
   const formData = new FormData();
   const filename = audioFilename(file);
@@ -357,6 +359,9 @@ export async function uploadAudio(
   formData.append('exercise_id', exerciseId);
   if (sessionId) {
     formData.append('session_id', sessionId);
+  }
+  if (deviceInfo) {
+    formData.append('device_info', JSON.stringify(deviceInfo));
   }
   await publicApi.post(`/p/${token}/audio/upload/`, formData);
 }

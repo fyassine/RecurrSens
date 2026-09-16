@@ -1,3 +1,5 @@
+import type { RecordingDeviceInfo } from './utils/deviceInfo';
+
 export interface Patient {
   id: string;
   patient_id: string;
@@ -58,6 +60,7 @@ export interface AudioFile {
   exercise_id: string;
   phase: 'PRE_OP' | 'POST_OP';
   session: string | null;
+  device_info?: RecordingDeviceInfo;
   created_at: string;
 }
 

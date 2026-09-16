@@ -434,6 +434,12 @@ class AudioFile(models.Model):
     storage_key = models.CharField(
         max_length=500, verbose_name='Speicher-Schlüssel', help_text='S3/MinIO object key'
     )
+    device_info = models.JSONField(
+        default=dict,
+        blank=True,
+        verbose_name='Geräteinformationen',
+        help_text='Erfasste Geräte-, Browser- und Mikrofondaten zum Aufnahmezeitpunkt',
+    )
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='Erstellt am')
 
     class Meta:

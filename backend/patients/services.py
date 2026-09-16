@@ -11,6 +11,7 @@ Ported from the deprecated Next.js app (lib/api.ts):
 import base64
 import csv
 import io
+import json
 import logging
 import os
 import zipfile
@@ -574,6 +575,31 @@ def export_patients_zip(patient_ids: list | None = None) -> bytes:
             ]
         )
 
+        # Build recordings CSV (one row per audio recording with device and audio telemetry)
+        recordings_buffer = io.StringIO()
+        rec_writer = csv.writer(recordings_buffer)
+        rec_writer.writerow(
+            [
+                'PatientenID',
+                'Phase',
+                'Sitzungsnummer',
+                'UebungsID',
+                'Dateipfad',
+                'Geraetetyp',
+                'Geraet',
+                'Betriebssystem',
+                'OS_Version',
+                'Browser',
+                'Browser_Version',
+                'Mikrofon',
+                'Abtastrate_Hz',
+                'Kanaele',
+                'Rauschunterdrueckung',
+                'MIME_Typ',
+                'Erstellt_am',
+            ]
+        )
+
         s3 = get_s3_client()
         export_time = timezone.now()
         fetch_errors: list[str] = []
@@ -599,11 +625,44 @@ def export_patients_zip(patient_ids: list | None = None) -> bytes:
                 _, ext = os.path.splitext(audio_file.storage_key)
                 if audio_file.phase == 'PRE_OP':
                     subdir = 'prae_op'
+                    session_num = 1
                 elif audio_file.session_id is not None:
-                    subdir = f'post_op_{audio_file.session.session_number}'
+                    session_num = audio_file.session.session_number
+                    subdir = f'post_op_{session_num}'
                 else:
+                    session_num = 1
                     subdir = 'post_op'
                 zip_path = f'{patient.patient_id}/{subdir}/{audio_file.exercise_id}{ext}'
+
+                dev = audio_file.device_info or {}
+                parsed = dev.get('parsed') or {}
+                mic = dev.get('microphone') or {}
+                browser_obj = dev.get('browser') or {}
+                device_obj = dev.get('device') or {}
+                fmt = dev.get('audio_format') or {}
+
+                rec_writer.writerow(
+                    [
+                        patient.patient_id,
+                        audio_file.get_phase_display(),
+                        session_num,
+                        audio_file.exercise_id,
+                        zip_path,
+                        parsed.get('device_type') or device_obj.get('type') or '',
+                        parsed.get('device_family') or device_obj.get('family') or device_obj.get('model') or '',
+                        parsed.get('os') or browser_obj.get('os') or '',
+                        parsed.get('os_version') or browser_obj.get('os_version') or '',
+                        parsed.get('browser') or browser_obj.get('name') or '',
+                        parsed.get('browser_version') or browser_obj.get('version') or '',
+                        mic.get('label') or '',
+                        mic.get('sample_rate') or '',
+                        mic.get('channel_count') or '',
+                        mic.get('noise_suppression') if mic.get('noise_suppression') is not None else '',
+                        fmt.get('mime_type') or '',
+                        _format_date(audio_file.created_at),
+                    ]
+                )
+
                 try:
                     response = s3.get_object(
                         Bucket=settings.S3_BUCKET,
@@ -622,6 +681,7 @@ def export_patients_zip(patient_ids: list | None = None) -> bytes:
             patient.save(update_fields=['last_exported_at'])
 
         zf.writestr('metadata.csv', csv_buffer.getvalue())
+        zf.writestr('recordings.csv', recordings_buffer.getvalue())
         if fetch_errors:
             zf.writestr('errors.txt', '\n'.join(fetch_errors))
 
@@ -725,6 +785,92 @@ def parse_user_agent(ua_string: str) -> dict:
         'device_type': device_type,
         'device_family': ua.device.family,
     }
+
+
+def enrich_device_info(raw_info: dict | str | None, ua_header: str = '') -> dict:
+    """
+    Enrich client-reported device information with server-side User-Agent parsing.
+    Handles raw JSON string or dictionary, merges server UA if client omitted it,
+    and attaches standard parsed browser/OS/device_type/device_family fields.
+    """
+    if isinstance(raw_info, str):
+        try:
+            data = json.loads(raw_info)
+        except (ValueError, TypeError):
+            data = {}
+    elif isinstance(raw_info, dict):
+        data = dict(raw_info)
+    else:
+        data = {}
+
+    browser_info = data.get('browser') or {}
+    client_ua = browser_info.get('raw_user_agent') or data.get('user_agent') or ''
+    effective_ua = client_ua or ua_header or ''
+
+    parsed_ua = parse_user_agent(effective_ua)
+
+    # Standardized parsed segment
+    data['parsed'] = {
+        'browser': parsed_ua.get('browser'),
+        'browser_version': parsed_ua.get('browser_version'),
+        'os': parsed_ua.get('os'),
+        'os_version': parsed_ua.get('os_version'),
+        'device_type': parsed_ua.get('device_type') or 'Unbekannt',
+        'device_family': parsed_ua.get('device_family'),
+    }
+
+    if 'device' not in data or not isinstance(data['device'], dict):
+        data['device'] = {}
+    data['device'].setdefault('type', parsed_ua.get('device_type') or 'Unbekannt')
+    data['device'].setdefault('family', parsed_ua.get('device_family'))
+
+    if 'browser' not in data or not isinstance(data['browser'], dict):
+        data['browser'] = {}
+    data['browser'].setdefault('name', parsed_ua.get('browser'))
+    data['browser'].setdefault('version', parsed_ua.get('browser_version'))
+    data['browser'].setdefault('os', parsed_ua.get('os'))
+    data['browser'].setdefault('os_version', parsed_ua.get('os_version'))
+    data['browser'].setdefault('raw_user_agent', effective_ua)
+
+    if 'microphone' not in data or not isinstance(data['microphone'], dict):
+        data['microphone'] = {}
+
+    return data
+
+
+def summarize_device_info(device_info: dict | None) -> str:
+    """
+    Return a concise human-readable device summary, e.g.
+    'Mobil · Safari · iPhone Mikrofon' or 'Desktop · Chrome · MacBook Pro Mikrofon'.
+    """
+    if not device_info or not isinstance(device_info, dict):
+        return ''
+
+    parsed = device_info.get('parsed') or {}
+    device = device_info.get('device') or {}
+    browser = device_info.get('browser') or {}
+    mic = device_info.get('microphone') or {}
+
+    parts = []
+
+    dev_type = parsed.get('device_type') or device.get('type')
+    if dev_type and dev_type != 'Unbekannt':
+        parts.append(dev_type)
+
+    dev_family = parsed.get('device_family') or device.get('family')
+    if dev_family and dev_family not in ('Generic Smartphone', 'Generic Feature Phone', None, ''):
+        if dev_family not in parts:
+            parts.append(dev_family)
+
+    browser_name = parsed.get('browser') or browser.get('name')
+    if browser_name:
+        parts.append(browser_name)
+
+    mic_label = mic.get('label')
+    if mic_label:
+        parts.append(mic_label)
+
+    return ' · '.join(parts)
 
 
 def record_login(user, request) -> None:
