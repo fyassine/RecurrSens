@@ -433,7 +433,7 @@ export default function PatientHistorySidebar({ patientId, refreshTrigger }: Pat
           flexDirection: 'column',
           position: 'sticky',
           top: 80,
-          maxHeight: 'calc(100vh - 100px)',
+          maxHeight: 'calc(100vh - 100px - var(--shell-extra, 0px))',
         }}
       >
         {/* Header */}
