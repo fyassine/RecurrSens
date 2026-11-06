@@ -12,7 +12,7 @@ Internet → :80 → Nginx → Backend (Gunicorn)
 Internal only (not exposed):
   PostgreSQL :5432
   Redis      :6379
-  MinIO      :9000/:9001
+  Garage     :3900 (internal)
   Celery Worker
   Celery Beat
 ```
@@ -29,7 +29,7 @@ Internal only (not exposed):
 | Gunicorn Workers | 1 | RAM constraint (each worker ~70MB) |
 | Celery Concurrency | 1 | RAM constraint |
 | Server User | `flakhal` (non-root) | Security best practice; root SSH disabled |
-| Firewall | UFW: 22, 80, 443 only | DB/Redis/MinIO not exposed externally |
+| Firewall | UFW: 22, 80, 443 only | DB/Redis/Garage not exposed externally |
 | Swap | 2GB swap file | Prevents OOM kills with only 856MB physical RAM |
 | SSL | Deferred (no domain yet) | Will use Let's Encrypt + Certbot when domain is configured |
 | Database | PostgreSQL 16 with tuned memory | `shared_buffers=64MB`, `max_connections=20` for low-memory |
@@ -57,7 +57,7 @@ Internal only (not exposed):
 | Celery Worker | 192MB | ~172MB |
 | Celery Beat | 96MB | ~85MB |
 | PostgreSQL | 192MB | ~48MB |
-| MinIO | 192MB | ~144MB |
+| Garage | 128MB | ~10MB |
 | Redis | 48MB | ~4MB |
 | Nginx | 128MB | ~7MB |
 | Dozzle | 32MB | ~23MB |
@@ -70,7 +70,7 @@ Internal only (not exposed):
 | Backend (Gunicorn) | 256MB |
 | Celery Worker | 192MB |
 | PostgreSQL | 128MB |
-| MinIO | 128MB |
+| Garage | 96MB |
 | Redis | 32MB |
 | Nginx | 48MB |
 | **Total** | **784MB** |
@@ -102,20 +102,20 @@ no other service needs to.
 
 ### Architecture
 
-Staging runs alongside production on the same VPS with its **own dedicated `db`, `redis`, and `minio` containers** — fully isolated from production's data and schema. Only the staging `nginx` container talks to production's network (so production nginx can proxy `staging.recurrsens.eu` to it).
+Staging runs alongside production on the same VPS with its **own dedicated `db`, `redis`, and `garage` containers** — fully isolated from production's data and schema. Only the staging `nginx` container talks to production's network (so production nginx can proxy `staging.recurrsens.eu` to it).
 
 | Container | Production | Staging | Notes |
 |---|:---:|:---:|---|
 | `db` (PostgreSQL) | ✅ | ✅ | Separate container + volume (`recurrsens-staging-db-1`) |
 | `redis` | ✅ | ✅ | Separate container (`recurrsens-staging-redis-1`) |
-| `minio` | ✅ | ✅ | Separate container + volume (`recurrsens-staging-minio-1`) |
+| `garage` | ✅ | ✅ | Separate container + volume (`recurrsens-staging-garage-1`) |
 | `backend` | ✅ | ✅ | Separate container, tagged `:staging` |
 | `celery` | ✅ | ✅ | Separate container, tagged `:staging` |
 | `celery-beat` | ✅ | ❌ | Not needed in staging |
 | `nginx` | ✅ | ✅ | Production nginx terminates SSL; staging nginx serves SPA |
 | `dozzle` | ✅ | **shared** | Already sees all containers |
 
-**Additional RAM for staging**: ~784MB reserved limit (db 128MB + redis 32MB + minio 128MB + backend 256MB + celery 192MB + nginx 48MB).
+**Additional RAM for staging**: ~784MB reserved limit (db 128MB + redis 32MB + garage 128MB + backend 256MB + celery 192MB + nginx 48MB).
 
 ### Networking
 
@@ -123,11 +123,11 @@ Staging runs alongside production on the same VPS with its **own dedicated `db`,
 Internet → :443 → Production Nginx ─┬→ recurrsens.eu       → Production backend (:8000)
                                      └→ staging.recurrsens.eu → Staging Nginx (:8080)
                                                                    └→ Staging backend (:8000)
-                                                                        └→ Staging db / redis / minio
+                                                                        └→ Staging db / redis / garage
 
 Production Nginx (recurrsens-nginx-1) acts as the SSL terminator for both environments.
 Only the staging `nginx` container joins the `recurrsens_default` network (so production
-nginx can resolve and proxy to it). Staging's db/redis/minio/backend/celery are isolated
+nginx can resolve and proxy to it). Staging's db/redis/garage/backend/celery are isolated
 on the staging project's own network.
 ```
 
@@ -164,9 +164,9 @@ sudo certbot certonly --webroot -w /var/www/certbot -d staging.recurrsens.eu
 #    CORS_ALLOWED_ORIGINS=https://staging.recurrsens.eu
 #    CSRF_TRUSTED_ORIGINS=https://staging.recurrsens.eu
 #    DB_HOST=db, DB_PORT=5432, DB_NAME=stimmbandlaesion, DB_USER=stimmbandlaesion
-#    S3_ENDPOINT=http://minio:9000, S3_BUCKET=stimmbandlaesion, S3_ACCESS_KEY=stimmbandlaesion
+#    S3_ENDPOINT=http://garage:3900, S3_BUCKET=stimmbandlaesion, S3_ACCESS_KEY=stimmbandlaesion
 #    CELERY_BROKER_URL=redis://redis:6379/0
-# (db/redis/minio are staging's own dedicated containers — see Architecture above)
+# (db/redis/garage are staging's own dedicated containers — see Architecture above)
 ```
 
 ### Staging Commands
@@ -200,7 +200,7 @@ ssh flakhal@31.70.77.124 "cd ~/recurrsens-staging && docker compose -p recurrsen
 │   ├── dozzle-users.yml            # Dozzle auth config
 │   └── .env                        # Production secrets (chmod 600)
 │
-├── recurrsens-staging/             # Staging (self-contained, isolated db/redis/minio)
+├── recurrsens-staging/             # Staging (self-contained, isolated db/redis/garage)
 │   ├── docker-compose.staging.yml  # Full staging compose config
 │   └── .env                        # Staging secrets (chmod 600)
 │
@@ -232,7 +232,7 @@ recordings and metadata directly.
 
 - **SSH:** Key-based only, root login disabled, password authentication disabled
 - **Firewall (UFW):** Only ports 22 (SSH), 80 (HTTP), 443 (HTTPS) open
-- **Internal services:** PostgreSQL, Redis, MinIO have no external port bindings
+- **Internal services:** PostgreSQL, Redis, Garage have no external port bindings
 - **Secrets:** Production `.env` has `chmod 600`, not in version control
 - **Admin password:** Default `admin/admin` — change immediately via Django admin
 - **Docker credentials:** ghcr.io token stored in `~/.docker/config.json` on server

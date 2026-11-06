@@ -44,7 +44,9 @@ def get_s3_client():
         endpoint_url=settings.S3_ENDPOINT,
         aws_access_key_id=settings.S3_ACCESS_KEY,
         aws_secret_access_key=settings.S3_SECRET_KEY,
-        config=BotocoreConfig(s3={'addressing_style': 'path'}),
+        # SigV4 is required for pre-signed URLs on Garage (boto3 otherwise
+        # presigns with legacy SigV2, which Garage rejects as "anonymous").
+        config=BotocoreConfig(signature_version='s3v4', s3={'addressing_style': 'path'}),
     )
 
 

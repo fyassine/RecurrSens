@@ -1,0 +1,48 @@
+# Temporary overlay used ONLY to copy objects from the legacy MinIO volume into
+# Garage. Not part of normal operation.
+#   docker compose -f docker-compose.yml -f docker-compose.migrate.yml up -d minio-legacy
+#   scripts/migrate-minio-to-garage.sh bucket [bucket ...]
+#   docker compose -f docker-compose.yml -f docker-compose.migrate.yml stop minio-legacy
+#
+# For production, run this against a COPY of the volume (see docs/backup.md),
+# never directly against the live data: MinIO writes to its volume on startup.
+services:
+  minio-legacy:
+    image: minio/minio:latest   # must already be cached locally / on the server
+    pull_policy: never
+    environment:
+      MINIO_ROOT_USER: ${MIGRATE_SRC_ACCESS_KEY:?MIGRATE_SRC_ACCESS_KEY must be set}
+      MINIO_ROOT_PASSWORD: ${MIGRATE_SRC_SECRET_KEY:?MIGRATE_SRC_SECRET_KEY must be set}
+    command: server /data
+    volumes:
+      - ${MIGRATE_SRC_VOLUME:-minio_data}:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  rclone:
+    image: rclone/rclone:1.68
+    entrypoint: ["rclone"]
+    profiles: [tools]
+    environment:
+      RCLONE_CONFIG_SRC_TYPE: s3
+      RCLONE_CONFIG_SRC_PROVIDER: Minio
+      RCLONE_CONFIG_SRC_ENDPOINT: http://minio-legacy:9000
+      RCLONE_CONFIG_SRC_ACCESS_KEY_ID: ${MIGRATE_SRC_ACCESS_KEY}
+      RCLONE_CONFIG_SRC_SECRET_ACCESS_KEY: ${MIGRATE_SRC_SECRET_KEY}
+      RCLONE_CONFIG_DST_TYPE: s3
+      RCLONE_CONFIG_DST_PROVIDER: Other
+      RCLONE_CONFIG_DST_ENDPOINT: http://garage:3900
+      RCLONE_CONFIG_DST_REGION: ${S3_REGION:-us-east-1}
+      RCLONE_CONFIG_DST_ACCESS_KEY_ID: ${S3_ACCESS_KEY}
+      RCLONE_CONFIG_DST_SECRET_ACCESS_KEY: ${S3_SECRET_KEY}
+      # Garage: no checksum header on listing, avoid server-side surprises
+      RCLONE_S3_NO_CHECK_BUCKET: "true"
+    depends_on:
+      garage:
+        condition: service_healthy
+
+volumes:
+  minio_data:

@@ -168,12 +168,12 @@ CSRF_TRUSTED_ORIGINS = config(
 )
 
 # ==============================================================================
-# S3 / MinIO STORAGE
+# S3 / GARAGE STORAGE
 # ==============================================================================
 S3_REGION = config('S3_REGION', default='us-east-1')
 S3_ACCESS_KEY = config('S3_ACCESS_KEY', default='minioadmin')
 S3_SECRET_KEY = config('S3_SECRET_KEY', default='minioadmin')
-S3_ENDPOINT = config('S3_ENDPOINT', default='http://localhost:9000')
+S3_ENDPOINT = config('S3_ENDPOINT', default='http://localhost:3900')
 S3_BUCKET = config('S3_BUCKET', default='stimmbandlaesion')
 
 # django-storages S3 configuration (used for media files)
