@@ -1,0 +1,41 @@
+# Lightweight local stack: only db, redis, garage and backend.
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.light.yml up -d
+# celery / celery-beat are behind a profile, so AI inference and scheduled
+# jobs do not run. Add `--profile workers` to start them.
+services:
+  db:
+    command: >
+      postgres
+        -c shared_buffers=16MB
+        -c max_connections=10
+        -c work_mem=2MB
+        -c fsync=off
+        -c synchronous_commit=off
+        -c full_page_writes=off
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+
+  garage:
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+
+  redis:
+    deploy:
+      resources:
+        limits:
+          memory: 32M
+
+  backend:
+    environment:
+      DEV_ADMIN_USERNAME: ${DEV_ADMIN_USERNAME:-}
+      DEV_ADMIN_PASSWORD: ${DEV_ADMIN_PASSWORD:-}
+
+  celery:
+    profiles: [workers]
+
+  celery-beat:
+    profiles: [workers]

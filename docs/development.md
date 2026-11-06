@@ -8,6 +8,25 @@
 
 ---
 
+## Light local setup (fake data, 4 containers)
+
+For testing without any real data: Postgres, Redis, Garage and the backend only.
+
+```bash
+# .env needs DEV_ADMIN_USERNAME and DEV_ADMIN_PASSWORD (any local values)
+F="-f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.light.yml"
+docker compose $F up -d
+docker compose $F exec backend python manage.py migrate
+COMPOSE="docker compose $F" scripts/garage-init.sh
+docker compose $F exec backend python manage.py seed_dev_data
+```
+
+`seed_dev_data` loads the exercises, creates the admin and three patients named
+`FAKE-001` to `FAKE-003`. It refuses to run unless `DEBUG` is on. Celery is not
+started, so AI inference does not run (`--profile workers` adds it).
+
+---
+
 ## Running the Local Development Environment
 
 The dev stack uses Docker Compose for backend services (PostgreSQL, Garage, Redis, Celery) and runs the Django dev server + Vite dev server directly on the host for hot-reload.
