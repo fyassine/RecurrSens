@@ -15,8 +15,8 @@ import subprocess
 import tempfile
 
 import boto3
-from botocore.config import Config as BotocoreConfig
 import requests
+from botocore.config import Config as BotocoreConfig
 from celery import shared_task
 from django.conf import settings
 from django.core.mail import send_mail
