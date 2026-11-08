@@ -7,7 +7,7 @@
 #
 # This file is fully self-contained:
 #   - Uses :staging tagged images
-#   - Runs its own dedicated db, redis, and minio containers (no shared state
+#   - Runs its own dedicated db, redis, and garage containers (no shared state
 #     with production — avoids schema drift between staging and prod)
 #   - Binds nginx to port 8080 (proxied by production nginx)
 # ==============================================================================
@@ -52,26 +52,27 @@ services:
           memory: 32M
 
   # ── Staging object storage ──────────────────────────────────────────────────
-  minio:
-    image: minio/minio:latest
+  garage:
+    image: dxflrs/garage:v2.1.0
     restart: unless-stopped
     environment:
-      MINIO_ROOT_USER: ${S3_ACCESS_KEY:-stimmbandlaesion}
-      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:-change-me-in-staging}
-    command: server /data --console-address ":9001"
+      GARAGE_RPC_SECRET: ${GARAGE_RPC_SECRET:?GARAGE_RPC_SECRET must be set}
+      GARAGE_ADMIN_TOKEN: ${GARAGE_ADMIN_TOKEN:?GARAGE_ADMIN_TOKEN must be set}
     volumes:
-      - staging_minio_data:/data
+      - ./garage/garage.toml:/etc/garage.toml:ro
+      - staging_garage_meta:/var/lib/garage/meta
+      - staging_garage_data:/var/lib/garage/data
     healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
+      test: ["CMD", "/garage", "status"]
       interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
     networks:
       - default
     deploy:
       resources:
         limits:
-          memory: 128M
+          memory: 96M
 
   # ── Staging backend ─────────────────────────────────────────────────────────
   backend:
@@ -96,7 +97,7 @@ services:
       S3_REGION: ${S3_REGION:-us-east-1}
       S3_ACCESS_KEY: ${S3_ACCESS_KEY:-stimmbandlaesion}
       S3_SECRET_KEY: ${S3_SECRET_KEY:-change-me-in-staging}
-      S3_ENDPOINT: http://minio:9000
+      S3_ENDPOINT: http://garage:3900
       S3_BUCKET: ${S3_BUCKET:-stimmbandlaesion}
       CELERY_BROKER_URL: redis://redis:6379/0
       INFERENCE_SERVICE_URL: ${INFERENCE_SERVICE_URL:-http://inference:8001}
@@ -109,7 +110,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      minio:
+      garage:
         condition: service_healthy
     networks:
       - default
@@ -135,7 +136,7 @@ services:
       S3_REGION: ${S3_REGION:-us-east-1}
       S3_ACCESS_KEY: ${S3_ACCESS_KEY:-stimmbandlaesion}
       S3_SECRET_KEY: ${S3_SECRET_KEY:-change-me-in-staging}
-      S3_ENDPOINT: http://minio:9000
+      S3_ENDPOINT: http://garage:3900
       S3_BUCKET: ${S3_BUCKET:-stimmbandlaesion}
       CELERY_BROKER_URL: redis://redis:6379/0
       INFERENCE_SERVICE_URL: ${INFERENCE_SERVICE_URL:-http://inference:8001}
@@ -144,7 +145,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      minio:
+      garage:
         condition: service_healthy
     networks:
       - default
@@ -174,7 +175,9 @@ services:
 volumes:
   staging_static_files:
   staging_postgres_data:
-  staging_minio_data:
+  staging_garage_meta:
+  staging_garage_data:
+  staging_minio_data:   # legacy, kept until migrated
 
 networks:
   recurrsens_default:

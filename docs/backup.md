@@ -70,7 +70,7 @@ ssh flakhal@31.70.77.124 "cd ~/recurrsens && docker compose -f docker-compose.ym
 ssh flakhal@31.70.77.124 "cd ~/recurrsens && docker compose -f docker-compose.yml -f docker-compose.prod.yml exec celery python manage.py backup_database"
 ```
 
-A successful run uploads `{DB_NAME}_{timestamp}.dump.gpg` to MinIO/S3 and
+A successful run uploads `{DB_NAME}_{timestamp}.dump.gpg` to Garage (S3) and
 emails `ADMIN_NOTIFICATION_EMAIL` a summary; a failure (after 2 retries)
 emails a failure summary instead.
 
@@ -101,22 +101,15 @@ under:
 
 e.g. `backups/production/stimmbandlaesion_2026-06-12_02-30-00.dump.gpg`.
 
-MinIO's ports are intentionally **not published** to the host in
-production (`ports: !reset []` in `docker-compose.prod.yml`) — there's no
-browser-accessible console URL, and an SSH tunnel to 9001 has nothing to
-connect to. Use one of the methods below instead.
-
-**Via `mc` (bundled in the MinIO image, no port exposure needed):**
+Garage's ports are intentionally **not published** to the host in
+production (`ports: !reset []` in `docker-compose.prod.yml`) — there is no
+console. Use the Django shell / boto3 method below, or the Garage CLI:
 
 ```bash
 ssh flakhal@31.70.77.124
-docker exec -it recurrsens-minio-1 sh
-mc alias set local http://localhost:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD"
-mc ls --recursive local/stimmbandlaesion/backups/production/
+docker exec recurrsens-garage-1 /garage bucket info stimmbandlaesion
+docker exec recurrsens-garage-1 /garage status
 ```
-
-The alias persists in the container's config, so subsequent shells can
-skip straight to `mc ls`/`mc cp`/`mc cat`.
 
 **Via Django shell / boto3:**
 

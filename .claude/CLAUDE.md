@@ -32,7 +32,7 @@ docker-compose.dev.yml     Dev overrides (bind mounts, Django runserver)
 | Frontend | React 19, Vite 8, TypeScript, Mantine 7, Tailwind CSS, Motion |
 | Backend | Django 5.1, DRF 3.15, Python 3.12 |
 | Database | PostgreSQL 16 |
-| Object storage | MinIO (dev) / AWS S3 (prod) via django-storages + boto3 |
+| Object storage | Garage (self-hosted S3) via django-storages + boto3 (SigV4) |
 | Task queue | Celery 5 + Redis 7 |
 | Auth | SimpleJWT (admins); UUID primary key as token (patients, embedded in QR) |
 | Infra | Docker Compose, Nginx, Gunicorn |
@@ -44,7 +44,7 @@ docker-compose.dev.yml     Dev overrides (bind mounts, Django runserver)
 ### Dev environment
 
 ```bash
-# Start all backend services (DB, MinIO, Redis, Django, Celery)
+# Start all backend services (DB, Garage, Redis, Django, Celery)
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up
 
 # Start frontend dev server (separate terminal)
@@ -72,7 +72,7 @@ npm run lint      # eslint
 ```bash
 docker compose up -d                    # production stack
 docker compose down
-docker compose logs -f <service>        # backend | celery | nginx | db | minio | redis
+docker compose logs -f <service>        # backend | celery | nginx | db | garage | redis
 ```
 
 ---
@@ -80,7 +80,7 @@ docker compose logs -f <service>        # backend | celery | nginx | db | minio 
 ## Architecture Decisions
 
 - **JWT for admins, UUID token for patients**: Admins log in via `/api/auth/token/`; patients are identified by their UUID primary key embedded in a QR code — no account needed.
-- **MinIO / S3 for audio**: Audio files are stored in object storage, never on the Django filesystem. Use pre-signed URLs for direct client-to-storage uploads to reduce server load.
+- **Garage (S3) for audio**: Audio files are stored in object storage, never on the Django filesystem. Use pre-signed URLs for direct client-to-storage uploads to reduce server load.
 - **Celery for AI inference**: After recording phases complete, `run_inference_task` calls the external inference service asynchronously (retries 3×, 30 s delay). Results are written back to the `Patient` model.
 - **Nginx as reverse proxy**: `/api/*` and `/admin/*` proxy to Django; `/*` serves the React SPA with `try_files` fallback.
 - **Split Django settings**: `config/settings/base.py` → `development.py` / `production.py`. The active module is selected via `DJANGO_SETTINGS_MODULE`.
@@ -105,7 +105,7 @@ docker compose logs -f <service>        # backend | celery | nginx | db | minio 
 ### General
 
 - Never commit `.env` — use `.env.example` for defaults.
-- Never store audio files in Django's media root — always use MinIO/S3.
+- Never store audio files in Django's media root — always use Garage/S3.
 - Never bypass JWT middleware on new admin endpoints.
 
 ---

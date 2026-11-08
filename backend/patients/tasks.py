@@ -16,6 +16,7 @@ import tempfile
 
 import boto3
 import requests
+from botocore.config import Config as BotocoreConfig
 from celery import shared_task
 from django.conf import settings
 from django.core.mail import send_mail
@@ -373,6 +374,7 @@ def _s3_client():
         aws_access_key_id=settings.S3_ACCESS_KEY,
         aws_secret_access_key=settings.S3_SECRET_KEY,
         region_name=settings.S3_REGION,
+        config=BotocoreConfig(signature_version='s3v4', s3={'addressing_style': 'path'}),
     )
 
 

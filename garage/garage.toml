@@ -1,0 +1,21 @@
+# Garage single-node configuration (S3-compatible object storage).
+# Secrets are NOT stored here: GARAGE_RPC_SECRET and GARAGE_ADMIN_TOKEN come
+# from the environment (see .env.example).
+metadata_dir = "/var/lib/garage/meta"
+data_dir = "/var/lib/garage/data"
+db_engine = "lmdb"
+
+# One node, one copy of the data (same durability as the previous MinIO setup;
+# keep off-server backups, see docs/backup.md).
+replication_factor = 1
+
+rpc_bind_addr = "[::]:3901"
+rpc_public_addr = "127.0.0.1:3901"
+
+[s3_api]
+s3_region = "us-east-1"
+api_bind_addr = "[::]:3900"
+root_domain = ".s3.garage.internal"
+
+[admin]
+api_bind_addr = "[::]:3903"

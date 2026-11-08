@@ -36,7 +36,7 @@ See [docs/architecture.md](docs/architecture.md) for the full system diagram and
 | Frontend | React 19, Vite 8, TypeScript, Mantine 7, Tailwind CSS, Motion |
 | Backend | Django 5.1, Django REST Framework, Python 3.12 |
 | Database | PostgreSQL 16 |
-| Object storage | MinIO (dev) / AWS S3 (prod) |
+| Object storage | Garage (self-hosted S3) |
 | Task queue | Celery 5 + Redis 7 |
 | Auth | JWT (SimpleJWT) for admins; UUID token for patients |
 | Infra | Docker Compose, Nginx, Gunicorn |
@@ -61,7 +61,7 @@ cp .env.example .env   # fill in your values
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up
 ```
 
-This starts PostgreSQL (5432), MinIO (9000/9001), Redis (6379), Django dev server (8000), and Celery worker. Nginx is disabled in dev.
+This starts PostgreSQL (5432), Garage (3900), Redis (6379), Django dev server (8000), and Celery worker. Nginx is disabled in dev.
 
 ### 3. Start the frontend
 
@@ -96,8 +96,11 @@ DB_NAME=stimmbandlaesion
 DB_USER=postgres
 DB_PASSWORD=postgres
 DB_PORT=5432
-S3_ACCESS_KEY=minioadmin
-S3_SECRET_KEY=minioadmin
+# Garage key format: GK + 24 hex chars / 64 hex chars (see .env.example)
+S3_ACCESS_KEY=GK000000000000000000000000
+S3_SECRET_KEY=0000000000000000000000000000000000000000000000000000000000000000
+GARAGE_RPC_SECRET=<openssl rand -hex 32>
+GARAGE_ADMIN_TOKEN=<openssl rand -hex 32>
 S3_BUCKET=stimmbandlaesion
 S3_REGION=us-east-1
 INFERENCE_SERVICE_URL=http://inference:8001
@@ -137,7 +140,6 @@ docker compose up -d
 | Frontend | http://localhost:5173 |
 | Backend API | http://localhost:8000/api/ |
 | Django Admin | http://localhost:8000/admin/ |
-| MinIO Console | http://localhost:9001 |
 
 ## Center & User Management (Admin)
 

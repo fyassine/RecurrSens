@@ -11,10 +11,9 @@ services:
     ports:
       - "${DB_PORT:-5432}:5432"
 
-  minio:
+  garage:
     ports:
-      - "9000:9000"   # S3 API
-      - "9001:9001"   # MinIO Console
+      - "3900:3900"   # S3 API
 
   redis:
     ports:

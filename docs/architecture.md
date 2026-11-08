@@ -24,12 +24,12 @@ graph TD
     Nginx -.->|serves| React["React SPA\nStatic files"]
     Django -->|broker| Redis["Redis\n:6379"]
     Django -->|SQL| PG["PostgreSQL\n:5432"]
-    Django -->|S3 API| MinIO["MinIO / S3\n:9000"]
+    Django -->|S3 API| Garage["Garage (S3)\n:3900"]
     Django --> Celery["Celery Worker"]
     Celery -->|tasks| Redis
     Celery -->|results| PG
     Celery -->|HTTP| Inference["Inference Service\n:8001"]
-    Browser -.->|pre-signed upload| MinIO
+    Browser -.->|pre-signed upload| Garage
 ```
 
 ---
@@ -44,7 +44,7 @@ graph TD
 | Reverse proxy | Nginx | Serves SPA static files, proxies API |
 | WSGI server | Gunicorn | Production-grade, multi-worker |
 | Database | PostgreSQL 16 | Relational, robust, widely supported |
-| Object storage | MinIO (dev) / S3 (prod) | S3-compatible, self-hosted for development |
+| Object storage | Garage | S3-compatible, self-hosted (single node) |
 | Task queue | Celery + Redis | Asynchronous inference calls |
 | Authentication | JWT (SimpleJWT) | Stateless admin auth; UUID tokens for patients |
 | Containerisation | Docker + Compose | Reproducible, portable deployments |
@@ -60,13 +60,13 @@ All services are defined in `docker-compose.yml` with development overrides in `
 | Service | Image | Port(s) | Role |
 | :--- | :--- | :--- | :--- |
 | `db` | `postgres:16-alpine` | 5432 | Primary relational database |
-| `minio` | `minio/minio:latest` | 9000, 9001 | S3-compatible object storage (audio files) |
+| `garage` | `dxflrs/garage:v2.1.0` | 3900 (internal) | S3-compatible object storage (audio files) |
 | `redis` | `redis:7-alpine` | 6379 | Celery message broker |
 | `backend` | Custom (Python 3.12) | 8000 | Django application server |
 | `celery` | Same as backend | --- | Asynchronous task worker |
 | `nginx` | Custom (nginx:alpine) | 80 | Reverse proxy + SPA host |
 
-Three named Docker volumes persist data: `postgres_data`, `minio_data`, and `static_files`.
+Three named Docker volumes persist data: `postgres_data`, `garage_data` / `garage_meta`, and `static_files` (legacy `minio_data` is kept until migrated).
 
 ### 4.2 Nginx Reverse Proxy
 

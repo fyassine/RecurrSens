@@ -8,9 +8,28 @@
 
 ---
 
+## Light local setup (fake data, 4 containers)
+
+For testing without any real data: Postgres, Redis, Garage and the backend only.
+
+```bash
+# .env needs DEV_ADMIN_USERNAME and DEV_ADMIN_PASSWORD (any local values)
+F="-f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.light.yml"
+docker compose $F up -d
+docker compose $F exec backend python manage.py migrate
+COMPOSE="docker compose $F" scripts/garage-init.sh
+docker compose $F exec backend python manage.py seed_dev_data
+```
+
+`seed_dev_data` loads the exercises, creates the admin and three patients named
+`FAKE-001` to `FAKE-003`. It refuses to run unless `DEBUG` is on. Celery is not
+started, so AI inference does not run (`--profile workers` adds it).
+
+---
+
 ## Running the Local Development Environment
 
-The dev stack uses Docker Compose for backend services (PostgreSQL, MinIO, Redis, Celery) and runs the Django dev server + Vite dev server directly on the host for hot-reload.
+The dev stack uses Docker Compose for backend services (PostgreSQL, Garage, Redis, Celery) and runs the Django dev server + Vite dev server directly on the host for hot-reload.
 
 ### 1. Start backend services
 
@@ -20,7 +39,7 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up
 
 This starts:
 - **PostgreSQL** on `localhost:5432`
-- **MinIO** on `localhost:9000` (S3 API) and `localhost:9001` (console UI)
+- **Garage** (S3-compatible storage) on `localhost:3900` — run `COMPOSE="docker compose -f docker-compose.yml -f docker-compose.dev.yml" scripts/garage-init.sh` once after first start
 - **Redis** on `localhost:6379`
 - **Django dev server** on `localhost:8000`
 - **Celery worker** (debug log level)
@@ -60,10 +79,9 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml exec backend pyth
 | Frontend (Vite) | http://localhost:5173 |
 | Backend API | http://localhost:8000/api/ |
 | Django Admin | http://localhost:8000/admin/ |
-| MinIO Console | http://localhost:9001 |
-| MinIO S3 API | http://localhost:9000 |
+| Garage S3 API | http://localhost:3900 |
 
-Default MinIO credentials: `minioadmin` / `minioadmin`
+Garage has no console. Generate local keys (access key `GK` + 24 hex, secret 64 hex) and `GARAGE_RPC_SECRET` / `GARAGE_ADMIN_TOKEN` as described in `.env.example`. See [garage.md](garage.md).
 
 ---
 
@@ -130,7 +148,7 @@ These endpoints are used by the patient-side recording UI. The `{token}` is a UU
 | `GET` | `/api/p/{token}/` | Patient public view (exercises, status) |
 | `POST` | `/api/p/{token}/advance/` | Advance the patient's session step |
 | `POST` | `/api/p/{token}/audio/upload/` | Direct audio upload |
-| `POST` | `/api/p/{token}/audio/presign/` | Get a presigned MinIO upload URL |
+| `POST` | `/api/p/{token}/audio/presign/` | Get a presigned S3 upload URL |
 | `POST` | `/api/p/{token}/audio/confirm/` | Confirm presigned upload is complete |
 
 ---
