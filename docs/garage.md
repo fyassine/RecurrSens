@@ -12,6 +12,7 @@ no application code depends on Garage specifically.
 |---|---|
 | Server config | `garage/garage.toml` (secrets come from env, never the file) |
 | Env | `S3_ACCESS_KEY` (`GK` + 24 hex), `S3_SECRET_KEY` (64 hex), `S3_ENDPOINT=http://garage:3900`, `S3_BUCKET`, `GARAGE_RPC_SECRET`, `GARAGE_ADMIN_TOKEN` |
+| GitHub (per environment) | variable `GARAGE_ACCESS_KEY`; secrets `GARAGE_SECRET_KEY`, `GARAGE_RPC_SECRET`, `GARAGE_ADMIN_TOKEN`. The workflows write them into `.env` as `S3_ACCESS_KEY` / `S3_SECRET_KEY` |
 | Bootstrap | `scripts/garage-init.sh` (idempotent: layout, app key, bucket(s)) |
 | Volumes | `garage_data`, `garage_meta` (legacy `minio_data` kept until migrated) |
 
@@ -30,6 +31,8 @@ docker exec recurrsens-garage-1 /garage key info <GK...>
 ```
 
 ## Migrating existing MinIO data
+
+Production path used for the first cutover: bring up Garage alone with `docker-compose.garage-only.yml`, copy from the **running** MinIO through its S3 API with `SKIP_LEGACY_START=1` (read-only for MinIO), stop writes, copy once more, verify, then deploy. The generic procedure follows.
 
 Never run this against the live volume.
 

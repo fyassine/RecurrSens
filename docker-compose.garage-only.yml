@@ -1,0 +1,53 @@
+# Garage + rclone only, no app services and no required app secrets.
+# Used to prepare/copy data BEFORE the first Garage deploy (see docs/garage.md):
+#   docker compose -p recurrsens -f docker-compose.garage-only.yml up -d garage
+#   COMPOSE="docker compose -p recurrsens -f docker-compose.garage-only.yml" \
+#     SKIP_LEGACY_START=1 scripts/garage-init.sh <bucket>
+#   COMPOSE="docker compose -p recurrsens -f docker-compose.garage-only.yml" \
+#     SKIP_LEGACY_START=1 scripts/migrate-minio-to-garage.sh <bucket>
+# Volume and network names match docker-compose.yml, so the later deploy reuses them.
+services:
+  garage:
+    image: dxflrs/garage:v2.1.0
+    restart: unless-stopped
+    environment:
+      GARAGE_RPC_SECRET: ${GARAGE_RPC_SECRET:?GARAGE_RPC_SECRET must be set}
+      GARAGE_ADMIN_TOKEN: ${GARAGE_ADMIN_TOKEN:?GARAGE_ADMIN_TOKEN must be set}
+    volumes:
+      - ./garage/garage.toml:/etc/garage.toml:ro
+      - garage_meta:/var/lib/garage/meta
+      - garage_data:/var/lib/garage/data
+    healthcheck:
+      test: ["CMD", "/garage", "status"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+
+  rclone:
+    image: rclone/rclone:1.68
+    entrypoint: ["rclone"]
+    profiles: [tools]
+    environment:
+      RCLONE_CONFIG_SRC_TYPE: s3
+      RCLONE_CONFIG_SRC_PROVIDER: Minio
+      RCLONE_CONFIG_SRC_ENDPOINT: ${MIGRATE_SRC_ENDPOINT:-http://minio:9000}
+      RCLONE_CONFIG_SRC_ACCESS_KEY_ID: ${MIGRATE_SRC_ACCESS_KEY:?MIGRATE_SRC_ACCESS_KEY must be set}
+      RCLONE_CONFIG_SRC_SECRET_ACCESS_KEY: ${MIGRATE_SRC_SECRET_KEY:?MIGRATE_SRC_SECRET_KEY must be set}
+      RCLONE_CONFIG_DST_TYPE: s3
+      RCLONE_CONFIG_DST_PROVIDER: Other
+      RCLONE_CONFIG_DST_ENDPOINT: http://garage:3900
+      RCLONE_CONFIG_DST_REGION: ${S3_REGION:-us-east-1}
+      RCLONE_CONFIG_DST_ACCESS_KEY_ID: ${S3_ACCESS_KEY:?S3_ACCESS_KEY must be set}
+      RCLONE_CONFIG_DST_SECRET_ACCESS_KEY: ${S3_SECRET_KEY:?S3_SECRET_KEY must be set}
+      RCLONE_S3_NO_CHECK_BUCKET: "true"
+    depends_on:
+      garage:
+        condition: service_healthy
+
+volumes:
+  garage_meta:
+  garage_data:
