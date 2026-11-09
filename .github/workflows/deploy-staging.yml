@@ -153,15 +153,16 @@ jobs:
             # Django
             DJANGO_SECRET_KEY=${{ secrets.DJANGO_SECRET_KEY }}
             DJANGO_SETTINGS_MODULE=config.settings.production
-            ALLOWED_HOSTS=${{ vars.ALLOWED_HOSTS }}
+            ALLOWED_HOSTS=staging.recurrsens.eu
             DJANGO_SUPERUSER_USERNAME=${{ vars.DJANGO_SUPERUSER_USERNAME }}
             DJANGO_SUPERUSER_PASSWORD=${{ secrets.DJANGO_SUPERUSER_PASSWORD }}
 
-            # Database — dedicated staging Postgres container (isolated from production)
-            DB_NAME=${{ vars.DB_NAME }}
+            # Database — production's Postgres container, separate database.
+            # DB_NAME/DB_USER/DB_PASSWORD are overridden by staging.local.env below.
+            DB_NAME=stimmbandlaesion_staging
             DB_USER=${{ vars.DB_USER }}
             DB_PASSWORD=${{ secrets.DB_PASSWORD }}
-            DB_HOST=${{ vars.DB_HOST }}
+            DB_HOST=recurrsens-db-1
             DB_PORT=5432
 
             # S3 / Garage — dedicated staging Garage container (isolated from production)
@@ -171,26 +172,32 @@ jobs:
             S3_ENDPOINT=http://garage:3900
             GARAGE_RPC_SECRET=${{ secrets.GARAGE_RPC_SECRET }}
             GARAGE_ADMIN_TOKEN=${{ secrets.GARAGE_ADMIN_TOKEN }}
-            S3_BUCKET=${{ vars.S3_BUCKET }}
+            S3_BUCKET=stimmbandlaesion-staging
 
-            # Celery / Redis — dedicated staging Redis container (isolated from production)
-            CELERY_BROKER_URL=${{ vars.CELERY_BROKER_URL }}
+            # Celery / Redis — production's Redis container, DB 1 (prod uses DB 0)
+            CELERY_BROKER_URL=redis://recurrsens-redis-1:6379/1
 
             # Inference Service
             INFERENCE_SERVICE_URL=${{ vars.INFERENCE_SERVICE_URL }}
 
             # App URL
-            APP_URL=${{ vars.APP_URL }}
+            APP_URL=https://staging.recurrsens.eu
 
             # CORS
-            CORS_ALLOWED_ORIGINS=${{ vars.CORS_ALLOWED_ORIGINS }}
+            CORS_ALLOWED_ORIGINS=https://staging.recurrsens.eu
 
             # CSRF (Django admin & session auth)
-            CSRF_TRUSTED_ORIGINS=${{ vars.CSRF_TRUSTED_ORIGINS }}
+            CSRF_TRUSTED_ORIGINS=https://staging.recurrsens.eu
 
             # Data retention
             DATA_RETENTION_DAYS=${{ vars.DATA_RETENTION_DAYS }}
             EOF
+
+            # Host-local overrides (e.g. the staging DB credentials) that are not
+            # stored in GitHub. Later entries win.
+            if [ -f ~/recurrsens-staging/staging.local.env ]; then
+              cat ~/recurrsens-staging/staging.local.env >> ~/recurrsens-staging/.env
+            fi
 
       - name: Deploy staging via SSH
         uses: appleboy/ssh-action@v1.2.0
@@ -220,6 +227,9 @@ jobs:
 
             echo "=== Pruning old images ==="
             docker image prune -f
+
+            echo "=== Reloading staging nginx (re-resolve the recreated backend's IP) ==="
+            docker compose -p recurrsens-staging -f docker-compose.staging.yml exec -T nginx nginx -s reload
 
             echo "=== Reloading production nginx to pick up staging upstream ==="
             docker compose -p recurrsens -f ~/recurrsens/docker-compose.yml -f ~/recurrsens/docker-compose.prod.yml exec -T nginx nginx -s reload 2>/dev/null || true
