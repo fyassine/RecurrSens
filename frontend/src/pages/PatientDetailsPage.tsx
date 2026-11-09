@@ -3,9 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import {
   ActionIcon,
   Alert,
-  Badge,
   Button,
-  Card,
   Checkbox,
   Group,
   Loader,
@@ -14,15 +12,12 @@ import {
   Stack,
   Text,
   TextInput,
-  Title,
 } from '@mantine/core';
 import {
   ArrowLeft,
   Check,
   Download,
   Pencil,
-  User,
-  AudioLines,
   Upload,
   ArrowLeftRight,
   X,
@@ -94,77 +89,40 @@ export default function PatientDetailsPage() {
   }
 
   const preOpSession = patient.sessions.find((s) => s.phase === 'PRE_OP' && s.session_number === 1);
-  const noRecordings =
-    patient.audio_files_pre.length === 0
-    && patient.audio_files_post.length === 0
-    && postOpSections.length === 1;
 
   return (
-    <div className="min-h-screen pb-4">
-      <Button
-        variant="subtle"
-        leftSection={<ArrowLeft size={16} />}
-        onClick={() => navigate('/')}
-        mb={noRecordings ? 'sm' : 'md'}
-      >
-        Zurück zur Übersicht
-      </Button>
+    <div className="mx-auto max-w-[1600px]">
+      <PatientHeader patient={patient} onUpdated={fetchPatient} onBack={() => navigate('/')} />
 
-      <div
-        className="mx-auto flex flex-col md:flex-row gap-6 items-start"
-        style={{ maxWidth: noRecordings ? 1440 : 1320 }}
-      >
-        <div className="flex-1 w-full min-w-0">
-          <PatientInfoCard patient={patient} onUpdated={fetchPatient} compact={noRecordings} />
-          {noRecordings ? (
-            <div className="grid gap-4 md:grid-cols-2">
-              <AudioSection
-                title="Prä-OP Aufnahmen"
-                audioFiles={patient.audio_files_pre}
-                sessions={patient.sessions}
-                phase="PRE_OP"
-                date={patient.pre_op_date}
-                sessionId={preOpSession?.id}
-                isActiveSession
-                patientId={patient.id}
-                patientStatus={patient.status}
-                onUploaded={fetchPatient}
-                onSaveDate={(iso) => updatePatient(patient.id, { pre_op_date: iso })}
-                compact
-              />
-              <AudioSection
-                title={postOpSections[0].title}
-                audioFiles={postOpSections[0].audioFiles}
-                sessions={patient.sessions}
-                phase="POST_OP"
-                date={postOpSections[0].date}
-                sessionId={postOpSections[0].sessionId}
-                isActiveSession={postOpSections[0].isActiveSession}
-                patientId={patient.id}
-                patientStatus={patient.status}
-                onUploaded={fetchPatient}
-                onSaveDate={postOpSections[0].onSaveDate}
-                compact
-              />
-            </div>
-          ) : (
-            <>
-              <AudioSection
-                title="Prä-OP Aufnahmen"
-                audioFiles={patient.audio_files_pre}
-                sessions={patient.sessions}
-                phase="PRE_OP"
-                date={patient.pre_op_date}
-                sessionId={preOpSession?.id}
-                isActiveSession
-                patientId={patient.id}
-                patientStatus={patient.status}
-                onUploaded={fetchPatient}
-                onSaveDate={(iso) => updatePatient(patient.id, { pre_op_date: iso })}
-              />
-              {postOpSections.map((sec) => (
+      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_440px] xl:grid-cols-[minmax(0,1fr)_520px]">
+        <RecordingTabs
+          tabs={[
+            {
+              key: 'pre',
+              label: 'Prä-OP',
+              count: patient.audio_files_pre.length,
+              content: (
                 <AudioSection
-                  key={sec.key}
+                  title="Prä-OP Aufnahmen"
+                  audioFiles={patient.audio_files_pre}
+                  sessions={patient.sessions}
+                  phase="PRE_OP"
+                  date={patient.pre_op_date}
+                  sessionId={preOpSession?.id}
+                  isActiveSession
+                  patientId={patient.id}
+                  patientStatus={patient.status}
+                  onUploaded={fetchPatient}
+                  onSaveDate={(iso) => updatePatient(patient.id, { pre_op_date: iso })}
+                />
+              ),
+            },
+            ...postOpSections.map((sec) => ({
+              key: sec.key,
+              label: sec.title.replace(/ Aufnahmen$/, ''),
+              count: sec.audioFiles.length,
+              content: (
+                <AudioSection
                   title={sec.title}
                   audioFiles={sec.audioFiles}
                   sessions={patient.sessions}
@@ -177,24 +135,24 @@ export default function PatientDetailsPage() {
                   onUploaded={fetchPatient}
                   onSaveDate={sec.onSaveDate}
                 />
-              ))}
-            </>
-          )}
-        </div>
+              ),
+            })),
+          ]}
+        />
         <PatientHistorySidebar patientId={patient.id} refreshTrigger={patient.last_activity} />
       </div>
     </div>
   );
 }
 
-function PatientInfoCard({
+function PatientHeader({
   patient,
   onUpdated,
-  compact = false,
+  onBack,
 }: {
   patient: PatientDetail;
   onUpdated: () => void;
-  compact?: boolean;
+  onBack: () => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -224,6 +182,13 @@ function PatientInfoCard({
     }
   };
 
+  const resetEdit = () => {
+    setEditing(false);
+    setPid(patient.patient_id);
+    setCreatedAt(patient.created_at.slice(0, 10));
+    setStatus(patient.status);
+  };
+
   const handleSave = async () => {
     setSaving(true);
     try {
@@ -241,73 +206,89 @@ function PatientInfoCard({
   };
 
   return (
-    <Card withBorder radius="md" mb={compact ? 'sm' : 'md'} p="md">
-      <Group justify="space-between" mb="sm">
-        <Group gap="xs">
-          <User size={20} color="var(--mantine-color-brand-7)" />
-          <Title order={5}>Patienten Details</Title>
-          <ActionIcon variant="subtle" color="gray" size="sm" onClick={() => setEditing(!editing)}>
-            <Pencil size={14} />
-          </ActionIcon>
-        </Group>
-        <Button
-          size="xs"
-          variant="subtle"
-          leftSection={<Download size={14} />}
-          onClick={handleDownload}
-          loading={downloading}
-        >
-          Herunterladen
-        </Button>
-      </Group>
+    <div className="section mb-4">
+      <div className="flex flex-wrap items-start justify-between gap-3 px-4 pb-3 pt-2">
+        <div className="min-w-0">
+          <Button
+            variant="subtle"
+            size="compact-xs"
+            leftSection={<ArrowLeft size={14} />}
+            onClick={onBack}
+            ml={-8}
+          >
+            Zurück zur Übersicht
+          </Button>
+          <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-2">
+            {editing ? (
+              <TextInput
+                value={pid}
+                onChange={(e) => setPid(e.currentTarget.value)}
+                size="sm"
+                aria-label="Patienten-ID"
+                classNames={{ input: 'id-text' }}
+                styles={{ input: { fontWeight: 600 } }}
+              />
+            ) : (
+              <h1 className="id-text m-0 text-[22px] font-semibold leading-tight">{patient.patient_id}</h1>
+            )}
+            {editing ? (
+              <Select
+                value={status}
+                onChange={(val) => setStatus(val as PatientStatus)}
+                aria-label="Status"
+                data={[
+                  { value: 'NEW', label: 'Neu (Prä-OP unvollständig)' },
+                  { value: 'CONSENT_GIVEN', label: 'Einwilligung erteilt (Prä-OP unvollständig)' },
+                  { value: 'PRE_OP_DONE', label: 'Prä-OP abgeschlossen (Prä-OP vollständig)' },
+                  { value: 'POST_OP_STARTED', label: 'Post-OP begonnen (Post-OP unvollständig)' },
+                  { value: 'POST_OP_DONE', label: 'Post-OP abgeschlossen (Post-OP vollständig)' },
+                ]}
+                size="sm"
+                w={320}
+                allowDeselect={false}
+              />
+            ) : (patient.status === 'POST_OP_STARTED' || patient.status === 'POST_OP_DONE') &&
+              patient.current_post_op_session_number != null ? (
+              <PostOpSessionBadge
+                sessionNumber={patient.current_post_op_session_number}
+                complete={patient.status === 'POST_OP_DONE'}
+              />
+            ) : (
+              <StatusBadge status={patient.status as PatientStatus} />
+            )}
+          </div>
+        </div>
+        <div className="flex items-center gap-2 pt-1">
+          {editing ? (
+            <>
+              <Button size="xs" variant="default" onClick={resetEdit}>Abbrechen</Button>
+              <Button size="xs" onClick={handleSave} loading={saving}>Speichern</Button>
+            </>
+          ) : (
+            <Button size="xs" variant="default" leftSection={<Pencil size={14} />} onClick={() => setEditing(true)}>
+              Bearbeiten
+            </Button>
+          )}
+          <Button
+            size="xs"
+            variant="default"
+            leftSection={<Download size={14} />}
+            onClick={handleDownload}
+            loading={downloading}
+          >
+            Herunterladen
+          </Button>
+        </div>
+      </div>
 
       {patient.deleted_at && (
-        <Alert color="red" mb="sm">
+        <div className="border-t border-[var(--app-danger)] bg-[var(--app-header-bg)] px-4 py-1.5 text-[13px] font-medium text-[var(--app-danger)]">
           Gelöscht am {formatDateTime(patient.deleted_at)}
-        </Alert>
+        </div>
       )}
 
-      <div className="grid grid-cols-2 gap-3">
-        <InfoField label="Patienten-ID">
-          {editing ? (
-            <TextInput
-              value={pid}
-              onChange={(e) => setPid(e.currentTarget.value)}
-              size="xs"
-              styles={{ input: { fontFamily: 'ui-monospace, Consolas, monospace', fontWeight: 600 } }}
-            />
-          ) : (
-            <div className="text-[0.9375rem] font-semibold" style={{ fontFamily: 'ui-monospace, Consolas, monospace' }}>
-              {patient.patient_id}
-            </div>
-          )}
-        </InfoField>
-        <InfoField label="Status">
-          {editing ? (
-            <Select
-              value={status}
-              onChange={(val) => setStatus(val as PatientStatus)}
-              data={[
-                { value: 'NEW', label: 'Neu (Prä-OP unvollständig)' },
-                { value: 'CONSENT_GIVEN', label: 'Einwilligung erteilt (Prä-OP unvollständig)' },
-                { value: 'PRE_OP_DONE', label: 'Prä-OP abgeschlossen (Prä-OP vollständig)' },
-                { value: 'POST_OP_STARTED', label: 'Post-OP begonnen (Post-OP unvollständig)' },
-                { value: 'POST_OP_DONE', label: 'Post-OP abgeschlossen (Post-OP vollständig)' },
-              ]}
-              size="xs"
-              allowDeselect={false}
-            />
-          ) : (patient.status === 'POST_OP_STARTED' || patient.status === 'POST_OP_DONE') &&
-            patient.current_post_op_session_number != null ? (
-            <PostOpSessionBadge
-              sessionNumber={patient.current_post_op_session_number}
-              complete={patient.status === 'POST_OP_DONE'}
-            />
-          ) : (
-            <StatusBadge status={patient.status as PatientStatus} />
-          )}
-        </InfoField>
-        <InfoField label="Erstellt am">
+      <dl className="m-0 grid grid-cols-2 gap-x-6 gap-y-2 border-t border-[var(--app-border)] bg-[var(--app-header-bg)] px-4 py-2 md:grid-cols-4">
+        <HeaderField label="Erstellt am">
           {editing ? (
             <DateInput
               value={createdAt ? new Date(createdAt) : null}
@@ -315,24 +296,77 @@ function PatientInfoCard({
               valueFormat="DD.MM.YYYY"
               size="xs"
               clearable={false}
+              aria-label="Erstellt am"
             />
           ) : (
-            <div className="text-[0.9375rem] font-semibold">{formatDate(patient.created_at)}</div>
+            formatDate(patient.created_at)
           )}
-        </InfoField>
-        <InfoField
-          label="Ablaufdatum"
-          value={editing ? formatDate(derivedExpiresAt(createdAt)) : formatDate(patient.expires_at)}
-        />
-      </div>
-      {editing && (
-        <Group justify="flex-end" gap="sm" mt="sm">
-          <Button size="xs" variant="default" onClick={() => { setEditing(false); setPid(patient.patient_id); setCreatedAt(patient.created_at.slice(0, 10)); setStatus(patient.status); }}>Abbrechen</Button>
-          <Button size="xs" onClick={handleSave} loading={saving}>Speichern</Button>
-        </Group>
-      )}
+        </HeaderField>
+        <HeaderField label="Ablaufdatum">
+          {editing ? formatDate(derivedExpiresAt(createdAt)) : formatDate(patient.expires_at)}
+        </HeaderField>
+        <HeaderField label="Gelöscht am">{patient.deleted_at ? formatDateTime(patient.deleted_at) : '–'}</HeaderField>
+        <HeaderField label="Letzte Aktivität">{formatDateTime(patient.last_activity)}</HeaderField>
+      </dl>
+    </div>
+  );
+}
 
-    </Card>
+function HeaderField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-[11px] font-semibold uppercase tracking-wide text-[var(--app-text-secondary)]">{label}</dt>
+      <dd className="m-0 mt-0.5 text-[13px] font-medium tabular-nums">{children}</dd>
+    </div>
+  );
+}
+
+interface RecordingTab {
+  key: string;
+  label: string;
+  count: number;
+  content: React.ReactNode;
+}
+
+/** One panel with a tab per recording phase (Prä-OP, Post-OP 1, 2, …). */
+function RecordingTabs({ tabs }: { tabs: RecordingTab[] }) {
+  const [activeKey, setActiveKey] = useState(tabs[0]?.key);
+  const active = tabs.find((t) => t.key === activeKey) ?? tabs[0];
+  if (!active) return null;
+
+  return (
+    <div className="section min-w-0">
+      <div role="tablist" aria-label="Aufnahmephase" className="flex gap-0.5 overflow-x-auto border-b border-[var(--app-border)] bg-[var(--app-header-bg)] px-2">
+        {tabs.map((t) => {
+          const isActive = t.key === active.key;
+          return (
+            <button
+              key={t.key}
+              type="button"
+              role="tab"
+              id={`rec-tab-${t.key}`}
+              aria-selected={isActive}
+              aria-controls={`rec-panel-${t.key}`}
+              onClick={() => setActiveKey(t.key)}
+              className="cursor-pointer whitespace-nowrap border-0 border-b-2 border-solid bg-transparent px-3 pb-[7px] pt-[9px]"
+              style={{
+                borderBottomColor: isActive ? 'var(--app-primary)' : 'transparent',
+                color: isActive ? 'var(--app-primary)' : 'var(--app-text-secondary)',
+                fontWeight: isActive ? 600 : 400,
+                font: 'inherit',
+                fontSize: 13,
+              }}
+            >
+              {t.label}
+              <span className="ml-1.5 text-[11px] font-normal text-[var(--app-text-secondary)]">{t.count}</span>
+            </button>
+          );
+        })}
+      </div>
+      <div role="tabpanel" id={`rec-panel-${active.key}`} aria-labelledby={`rec-tab-${active.key}`} key={active.key}>
+        {active.content}
+      </div>
+    </div>
   );
 }
 
@@ -348,7 +382,6 @@ function AudioSection({
   patientStatus,
   onUploaded,
   onSaveDate,
-  compact = false,
 }: {
   title: string;
   audioFiles: AudioFileType[];
@@ -361,13 +394,15 @@ function AudioSection({
   patientStatus: string;
   onUploaded: () => void;
   onSaveDate: (isoDate: string) => Promise<unknown>;
-  compact?: boolean;
 }) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkOpen, setBulkOpen] = useState(false);
   const [editingDate, setEditingDate] = useState(false);
   const [dateValue, setDateValue] = useState(toDatetimeLocal(date));
   const [savingDate, setSavingDate] = useState(false);
+
+  const allSelected = audioFiles.length > 0 && selectedIds.size === audioFiles.length;
+  const toggleAll = () => setSelectedIds(allSelected ? new Set() : new Set(audioFiles.map((f) => f.id)));
 
   const toggleSelect = (id: string) =>
     setSelectedIds((prev) => {
@@ -396,76 +431,74 @@ function AudioSection({
   };
 
   return (
-    <Card withBorder radius="md" mb={compact ? 0 : 'md'} p="md" h={compact ? '100%' : undefined}>
-      <Stack gap={4} align="center" mb="md">
-        <Group gap="xs">
-          <AudioLines size={20} color="var(--mantine-color-brand-7)" />
-          <Title order={6}>{title}</Title>
-        </Group>
-        {editingDate ? (
-          <Group gap="xs">
-            <TextInput
-              type="datetime-local"
-              value={dateValue}
-              onChange={(e) => setDateValue(e.currentTarget.value)}
-              size="xs"
-              style={{ width: 200 }}
-            />
-            <ActionIcon size="xs" variant="subtle" color="green" loading={savingDate} onClick={handleSaveDate}>
-              <Check size={12} />
-            </ActionIcon>
-            <ActionIcon size="xs" variant="subtle" color="gray" onClick={() => setEditingDate(false)}>
-              <X size={12} />
-            </ActionIcon>
-          </Group>
-        ) : (
-          <Group gap={4}>
-            <Text size="xs" c="dimmed">{date ? formatDateTime(date) : NO_RECORDING_DATE}</Text>
-            <ActionIcon
-              size="xs"
-              variant="subtle"
-              color="gray"
-              onClick={() => { setDateValue(toDatetimeLocal(date) || toDatetimeLocal(new Date().toISOString())); setEditingDate(true); }}
-            >
-              <Pencil size={11} />
-            </ActionIcon>
-          </Group>
-        )}
-      </Stack>
-
-      {audioFiles.length > 0 && (
-        <Group justify="space-between" mb="xs">
-          <Group gap={0}>
-            <Checkbox
-              size="xs"
-              checked={selectedIds.size === audioFiles.length}
-              indeterminate={selectedIds.size > 0 && selectedIds.size < audioFiles.length}
-              onChange={() => {
-                if (selectedIds.size === audioFiles.length) setSelectedIds(new Set());
-                else setSelectedIds(new Set(audioFiles.map((f) => f.id)));
-              }}
-            />
-            <Button
-              size="xs"
-              variant="subtle"
-              onClick={() => {
-                if (selectedIds.size === audioFiles.length) setSelectedIds(new Set());
-                else setSelectedIds(new Set(audioFiles.map((f) => f.id)));
-              }}
-            >
-              {selectedIds.size === audioFiles.length ? 'Auswahl aufheben' : 'Alle auswählen'}
-            </Button>
-            {selectedIds.size > 0 && (
-              <Button
+    <section aria-label={title}>
+      <div className="section-header flex-wrap justify-between border-t-0">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <h2 className="section-title m-0">{title}</h2>
+          {editingDate ? (
+            <div className="flex items-center gap-1">
+              <TextInput
+                type="datetime-local"
+                value={dateValue}
+                onChange={(e) => setDateValue(e.currentTarget.value)}
                 size="xs"
-                variant="outline"
-                leftSection={<ArrowLeftRight size={14} />}
-                onClick={() => setBulkOpen(true)}
+                aria-label="Aufnahmedatum"
+                style={{ width: 200 }}
+              />
+              <ActionIcon size="sm" variant="subtle" color="green" loading={savingDate} onClick={handleSaveDate} aria-label="Datum speichern">
+                <Check size={14} />
+              </ActionIcon>
+              <ActionIcon size="sm" variant="subtle" color="gray" onClick={() => setEditingDate(false)} aria-label="Abbrechen">
+                <X size={14} />
+              </ActionIcon>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1">
+              <span className="text-xs tabular-nums text-[var(--app-text-secondary)]">
+                {date ? formatDateTime(date) : NO_RECORDING_DATE}
+              </span>
+              <ActionIcon
+                size="sm"
+                variant="subtle"
+                color="gray"
+                aria-label="Datum bearbeiten"
+                onClick={() => {
+                  setDateValue(toDatetimeLocal(date) || toDatetimeLocal(new Date().toISOString()));
+                  setEditingDate(true);
+                }}
               >
-                Zuordnung ändern ({selectedIds.size})
+                <Pencil size={12} />
+              </ActionIcon>
+            </div>
+          )}
+        </div>
+
+        <div className="flex flex-wrap items-center gap-1">
+          {audioFiles.length > 0 && (
+            <>
+              <Checkbox
+                size="xs"
+                checked={allSelected}
+                indeterminate={selectedIds.size > 0 && !allSelected}
+                onChange={toggleAll}
+                aria-label="Alle Aufnahmen auswählen"
+                mr={4}
+              />
+              <Button size="compact-xs" variant="subtle" onClick={toggleAll}>
+                {allSelected ? 'Auswahl aufheben' : 'Alle auswählen'}
               </Button>
-            )}
-          </Group>
+              {selectedIds.size > 0 && (
+                <Button
+                  size="compact-xs"
+                  variant="default"
+                  leftSection={<ArrowLeftRight size={12} />}
+                  onClick={() => setBulkOpen(true)}
+                >
+                  Zuordnung ändern ({selectedIds.size})
+                </Button>
+              )}
+            </>
+          )}
           <ManualUpload
             patientId={patientId}
             phase={phase}
@@ -473,55 +506,35 @@ function AudioSection({
             sessionId={sessionId}
             isActiveSession={isActiveSession}
             onDone={onUploaded}
-            buttonLabel="Hochladen"
+            buttonLabel={audioFiles.length > 0 ? 'Hochladen' : 'Dateien hochladen'}
             existingFiles={audioFiles}
           />
-        </Group>
-      )}
+        </div>
+      </div>
 
       {audioFiles.length === 0 ? (
-        <div
-          className="rounded-md border border-dashed border-[var(--mantine-color-default-border)] bg-[var(--mantine-color-default-hover)] text-center"
-          style={{ padding: compact ? '20px' : '32px', color: 'var(--mantine-color-dimmed)' }}
-        >
-          <Text size="sm" c="dimmed">
-            Keine Aufnahmen für {title.replace(/ Aufnahmen$/, '')} vorhanden.
-          </Text>
-          <div className="mt-2">
-            <ManualUpload
-              patientId={patientId}
-              phase={phase}
-              patientStatus={patientStatus}
-              sessionId={sessionId}
-              isActiveSession={isActiveSession}
-              onDone={onUploaded}
-              buttonLabel="Dateien hochladen"
-              existingFiles={audioFiles}
-            />
-          </div>
+        <div className="px-3 py-3 text-[13px] text-[var(--app-text-secondary)]">
+          Keine Aufnahmen für {title.replace(/ Aufnahmen$/, '')} vorhanden.
         </div>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-px bg-[var(--app-border)] sm:grid-cols-2">
           {audioFiles.map((f, i) => (
-            <div
-              key={f.id}
-              className="rounded-md border p-3 transition-colors"
-              style={{
-                borderColor: selectedIds.has(f.id)
-                  ? 'var(--mantine-color-brand-6)'
-                  : 'var(--mantine-color-default-border)',
-              }}
-            >
-              <Group justify="space-between" mb="xs">
-                <Group gap={4}>
-                  <Checkbox size="xs" checked={selectedIds.has(f.id)} onChange={() => toggleSelect(f.id)} />
-                  <Text size="sm" fw={500}>
-                    Aufnahme {i + 1}
-                    {f.exercise_id && <Badge ml="xs" size="sm" variant="light">{f.exercise_id}</Badge>}
-                  </Text>
-                </Group>
+            <div key={f.id} className="bg-[var(--app-surface)] px-3 py-2">
+              <div className="mb-1 flex items-center justify-between gap-2">
+                <div className="flex min-w-0 items-center gap-2">
+                  <Checkbox
+                    size="xs"
+                    checked={selectedIds.has(f.id)}
+                    onChange={() => toggleSelect(f.id)}
+                    aria-label={`Aufnahme ${i + 1} auswählen`}
+                  />
+                  <span className="text-[13px] font-medium">Aufnahme {i + 1}</span>
+                  {f.exercise_id && (
+                    <span className="truncate text-xs text-[var(--app-text-secondary)]">{f.exercise_id}</span>
+                  )}
+                </div>
                 <AudioDeviceInfoBadge info={f.device_info} />
-              </Group>
+              </div>
               <AudioPlayer fileId={f.id} />
             </div>
           ))}
@@ -537,7 +550,7 @@ function AudioSection({
         onClose={() => setBulkOpen(false)}
         onDone={handleDone}
       />
-    </Card>
+    </section>
   );
 }
 
@@ -843,7 +856,7 @@ function ManualUpload({
 
   return (
     <>
-      <Button size="xs" variant="subtle" leftSection={<Upload size={14} />} onClick={handleOpen}>
+      <Button size="compact-xs" variant="default" leftSection={<Upload size={12} />} onClick={handleOpen}>
         {buttonLabel}
       </Button>
       <ConfirmDialog
@@ -887,7 +900,7 @@ function ManualUpload({
             return (
               <div
                 key={group.label}
-                className="rounded-lg border border-[var(--mantine-color-default-border)] p-3"
+                className="border-t-2 border-[var(--app-border)] pt-2"
               >
                 <Text fw={600} size="xs" c="dimmed" mb="xs" tt="uppercase">{group.label}</Text>
                 <Stack gap="xs">
@@ -939,34 +952,4 @@ function ManualUpload({
 function toDatetimeLocal(iso: string | null): string {
   if (!iso) return '';
   return iso.slice(0, 16);
-}
-
-function InfoField({
-  label,
-  value,
-  mono = false,
-  children,
-}: {
-  label: string;
-  value?: string;
-  mono?: boolean;
-  children?: React.ReactNode;
-}) {
-  return (
-    <div className="rounded-md border border-[var(--mantine-color-default-border)] bg-[var(--mantine-color-default-hover)] px-3 py-2.5">
-      <div className="text-[0.68rem] font-semibold uppercase tracking-wider text-[var(--mantine-color-dimmed)]">
-        {label}
-      </div>
-      <div className="mt-1">
-        {children ?? (
-          <div
-            className="text-[0.9375rem] font-semibold"
-            style={{ fontFamily: mono ? 'ui-monospace, Consolas, monospace' : undefined }}
-          >
-            {value || '-'}
-          </div>
-        )}
-      </div>
-    </div>
-  );
 }

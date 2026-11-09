@@ -1,71 +1,53 @@
-import { Badge, useMantineColorScheme } from '@mantine/core';
+import type { CSSProperties } from 'react';
 import type { PatientStatus, PredictionStatus } from '../types';
 
-export function PostOpSessionBadge({ sessionNumber, complete }: { sessionNumber: number; complete: boolean }) {
-  const { colorScheme } = useMantineColorScheme();
-  const isDark = colorScheme === 'dark';
-  const color = complete
-    ? isDark ? '#4ade80' : '#2e7d32'
-    : isDark ? '#60a5fa' : '#1565c0';
-  const bg = complete
-    ? isDark ? 'rgba(74,222,128,0.12)' : '#e8f5e9'
-    : isDark ? 'rgba(96,165,250,0.12)' : '#e3f2fd';
+type Tone = 'neutral' | 'success' | 'info' | 'danger';
+
+const TONE_COLOR: Record<Tone, string> = {
+  neutral: 'var(--app-text-secondary)',
+  success: 'var(--app-success)',
+  info: 'var(--app-primary)',
+  danger: 'var(--app-danger)',
+};
+
+/** Compact semantic label: colored dot + text, no filled pill. */
+function StatusLabel({ tone, children }: { tone: Tone; children: React.ReactNode }) {
   return (
-    <Badge
-      variant="filled"
-      size="lg"
-      radius="sm"
-      style={{ backgroundColor: bg, color, fontWeight: 500, textTransform: 'none' }}
+    <span
+      className="status-label"
+      style={{ ['--status-color' as string]: TONE_COLOR[tone], color: 'var(--app-text)' } as CSSProperties}
     >
-      Post-OP {sessionNumber} {complete ? 'vollständig' : 'unvollständig'}
-    </Badge>
+      {children}
+    </span>
   );
 }
+
+export function PostOpSessionBadge({ sessionNumber, complete }: { sessionNumber: number; complete: boolean }) {
+  return (
+    <StatusLabel tone={complete ? 'success' : 'info'}>
+      Post-OP {sessionNumber} {complete ? 'vollständig' : 'unvollständig'}
+    </StatusLabel>
+  );
+}
+
+const STATUS_CONFIG: Record<PatientStatus, { label: string; tone: Tone }> = {
+  NEW: { label: 'Prä-OP unvollständig', tone: 'neutral' },
+  CONSENT_GIVEN: { label: 'Prä-OP unvollständig', tone: 'neutral' },
+  PRE_OP_DONE: { label: 'Prä-OP vollständig', tone: 'success' },
+  POST_OP_STARTED: { label: 'Post-OP unvollständig', tone: 'neutral' },
+  POST_OP_DONE: { label: 'Post-OP vollständig', tone: 'success' },
+};
 
 export function StatusBadge({ status }: { status: PatientStatus }) {
-  const { colorScheme } = useMantineColorScheme();
-  const isDark = colorScheme === 'dark';
-
-  const config: Record<PatientStatus, { label: string; color: string; bg: string }> = {
-    NEW: {
-      label: 'Prä-OP unvollständig',
-      color: isDark ? '#9aafc4' : '#616161',
-      bg: isDark ? 'rgba(154,175,196,0.15)' : '#f5f5f5',
-    },
-    CONSENT_GIVEN: {
-      label: 'Prä-OP unvollständig',
-      color: isDark ? '#9aafc4' : '#616161',
-      bg: isDark ? 'rgba(154,175,196,0.15)' : '#f5f5f5',
-    },
-    PRE_OP_DONE: {
-      label: 'Prä-OP vollständig',
-      color: isDark ? '#4ade80' : '#2e7d32',
-      bg: isDark ? 'rgba(74,222,128,0.12)' : '#e8f5e9',
-    },
-    POST_OP_STARTED: {
-      label: 'Post-OP unvollständig',
-      color: isDark ? '#9aafc4' : '#616161',
-      bg: isDark ? 'rgba(154,175,196,0.15)' : '#f5f5f5',
-    },
-    POST_OP_DONE: {
-      label: 'Post-OP vollständig',
-      color: isDark ? '#4ade80' : '#2e7d32',
-      bg: isDark ? 'rgba(74,222,128,0.12)' : '#e8f5e9',
-    },
-  };
-
-  const c = config[status] ?? config.NEW;
-  return (
-    <Badge
-      variant="filled"
-      size="lg"
-      radius="sm"
-      style={{ backgroundColor: c.bg, color: c.color, fontWeight: 500, textTransform: 'none' }}
-    >
-      {c.label}
-    </Badge>
-  );
+  const c = STATUS_CONFIG[status] ?? STATUS_CONFIG.NEW;
+  return <StatusLabel tone={c.tone}>{c.label}</StatusLabel>;
 }
+
+const PREDICTION_CONFIG: Record<PredictionStatus, { label: string; tone: Tone }> = {
+  TODO: { label: 'Ausstehend...', tone: 'neutral' },
+  INFECTED: { label: 'RP', tone: 'danger' },
+  HEALTHY: { label: 'Keine RP', tone: 'success' },
+};
 
 export function PredictionBadge({
   value,
@@ -78,63 +60,24 @@ export function PredictionBadge({
   gradcamPrediction?: string | null;
   gradcamPercentage?: number | null;
 }) {
-  const { colorScheme } = useMantineColorScheme();
-  const isDark = colorScheme === 'dark';
-
-  const config: Record<PredictionStatus, { label: string; color: string; bg: string }> = {
-    TODO: {
-      label: 'Ausstehend...',
-      color: isDark ? '#7a90a8' : '#9e9e9e',
-      bg: isDark ? 'rgba(122,144,168,0.12)' : '#f5f5f5',
-    },
-    INFECTED: {
-      label: 'RP',
-      color: isDark ? '#f87171' : '#c62828',
-      bg: isDark ? 'rgba(248,113,113,0.12)' : '#ffebee',
-    },
-    HEALTHY: {
-      label: 'Keine RP',
-      color: isDark ? '#4ade80' : '#2e7d32',
-      bg: isDark ? 'rgba(74,222,128,0.12)' : '#e8f5e9',
-    },
-  };
-
-  const c = config[value] ?? config.TODO;
+  const c = PREDICTION_CONFIG[value] ?? PREDICTION_CONFIG.TODO;
   const label =
     value === 'TODO'
       ? c.label
       : `${c.label}${percentage != null && percentage > 0 ? ` (${percentage.toFixed(2)}%)` : ''}`;
 
   const gcKey = (gradcamPrediction?.toUpperCase() ?? 'TODO') as PredictionStatus;
-  const gcConfig = config[gcKey] ?? config.TODO;
+  const gc = PREDICTION_CONFIG[gcKey] ?? PREDICTION_CONFIG.TODO;
 
   return (
-    <>
-      <Badge
-        variant="filled"
-        radius="sm"
-        style={{ backgroundColor: c.bg, color: c.color, fontWeight: 500, textTransform: 'none' }}
-      >
-        {label}
-      </Badge>
+    <span className="inline-flex flex-wrap items-center gap-x-4 gap-y-1">
+      <StatusLabel tone={c.tone}>{label}</StatusLabel>
       {gradcamPrediction && (
-        <Badge
-          variant="filled"
-          radius="sm"
-          ml={4}
-          style={{
-            backgroundColor: gcConfig.bg,
-            color: gcConfig.color,
-            fontWeight: 500,
-            textTransform: 'none',
-          }}
-        >
-          GC: {gcConfig.label}
-          {gradcamPercentage != null && gradcamPercentage > 0
-            ? ` (${gradcamPercentage.toFixed(2)}%)`
-            : ''}
-        </Badge>
+        <StatusLabel tone={gc.tone}>
+          GC: {gc.label}
+          {gradcamPercentage != null && gradcamPercentage > 0 ? ` (${gradcamPercentage.toFixed(2)}%)` : ''}
+        </StatusLabel>
       )}
-    </>
+    </span>
   );
 }

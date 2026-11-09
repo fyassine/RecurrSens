@@ -2,19 +2,17 @@ import { useState, useMemo, useEffect, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ActionIcon,
-  Alert,
   Button,
   Checkbox,
   Loader,
   Menu,
-  Paper,
+  Select,
   Table,
   Text,
   TextInput,
   Tooltip,
   UnstyledButton,
 } from '@mantine/core';
-import { motion, AnimatePresence } from 'motion/react';
 import {
   Search,
   Download,
@@ -43,6 +41,8 @@ export type DashboardFilter = 'ALL' | 'PRE_OP' | 'POST_OP' | 'RP' | 'OVERDUE_DEL
 
 type SortKey = keyof Patient;
 type Order = 'asc' | 'desc';
+
+const FOOTER_TEXT = { fontSize: '0.8125rem', lineHeight: 1.25 } as const;
 
 const PAGE_SIZE_OPTIONS = [5, 10, 25];
 
@@ -221,9 +221,9 @@ export default function PatientList({
 
   return (
     <>
-      <Paper withBorder radius="md" className="overflow-clip">
+      <div className="section">
         {/* Toolbar */}
-        <div className="flex flex-wrap items-center gap-3 border-b border-[var(--mantine-color-default-border)] px-4 py-3">
+        <div className="flex flex-wrap items-center gap-3 border-b border-[var(--app-border)] px-3 py-2">
           <TextInput
             size="xs"
             placeholder="Patienten-ID suchen…"
@@ -231,35 +231,30 @@ export default function PatientList({
             onChange={(e) => setSearch(e.currentTarget.value)}
             leftSection={<Search size={14} />}
             className="max-w-[280px] flex-1"
+            aria-label="Patienten-ID suchen"
           />
+          {rpCount > 0 && activeFilter !== 'RP' && (
+            <span className="inline-flex items-center gap-1.5 text-[13px] font-medium text-[var(--app-danger)]">
+              <AlertTriangle size={14} />
+              {rpCount} mit RP-Vorhersage in dieser Ansicht
+            </span>
+          )}
           <div className="flex-1" />
-          {canDelete && (
-            <AnimatePresence>
-              {selectedIds.size > 0 && (
-                <motion.div
-                  initial={{ opacity: 0, y: -4 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -4 }}
-                  transition={{ duration: 0.15 }}
-                >
-                  <Button
-                    variant="outline"
-                    color="red"
-                    size="xs"
-                    leftSection={<Trash2 size={14} />}
-                    onClick={() => setBulkDeleteOpen(true)}
-                    className="min-w-[160px]"
-                  >
-                    {selectedIds.size === 1 ? 'Löschen' : `Löschen (${selectedIds.size})`}
-                  </Button>
-                </motion.div>
-              )}
-            </AnimatePresence>
+          {canDelete && selectedIds.size > 0 && (
+            <Button
+              variant="outline"
+              color="red"
+              size="xs"
+              leftSection={<Trash2 size={14} />}
+              onClick={() => setBulkDeleteOpen(true)}
+            >
+              {selectedIds.size === 1 ? 'Löschen' : `Löschen (${selectedIds.size})`}
+            </Button>
           )}
           {canExport && onExport && (
             <Button
-              variant="outline"
-              size="sm"
+              variant="default"
+              size="xs"
               leftSection={<Download size={14} />}
               onClick={onExport}
               loading={exporting}
@@ -269,27 +264,20 @@ export default function PatientList({
           )}
         </div>
 
-        {/* RP alert banner */}
-        {rpCount > 0 && activeFilter !== 'RP' && (
-          <Alert color="red" radius={0} icon={<AlertTriangle size={16} />}>
-            {rpCount} Patient{rpCount !== 1 ? 'en' : ''} mit RP-Vorhersage in dieser Ansicht
-          </Alert>
-        )}
-
         {/* Table */}
-        <Table.ScrollContainer minWidth={0}>
+        <Table.ScrollContainer minWidth={0} type="native" className="[&_tbody_tr:last-child]:border-b-0">
           <Table
-            verticalSpacing="xs"
+            verticalSpacing={6}
             horizontalSpacing="sm"
             striped={false}
             highlightOnHover
             stickyHeader={false}
-            style={{ fontVariantNumeric: 'tabular-nums' }}
+            fz={13}
           >
-            <Table.Thead bg="var(--mantine-color-body)">
+            <Table.Thead bg="var(--app-header-bg)">
               <Table.Tr>
                 {canDelete && (
-                  <Table.Th style={{ width: 44, textAlign: 'center' }}>
+                  <Table.Th style={{ width: 40, textAlign: 'center' }}>
                     <div className="flex justify-center">
                       <Checkbox
                         size="xs"
@@ -301,14 +289,14 @@ export default function PatientList({
                     </div>
                   </Table.Th>
                 )}
-                {!canDelete && <Table.Th style={{ width: 44 }} />}
+                {!canDelete && <Table.Th style={{ width: 40 }} />}
                 <SortHeader label="Patienten-ID" field="patient_id" orderBy={orderBy} order={order} onSort={handleSort} />
                 <SortHeader label="Erstellt am" field="created_at" orderBy={orderBy} order={order} onSort={handleSort} />
                 <SortHeader label="Status" field="status" orderBy={orderBy} order={order} onSort={handleSort} />
                 <SortHeader label="Löschdatum" field="expires_at" orderBy={orderBy} order={order} onSort={handleSort} />
                 <SortHeader label="Aufnahmedatum" field="pre_op_date" orderBy={orderBy} order={order} onSort={handleSort} />
                 <SortHeader label="Letzte Aktivität" field="last_activity" orderBy={orderBy} order={order} onSort={handleSort} />
-                <Table.Th style={{ width: 140, textAlign: 'center' }} />
+                <Table.Th style={{ width: 120 }} />
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
@@ -318,9 +306,9 @@ export default function PatientList({
                 const isExpired = !p.deleted_at && expiresAtMs <= nowMs;
                 const isExpiringSoon = !isExpired && expiresAtMs <= warningThresholdMs;
                 const expColor = p.deleted_at
-                  ? 'var(--mantine-color-green-6)'
+                  ? 'var(--app-success)'
                   : isExpired || isExpiringSoon
-                    ? 'var(--mantine-color-red-6)'
+                    ? 'var(--app-danger)'
                     : undefined;
                 const isMenuOpen = menuOpenId === p.id;
                 return (
@@ -342,60 +330,46 @@ export default function PatientList({
                         </div>
                       )}
                     </Table.Td>
-                    <Table.Td align="center">
-                      <div
-                        className="flex items-center justify-center gap-2 font-mono font-bold"
-                        style={{
-                          color: 'var(--mantine-color-brand-7)',
-                          fontVariantNumeric: 'tabular-nums',
-                        }}
-                      >
-                        <span
-                          className="h-[7px] w-[7px] shrink-0 rounded-full"
-                          style={{
-                            backgroundColor: isRP ? 'var(--mantine-color-red-6)' : 'transparent',
-                          }}
-                        />
+                    <Table.Td>
+                      <span className="id-text inline-flex items-center gap-2 font-semibold text-[var(--app-primary)]">
                         {p.patient_id}
-                      </div>
+                        {isRP && (
+                          <span className="rounded-[2px] border border-[var(--app-danger)] px-1 text-[11px] font-semibold leading-4 text-[var(--app-danger)]">
+                            RP
+                          </span>
+                        )}
+                      </span>
                     </Table.Td>
-                    <Table.Td align="center">{formatDate(p.created_at)}</Table.Td>
-                    <Table.Td align="center">
+                    <Table.Td className="tabular-nums" style={{ whiteSpace: 'nowrap' }}>{formatDate(p.created_at)}</Table.Td>
+                    <Table.Td>
                       <PatientStatusCell patient={p} />
                     </Table.Td>
-                    <Table.Td align="center" style={{ color: expColor, fontWeight: p.deleted_at || isExpired ? 700 : 400 }}>
+                    <Table.Td className="tabular-nums" style={{ whiteSpace: 'nowrap', color: expColor, fontWeight: p.deleted_at || isExpired ? 600 : 400 }}>
                       {p.deleted_at ? (
                         <span className="inline-flex items-center gap-1">
                           Gelöscht <Check size={14} />
                         </span>
                       ) : (
-                        <span className="inline-flex items-center justify-center gap-1">
+                        <span className="inline-flex items-center gap-1">
                           {formatDate(p.expires_at)}
-                          {isExpired && <AlertTriangle size={14} color="var(--mantine-color-red-6)" />}
+                          {isExpired && <AlertTriangle size={14} color="var(--app-danger)" />}
                         </span>
                       )}
                     </Table.Td>
                     <Table.Td
-                      align="center"
+                      className="tabular-nums"
                       style={{
                         whiteSpace: 'nowrap',
-                        fontSize: '0.8rem',
                         color: p.pre_op_date ? undefined : 'var(--mantine-color-dimmed)',
                       }}
                     >
                       {p.pre_op_date ? formatDateTime(p.pre_op_date) : NO_RECORDING_DATE}
                     </Table.Td>
-                    <Table.Td
-                      align="center"
-                      style={{
-                        whiteSpace: 'nowrap',
-                        fontSize: '0.8rem',
-                      }}
-                    >
+                    <Table.Td className="tabular-nums" style={{ whiteSpace: 'nowrap' }}>
                       {formatDateTime(p.last_activity)}
                     </Table.Td>
-                    <Table.Td align="center" style={{ width: 140 }} onClick={(e) => e.stopPropagation()}>
-                      <div className={`flex items-center justify-center gap-0.5 transition-opacity ${isMenuOpen ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+                    <Table.Td style={{ width: 120 }} onClick={(e) => e.stopPropagation()}>
+                      <div className="flex items-center justify-end gap-0.5">
                         <Menu position="bottom-end" withinPortal onOpen={() => setMenuOpenId(p.id)} onClose={() => setMenuOpenId(null)}>
                           <Menu.Target>
                             <ActionIcon
@@ -413,9 +387,9 @@ export default function PatientList({
                             <Menu.Item
                               leftSection={
                                 copiedId === p.id ? (
-                                  <Check size={14} color="var(--mantine-color-green-6)" />
+                                  <Check size={14} color="var(--app-success)" />
                                 ) : (
-                                  <Copy size={14} color="var(--mantine-color-cyan-6)" />
+                                  <Copy size={14} />
                                 )
                               }
                               onClick={() => {
@@ -427,7 +401,7 @@ export default function PatientList({
                               {copiedId === p.id ? 'Kopiert!' : 'Link kopieren'}
                             </Menu.Item>
                             <Menu.Item
-                              leftSection={<FileText size={14} color="var(--mantine-color-yellow-6)" />}
+                              leftSection={<FileText size={14} />}
                               onClick={() => downloadPatientPdf(p.id)}
                             >
                               PDF öffnen
@@ -515,7 +489,7 @@ export default function PatientList({
               })}
               {paginated.length === 0 && (
                 <Table.Tr>
-                  <Table.Td colSpan={8} align="center" py="xl">
+                  <Table.Td colSpan={8} align="center" py="lg">
                     <Text size="sm" c="dimmed">
                       {search
                         ? `Kein Patient mit ID „${search}" gefunden.`
@@ -530,85 +504,82 @@ export default function PatientList({
           </Table>
         </Table.ScrollContainer>
 
-        {/* Footer */}
-        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[var(--mantine-color-default-border)] bg-[var(--mantine-color-default-hover)] px-4 py-2.5">
-          <div className="flex items-center gap-4">
-            <Text size="sm" c="dimmed" style={{ fontVariantNumeric: 'tabular-nums' }}>
-              {sorted.length} Patient{sorted.length !== 1 ? 'en' : ''}
-            </Text>
-            <div className="flex items-center gap-1">
-              <Text size="sm" c="dimmed">Zeige:</Text>
-              {PAGE_SIZE_OPTIONS.map((size) => (
-                <UnstyledButton
-                  key={size}
-                  onClick={() => {
-                    const newTotal = Math.max(1, Math.ceil(sorted.length / size));
-                    setRowsPerPage(size);
-                    setPageIndex((p) => Math.min(p, newTotal - 1));
-                  }}
-                  className="flex h-7 w-8 items-center justify-center rounded text-sm transition-colors"
-                  style={{
-                    border: '1px solid',
-                    borderColor: rowsPerPage === size ? 'var(--mantine-color-brand-6)' : 'var(--mantine-color-default-border)',
-                    backgroundColor: rowsPerPage === size ? 'var(--mantine-color-brand-6)' : 'transparent',
-                    color: rowsPerPage === size ? '#fff' : 'var(--mantine-color-dimmed)',
-                    fontWeight: rowsPerPage === size ? 700 : 400,
-                    fontVariantNumeric: 'tabular-nums',
-                  }}
+        {/* Footer: pagination left, count + page size right. */}
+        <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 border-t border-[var(--app-border)] bg-[var(--app-header-bg)] px-3 py-1.5">
+          <div className="flex items-center gap-1">
+            {totalPages > 1 && (
+              <>
+                <ActionIcon
+                  aria-label="Vorherige Seite"
+                  size="sm"
+                  variant="subtle"
+                  color="gray"
+                  disabled={displayPage <= 1}
+                  onClick={() => setPageIndex(toInternalPage(displayPage - 1))}
                 >
-                  {size}
-                </UnstyledButton>
-              ))}
-            </div>
+                  <ChevronLeft size={14} />
+                </ActionIcon>
+                {pageButtons.map((btn, i) =>
+                  btn === '…' ? (
+                    <span key={`ellipsis-${i}`} className="px-1" style={{ ...FOOTER_TEXT, color: 'var(--mantine-color-dimmed)' }}>…</span>
+                  ) : (
+                    <UnstyledButton
+                      key={btn}
+                      onClick={() => setPageIndex(toInternalPage(btn as number))}
+                      aria-current={displayPage === btn ? 'page' : undefined}
+                      className="flex h-6 min-w-6 items-center justify-center rounded-[4px] px-1 transition-colors"
+                      style={{
+                        ...FOOTER_TEXT,
+                        border: '1px solid',
+                        borderColor: displayPage === btn ? 'var(--mantine-color-brand-filled)' : 'transparent',
+                        backgroundColor: displayPage === btn ? 'var(--mantine-color-brand-filled)' : 'transparent',
+                        color: displayPage === btn ? '#fff' : 'var(--mantine-color-dimmed)',
+                        fontWeight: displayPage === btn ? 600 : 400,
+                      }}
+                    >
+                      {btn as number}
+                    </UnstyledButton>
+                  ),
+                )}
+                <ActionIcon
+                  aria-label="Nächste Seite"
+                  size="sm"
+                  variant="subtle"
+                  color="gray"
+                  disabled={displayPage >= totalPages}
+                  onClick={() => setPageIndex(toInternalPage(displayPage + 1))}
+                >
+                  <ChevronRight size={14} />
+                </ActionIcon>
+              </>
+            )}
           </div>
 
-          {totalPages > 1 && (
-            <div className="flex items-center gap-1">
-              <ActionIcon
-                aria-label="Vorherige Seite"
-                size="sm"
-                variant="subtle"
-                color="gray"
-                disabled={displayPage <= 1}
-                onClick={() => setPageIndex(toInternalPage(displayPage - 1))}
-              >
-                <ChevronLeft size={14} />
-              </ActionIcon>
-              {pageButtons.map((btn, i) =>
-                btn === '…' ? (
-                  <Text key={`ellipsis-${i}`} size="sm" c="dimmed" px={4}>…</Text>
-                ) : (
-                  <UnstyledButton
-                    key={btn}
-                    onClick={() => setPageIndex(toInternalPage(btn as number))}
-                    className="flex h-7 w-8 items-center justify-center rounded text-sm transition-colors"
-                    style={{
-                      border: '1px solid',
-                      borderColor: displayPage === btn ? 'var(--mantine-color-brand-6)' : 'transparent',
-                      backgroundColor: displayPage === btn ? 'var(--mantine-color-brand-6)' : 'transparent',
-                      color: displayPage === btn ? '#fff' : 'var(--mantine-color-dimmed)',
-                      fontWeight: displayPage === btn ? 700 : 400,
-                      fontVariantNumeric: 'tabular-nums',
-                    }}
-                  >
-                    {btn as number}
-                  </UnstyledButton>
-                ),
-              )}
-              <ActionIcon
-                aria-label="Nächste Seite"
-                size="sm"
-                variant="subtle"
-                color="gray"
-                disabled={displayPage >= totalPages}
-                onClick={() => setPageIndex(toInternalPage(displayPage + 1))}
-              >
-                <ChevronRight size={14} />
-              </ActionIcon>
+          <div className="ml-auto flex items-center gap-4">
+            <span style={{ ...FOOTER_TEXT, color: 'var(--mantine-color-dimmed)' }}>
+              {sorted.length} Patient{sorted.length !== 1 ? 'en' : ''}
+            </span>
+            <div className="flex items-center gap-2">
+              <span style={{ ...FOOTER_TEXT, color: 'var(--mantine-color-dimmed)' }}>Zeilen:</span>
+              <Select
+                size="xs"
+                w={72}
+                aria-label="Einträge pro Seite"
+                allowDeselect={false}
+                data={PAGE_SIZE_OPTIONS.map((n) => String(n))}
+                value={String(rowsPerPage)}
+                onChange={(v) => {
+                  if (!v) return;
+                  const size = Number(v);
+                  const newTotal = Math.max(1, Math.ceil(sorted.length / size));
+                  setRowsPerPage(size);
+                  setPageIndex((pi) => Math.min(pi, newTotal - 1));
+                }}
+              />
             </div>
-          )}
+          </div>
         </div>
-      </Paper>
+      </div>
 
       <ConfirmDialog
         open={deleteOpen}
@@ -650,9 +621,9 @@ function PatientStatusCell({ patient }: { patient: Patient }) {
   }
 
   return (
-    <span className="inline-flex items-center justify-center gap-2">
+    <span className="inline-flex items-center gap-2">
       {badge}
-      {showLock && <Lock size={13} color="var(--mantine-color-yellow-6)" />}
+      {showLock && <Lock size={12} color="var(--app-warning)" aria-label="Gesperrt" />}
     </span>
   );
 }
@@ -672,11 +643,18 @@ function SortHeader({
 }) {
   const active = orderBy === field;
   return (
-    <Table.Th style={{ whiteSpace: 'nowrap', textAlign: 'center' }}>
+    <Table.Th style={{ whiteSpace: 'nowrap', textAlign: 'left' }}>
       <UnstyledButton
         onClick={() => onSort(field)}
-        className="mx-auto flex items-center gap-1 text-xs font-semibold uppercase tracking-wider"
-        style={{ color: active ? 'var(--mantine-color-text)' : 'var(--mantine-color-dimmed)' }}
+        className="flex items-center gap-1"
+        style={{
+          // Inline: Mantine's unlayered UnstyledButton font-size beats Tailwind's layered utilities.
+          fontSize: '0.75rem',
+          fontWeight: 600,
+          letterSpacing: 0,
+          textTransform: 'none',
+          color: active ? 'var(--mantine-color-text)' : 'var(--mantine-color-dimmed)',
+        }}
       >
         {label}
         {active &&

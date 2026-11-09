@@ -1,3 +1,4 @@
+@import './fonts.css';
 @import 'tailwindcss';
 @import '@mantine/core/styles.css';
 @import '@mantine/notifications/styles.css';
@@ -5,17 +6,104 @@
 
 @variant dark (&:where(.dark, .dark *));
 
+/* Identifiers (patient IDs, codes): same family as the UI, never a separate
+   monospace. Slashed zero keeps 0/O distinguishable. No tabular figures here:
+   in Inter and others, `tnum` also widens the hyphen, so "FAKE-001" and
+   "Prä-OP" look monospaced. Use `tabular-nums` only on pure number/date cells. */
+.id-text {
+  font-variant-numeric: slashed-zero;
+}
+
+/* Typography token. The stack ends in system fonts so text stays readable
+   while the web font loads. */
+:root {
+  --app-font-sans: 'Inter Variable', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
+/* Clinical palette. Color carries status or action, never decoration. */
+:root {
+  --app-bg: #f5f7f9;
+  --app-surface: #ffffff;
+  --app-header-bg: #f5f7f9;
+  --app-border: #dce2e8;
+  --app-text: #202b38;
+  --app-text-secondary: #697586;
+  --app-primary: #24558a;
+  --app-success: #27834a;
+  --app-warning: #b7791f;
+  --app-danger: #c43d3d;
+}
+
+:root[data-mantine-color-scheme='light'] {
+  --mantine-color-text: #202b38;
+  --mantine-color-dimmed: #697586;
+  --mantine-color-default-border: #dce2e8;
+}
+
+:root[data-mantine-color-scheme='dark'] {
+  --app-bg: #141c28;
+  --app-surface: #1a2433;
+  --app-header-bg: #1f2b3d;
+  --app-border: #2b3a4f;
+  --app-text: #d4e0ee;
+  --app-text-secondary: #8397ae;
+  --app-primary: #7aa3d2;
+  --app-success: #4ade80;
+  --app-warning: #e0b04f;
+  --app-danger: #f08080;
+  --mantine-color-default-border: #2b3a4f;
+}
+
+/* Flat section: white surface, 1px border, small radius, no shadow. */
+.section {
+  background: var(--app-surface);
+  border: 1px solid var(--app-border);
+  border-radius: 6px;
+  overflow: clip;
+}
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--app-border);
+  background: var(--app-header-bg);
+}
+.section-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--app-text);
+}
+
+/* Compact status label: dot + text, no background. */
+.status-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.status-label::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--status-color, var(--app-text-secondary));
+  flex-shrink: 0;
+}
+
 @theme {
-  --color-brand-50: #eef4fb;
-  --color-brand-100: #d6e3f1;
-  --color-brand-200: #a9c3e2;
-  --color-brand-300: #7aa3d2;
-  --color-brand-400: #5388c5;
-  --color-brand-500: #3c77bd;
-  --color-brand-600: #2f6fb9;
-  --color-brand-700: #235ea4;
-  --color-brand-800: #1b3f6e;
-  --color-brand-900: #0f2240;
+  --color-brand-50: #eef3f9;
+  --color-brand-100: #d9e4f0;
+  --color-brand-200: #b4c9e0;
+  --color-brand-300: #8aaacb;
+  --color-brand-400: #5f89b4;
+  --color-brand-500: #3f6ea0;
+  --color-brand-600: #2e6094;
+  --color-brand-700: #24558a;
+  --color-brand-800: #1b4271;
+  --color-brand-900: #12304f;
 
   --color-accent-500: #cf4f4f;
   --color-accent-600: #b53737;
@@ -26,6 +114,8 @@
   --color-border-default: #dde5ef;
   --color-text-primary: #1a2435;
   --color-text-secondary: #5a6e85;
+
+  --font-sans: var(--app-font-sans);
 }
 
 :where(.dark) {
@@ -44,7 +134,10 @@ body,
 
 body {
   margin: 0;
-  font-family: 'Inter', sans-serif;
+  font-family: var(--app-font-sans);
+  font-synthesis: none;
+  text-size-adjust: 100%;
+  -webkit-text-size-adjust: 100%;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
