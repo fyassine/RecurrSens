@@ -1,29 +1,20 @@
 import { useMemo } from 'react';
-import { Paper, Text, useMantineTheme } from '@mantine/core';
-import { Calendar } from 'lucide-react';
 import type { Patient } from '../types';
 
 const WEEK_MS = 7 * 86400000;
 
-function StatBox({ label, count, color }: { label: string; count: number; color: string }) {
+function Segment({ label, count, color }: { label: string; count: number; color: string }) {
   return (
-    <div className="flex min-w-0 flex-1 flex-col gap-1 rounded-md border border-[var(--mantine-color-default-border)] bg-[var(--mantine-color-body)] px-4 py-3">
-      <Text size="xs" fw={500} c="dimmed" lh={1.3}>
-        {label}
-      </Text>
-      <div className="text-3xl font-bold leading-none" style={{ color }}>
+    <div className="flex min-w-0 flex-1 items-baseline justify-between gap-3 border-r border-[var(--app-border)] px-3 py-2 last:border-r-0">
+      <span className="truncate text-[13px]" style={{ color }}>{label}</span>
+      <span className="text-base font-semibold tabular-nums" style={{ color }}>
         {count}
-      </div>
+      </span>
     </div>
   );
 }
 
 export default function AblaufdatenPanel({ patients }: { patients: Patient[] }) {
-  const theme = useMantineTheme();
-  const error = theme.colors.red[6];
-  const warning = theme.colors.yellow[6];
-  const info = theme.colors.cyan[6];
-  const success = theme.colors.green[6];
   const nowMs = Date.now();
 
   const stats = useMemo(() => {
@@ -43,19 +34,13 @@ export default function AblaufdatenPanel({ patients }: { patients: Patient[] }) 
   }, [patients, nowMs]);
 
   return (
-    <Paper withBorder radius="md" className="overflow-hidden">
-      <div className="flex items-center gap-2 border-b border-[var(--mantine-color-default-border)] bg-[var(--mantine-color-default-hover)] px-4 py-2">
-        <Calendar size={14} color={error} />
-        <Text fw={700} size="sm" style={{ color: error }}>
-          Ablaufdaten – Details
-        </Text>
+    <div className="section" aria-label="Ablaufdaten – Details">
+      <div className="flex flex-wrap">
+        <Segment label="Bereits abgelaufen" count={stats.expired} color="var(--app-danger)" />
+        <Segment label="Läuft diese Woche ab" count={stats.thisWeek} color="var(--app-warning)" />
+        <Segment label="Läuft nächste Woche ab" count={stats.nextWeek} color="var(--app-warning)" />
+        <Segment label="Aktiv & gültig" count={stats.valid} color="var(--app-success)" />
       </div>
-      <div className="flex gap-3 p-4">
-        <StatBox label="Bereits abgelaufen" count={stats.expired} color={error} />
-        <StatBox label="Läuft diese Woche ab" count={stats.thisWeek} color={warning} />
-        <StatBox label="Läuft nächste Woche ab" count={stats.nextWeek} color={info} />
-        <StatBox label="Aktiv & gültig" count={stats.valid} color={success} />
-      </div>
-    </Paper>
+    </div>
   );
 }

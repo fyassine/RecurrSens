@@ -20,7 +20,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       }}
     >
       <Topbar />
-      <main className="min-w-0 overflow-auto bg-[var(--mantine-color-body)] p-4 pb-28 md:p-6 md:pb-28" style={{ gridArea: 'main' }}>
+      <main className="min-w-0 overflow-auto [scrollbar-gutter:stable] bg-[var(--app-bg)] p-4 pb-28 md:p-6 md:pb-28" style={{ gridArea: 'main' }}>
         {children}
       </main>
 

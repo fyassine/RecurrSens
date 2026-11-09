@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import {
   Avatar,
   Badge,
-  Card,
   Collapse,
   Group,
   Loader,
@@ -97,13 +96,13 @@ function SectionCard({
   children: React.ReactNode;
 }) {
   return (
-    <Card withBorder radius="md" padding="lg">
-      <Group gap="xs" mb="md">
-        <div className="flex rounded-md bg-cyan-500/10 p-1.5 text-cyan-600">{icon}</div>
-        <Title order={4}>{title}</Title>
-      </Group>
-      {children}
-    </Card>
+    <section className="section">
+      <div className="section-header">
+        <span className="flex text-[var(--app-text-secondary)]">{icon}</span>
+        <h2 className="section-title m-0">{title}</h2>
+      </div>
+      <div className="p-4">{children}</div>
+    </section>
   );
 }
 
@@ -138,7 +137,7 @@ function AccountSection({ info }: { info: AccountInfo }) {
   return (
     <Stack gap="md">
       <Group gap="md">
-        <Avatar size={48} radius="xl" color="brand">
+        <Avatar size={40} radius="sm" color="brand">
           {initial}
         </Avatar>
         <div>
@@ -149,7 +148,7 @@ function AccountSection({ info }: { info: AccountInfo }) {
             @{info.username}
           </Text>
         </div>
-        <Badge color={info.role === 'SUPER_ADMIN' ? 'cyan' : 'gray'} variant="light" ml="auto">
+        <Badge color="gray" variant="outline" ml="auto">
           {roleLabel}
         </Badge>
       </Group>
@@ -206,7 +205,6 @@ function CurrentSessionSection({ info }: { info: AccountInfo }) {
       </UnstyledButton>
       <Collapse in={showAgent}>
         <Text
-          ff="monospace"
           size="xs"
           c="dimmed"
           className="mt-2 break-all rounded-md bg-[var(--mantine-color-default-hover)] p-2"
@@ -232,26 +230,26 @@ function LoginHistoryTable({ entries }: { entries: AccountInfo['login_history'] 
       <Table verticalSpacing="xs" fz="sm">
         <Table.Thead>
           <Table.Tr>
-            <Table.Th>Zeitpunkt</Table.Th>
-            <Table.Th>IP-Adresse</Table.Th>
-            <Table.Th>Browser</Table.Th>
-            <Table.Th>Betriebssystem</Table.Th>
-            <Table.Th>Gerät</Table.Th>
+            <Table.Th ta="center">Zeitpunkt</Table.Th>
+            <Table.Th ta="center">IP-Adresse</Table.Th>
+            <Table.Th ta="center">Browser</Table.Th>
+            <Table.Th ta="center">Betriebssystem</Table.Th>
+            <Table.Th ta="center">Gerät</Table.Th>
           </Table.Tr>
         </Table.Thead>
         <Table.Tbody>
           {entries.map((entry, i) => (
             <Table.Tr key={i}>
-              <Table.Td>{formatDateTime(entry.created_at)}</Table.Td>
-              <Table.Td>{entry.ip_address ?? '—'}</Table.Td>
-              <Table.Td>
+              <Table.Td ta="center">{formatDateTime(entry.created_at)}</Table.Td>
+              <Table.Td ta="center">{entry.ip_address ?? '—'}</Table.Td>
+              <Table.Td ta="center">
                 {entry.browser ? `${entry.browser} ${entry.browser_version ?? ''}`.trim() : '—'}
               </Table.Td>
-              <Table.Td>
+              <Table.Td ta="center">
                 {entry.os ? `${entry.os} ${entry.os_version ?? ''}`.trim() : '—'}
               </Table.Td>
-              <Table.Td>
-                <Group gap={6} wrap="nowrap">
+              <Table.Td ta="center">
+                <Group gap={6} wrap="nowrap" justify="center">
                   <DeviceIcon deviceType={entry.device_type} size={14} className="text-[var(--mantine-color-dimmed)]" />
                   {entry.device_type}
                 </Group>
@@ -305,14 +303,11 @@ export default function EinstellungenPage() {
   }
 
   return (
-    <Stack gap="lg" className="mx-auto max-w-3xl">
+    <Stack gap="md" className="mx-auto max-w-4xl">
       <div>
-        <Title order={3} fw={700} style={{ letterSpacing: '-0.02em' }}>
+        <Title order={3} fz={20} fw={600}>
           Einstellungen
         </Title>
-        <Text size="sm" c="dimmed">
-          Konto- und Sicherheitsinformationen
-        </Text>
       </div>
 
       <SectionCard icon={<UserIcon size={18} />} title="Konto">
