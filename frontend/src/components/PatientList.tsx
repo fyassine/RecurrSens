@@ -37,7 +37,17 @@ import { formatDate, formatDateTime, NO_RECORDING_DATE } from '../utils';
 import ConfirmDialog from './ConfirmDialog';
 import { useAppData } from '../context/AppDataContext';
 
-export type DashboardFilter = 'ALL' | 'PRE_OP' | 'POST_OP' | 'RP' | 'OVERDUE_DELETE';
+const WEEK_MS = 7 * 86400000;
+
+export type DashboardFilter =
+  | 'ALL'
+  | 'PRE_OP'
+  | 'POST_OP'
+  | 'RP'
+  | 'OVERDUE_DELETE'
+  | 'EXPIRES_THIS_WEEK'
+  | 'EXPIRES_NEXT_WEEK'
+  | 'EXPIRES_VALID';
 
 type SortKey = keyof Patient;
 type Order = 'asc' | 'desc';
@@ -103,6 +113,16 @@ export default function PatientList({
           return p.prediction_pre === 'INFECTED' || p.prediction_post === 'INFECTED';
         case 'OVERDUE_DELETE':
           return !p.deleted_at && new Date(p.expires_at).getTime() <= nowMs;
+        case 'EXPIRES_THIS_WEEK': {
+          const t = new Date(p.expires_at).getTime();
+          return !p.deleted_at && t > nowMs && t <= nowMs + WEEK_MS;
+        }
+        case 'EXPIRES_NEXT_WEEK': {
+          const t = new Date(p.expires_at).getTime();
+          return !p.deleted_at && t > nowMs + WEEK_MS && t <= nowMs + 2 * WEEK_MS;
+        }
+        case 'EXPIRES_VALID':
+          return !p.deleted_at && new Date(p.expires_at).getTime() > nowMs + 2 * WEEK_MS;
         default:
           return true;
       }
