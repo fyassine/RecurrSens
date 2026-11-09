@@ -14,7 +14,12 @@ const FILTER_LABELS: Record<DashboardFilter, string> = {
   POST_OP: 'Post-OP',
   RP: 'RP Vorhersagen',
   OVERDUE_DELETE: 'Zum Löschen',
+  EXPIRES_THIS_WEEK: 'Läuft diese Woche ab',
+  EXPIRES_NEXT_WEEK: 'Läuft nächste Woche ab',
+  EXPIRES_VALID: 'Aktiv & gültig',
 };
+
+const EXPIRY_FILTERS: DashboardFilter[] = ['OVERDUE_DELETE', 'EXPIRES_THIS_WEEK', 'EXPIRES_NEXT_WEEK', 'EXPIRES_VALID'];
 
 function SummarySegment({
   title,
@@ -195,13 +200,17 @@ export default function DashboardPage() {
         />
       </div>
 
-      {activeFilter === 'OVERDUE_DELETE' && (
+      {activeFilter && EXPIRY_FILTERS.includes(activeFilter) && (
         <div className="mb-3">
-          <AblaufdatenPanel patients={patients} />
+          <AblaufdatenPanel
+            patients={patients}
+            activeFilter={activeFilter}
+            onSelect={(f) => setActiveFilter(f === activeFilter ? 'OVERDUE_DELETE' : f)}
+          />
         </div>
       )}
 
-      {activeFilter && activeFilter !== 'OVERDUE_DELETE' && (
+      {activeFilter && !EXPIRY_FILTERS.includes(activeFilter) && (
         <div className="mb-3 flex items-center gap-2 text-[13px] text-[var(--app-text-secondary)]">
           Filter: <strong className="font-semibold text-[var(--app-text)]">{FILTER_LABELS[activeFilter]}</strong>
           <button
