@@ -43,7 +43,7 @@ function SummarySegment({
       aria-pressed={active}
       className="flex min-w-0 flex-1 cursor-pointer items-baseline justify-between gap-3 border-0 border-b-2 border-r border-solid bg-transparent px-3 py-2 text-left last:border-r-0 hover:bg-[var(--app-header-bg)]"
       style={{
-        borderBottomColor: active ? 'var(--app-primary)' : 'transparent',
+        borderBottomColor: active ? (alert ? 'var(--app-danger)' : 'var(--app-primary)') : 'transparent',
         borderRightColor: 'var(--app-border)',
         font: 'inherit',
       }}
@@ -194,7 +194,7 @@ export default function DashboardPage() {
           title="Zum Löschen"
           value={stats.expired}
           alert
-          active={activeFilter === 'OVERDUE_DELETE'}
+          active={activeFilter !== null && EXPIRY_FILTERS.includes(activeFilter)}
           tooltip="Patienten mit abgelaufener Datenfrist – Löschung erforderlich"
           onClick={() => handleCardClick('OVERDUE_DELETE')}
         />
