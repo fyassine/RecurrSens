@@ -212,6 +212,14 @@ class LiveDemoAnalyzeView(APIView):
                     if gradcam
                     else None
                 ),
+                # Spectrogram + highlighted region per recording, in upload
+                # order (the UI knows which vowel is which). Pictures of the
+                # spectrum only; null when the backend has none.
+                'explanations': (
+                    [e.to_payload() for e in result.explanations]
+                    if result.explanations
+                    else None
+                ),
                 'backend': result.backend,
                 'recordings': len(files),
                 # Read by the UI to show the visitor that nothing was kept.

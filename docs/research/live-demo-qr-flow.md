@@ -235,13 +235,22 @@ very work this project builds on. The confidence is presented as *the model's
 certainty about this recording*, adjacent to clinical judgement rather than a
 substitute for it.
 
-Two further elements:
+Further elements:
 
-4. **A privacy confirmation** — "Ihre Aufnahmen wurden ausschließlich im
+4. **Where the model looked (Grad-CAM).** Below the confidence, one block per
+   vowel (I, A, U) shows the log-mel spectrogram of the recording next to the
+   same spectrogram with the Grad-CAM map on top (viridis, alpha 0.55; frequency
+   axis in kHz on the mel scale, time in seconds) and the model's probability for
+   that recording. The inference service sends two small byte grids per recording
+   (`explanations`, §5.5); the browser draws them on canvas. They are pictures of
+   the spectrum, not audio, they exist only in the response, and the section is
+   hidden when the backend sends none (the stub). The caption states that the
+   highlight is not a clinical statement.
+5. **A privacy confirmation** — "Ihre Aufnahmen wurden ausschließlich im
    Arbeitsspeicher verarbeitet und sind bereits gelöscht." Driven by the API's
    `stored: false` field, which is hardcoded because the endpoint has no branch
    that stores.
-5. **A standing disclaimer** in the footer: demonstration without diagnostic
+6. **A standing disclaimer** in the footer: demonstration without diagnostic
    validity.
 
 ---
@@ -340,7 +349,27 @@ DEMO_INFERENCE_PREDICT_PATH=/predict-upload
 
 No code change. Re-read §2.5 and §3.2 before demoing with the real model.
 
-### 5.4 Adding a different backend
+### 5.4 The `explanations` block
+
+`/predict-upload` may add `explanations`, one entry per uploaded recording in
+upload order (the UI maps them to I, A, U by position):
+
+```json
+{"duration_s": 3.2, "probability": 0.31,
+ "mel": {"n_mels": 128, "n_frames": 138, "data": "<base64 uint8, 0..255 = -80..0 dB>"},
+ "cam": {"size": 64,  "data": "<base64 uint8, 0..255 = 0..1>"},
+ "phonation_overlap": 0.9, "glottal_band_overlap": 0.6, "formant_band_overlap": 0.4}
+```
+
+Both grids are row-major with row 0 = lowest mel bin; the map spans the clip's
+whole time axis. `HttpDemoInferenceBackend` validates every entry (decoded size
+equals the declared shape, bounded dimensions, fractions in 0..1) and drops the
+whole list if any entry is malformed; the verdict never depends on it. The
+computation (image build, Grad-CAM on `backbone.layer4`, phonation and band
+overlaps) is the one in the research notebooks `REPORT_GRADCAM_VISITS` and
+`AUDIT_GRADCAM`.
+
+### 5.5 Adding a different backend
 
 Implement `analyze(*, recordings, gender, age)` — `recordings` is a sequence of
 `DemoAudio` (one per vowel) — returning a `DemoInferenceResult`, and register
@@ -391,5 +420,6 @@ patient to create, and no cleanup afterwards, because nothing was kept.
 | `backend/patients/tests/test_demo.py` | Privacy regression tests |
 | `backend/patients/management/commands/demo_qr.py` | Booth QR / URL generation |
 | `frontend/src/pages/LiveDemo.tsx` | Three-vowel recording flow + result visualisation |
+| `frontend/src/components/DemoSaliency.tsx`, `src/utils/spectrogram.ts` | Spectrogram + Grad-CAM canvas drawing |
 | `frontend/src/api/client.ts` | `analyzeDemoRecording()` |
 | `backend/config/settings/base.py` | `DEMO_*` settings |

@@ -40,6 +40,7 @@ import {
 } from '@mantine/core';
 import { AlertTriangle, CheckCircle2, RotateCcw, ShieldCheck, Timer } from 'lucide-react';
 import AudioRecorder from '../components/AudioRecorder';
+import DemoSaliency from '../components/DemoSaliency';
 import { analyzeDemoRecording, type DemoAnalysis, type DemoRecording } from '../api/client';
 import { calculateRMS, getAudioDuration } from '../utils';
 
@@ -436,6 +437,16 @@ function ResultStep({ result, onRestart }: { result: DemoAnalysis; onRestart: ()
           Gemittelt über {result.recordings} Aufnahmen (I, A, U)
         </Text>
       </div>
+
+      {result.explanations && result.explanations.length > 0 && (
+        <DemoSaliency
+          explanations={result.explanations}
+          labels={DEMO_EXERCISES.map((e) => ({
+            exerciseId: e.exerciseId,
+            short: e.title.replace(' (normale Tonlage)', ''),
+          }))}
+        />
+      )}
 
       {/* Framing borrowed from the reference paper ("Identifying bias in models
           that detect vocal fold paralysis from audio recordings using

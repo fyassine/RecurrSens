@@ -7,6 +7,7 @@ normal persistent upload path, `test_analyze_persists_nothing` is what should
 fail first.
 """
 
+import base64
 import uuid
 from unittest import mock
 
@@ -265,6 +266,97 @@ class HttpBackendParsingTest(TestCase):
 
         sent_data = mock_post.call_args.kwargs['data']
         self.assertEqual(sent_data, {'sex': 'male', 'age': '45'})
+
+
+def explanation_payload(n_mels=4, n_frames=6, cam_size=3, **overrides):
+    """One `explanations` entry as the real service sends it."""
+    payload = {
+        'duration_s': 3.2,
+        'probability': 0.31,
+        'mel': {
+            'n_mels': n_mels,
+            'n_frames': n_frames,
+            'data': base64.b64encode(bytes(n_mels * n_frames)).decode(),
+        },
+        'cam': {'size': cam_size, 'data': base64.b64encode(bytes(cam_size**2)).decode()},
+        'phonation_overlap': 0.9,
+        'glottal_band_overlap': 0.6,
+        'formant_band_overlap': 0.4,
+    }
+    return payload | overrides
+
+
+@override_settings(DEMO_MAX_RECORDINGS=3)
+class ExplanationParsingTest(TestCase):
+    """The Grad-CAM pictures are optional and validated; the verdict never depends on them."""
+
+    FILM = {'prediction': 'INFECTED', 'percentage': 62.0}
+
+    def setUp(self):
+        self.backend = HttpDemoInferenceBackend()
+
+    def parse(self, explanations):
+        return self.backend._parse({'film_classifier': self.FILM, 'explanations': explanations})
+
+    def test_parses_one_entry_per_recording_in_order(self):
+        result = self.parse([explanation_payload(duration_s=1.0), explanation_payload(duration_s=2.0)])
+        self.assertEqual([e.duration_s for e in result.explanations], [1.0, 2.0])
+        self.assertEqual(result.explanations[0].n_mels, 4)
+        self.assertEqual(result.explanations[0].cam_size, 3)
+
+    def test_payload_round_trips_the_service_shape(self):
+        entry = explanation_payload()
+        self.assertEqual(self.parse([entry]).explanations[0].to_payload(), entry)
+
+    def test_absent_explanations_are_none(self):
+        self.assertIsNone(self.backend._parse({'film_classifier': self.FILM}).explanations)
+        self.assertIsNone(self.parse([]).explanations)
+        self.assertIsNone(self.parse('nope').explanations)
+
+    def test_malformed_entry_drops_all_explanations_but_keeps_the_verdict(self):
+        bad_entries = [
+            explanation_payload(mel={'n_mels': 4, 'n_frames': 6, 'data': 'AAAA'}),  # wrong size
+            explanation_payload(cam={'size': 3, 'data': '!!notbase64!!'}),
+            explanation_payload(probability=1.5),
+            explanation_payload(duration_s=0),
+            explanation_payload(n_mels=10_000, n_frames=1),
+            'not a dict',
+        ]
+        for bad in bad_entries:
+            with self.subTest(bad=str(bad)[:40]):
+                result = self.parse([explanation_payload(), bad])
+                self.assertIsNone(result.explanations)
+                self.assertEqual(result.film_classifier.prediction, INFECTED)
+
+    def test_more_entries_than_allowed_recordings_are_dropped(self):
+        self.assertIsNone(self.parse([explanation_payload()] * 4).explanations)
+
+
+@override_settings(DEMO_MODE_ENABLED=True, DEMO_INFERENCE_BACKEND='http')
+class ExplanationEndpointTest(TestCase):
+    @mock.patch('patients.demo_inference.requests.post')
+    def test_endpoint_relays_explanations_and_still_persists_nothing(self, mock_post):
+        mock_post.return_value.raise_for_status.return_value = None
+        mock_post.return_value.json.return_value = {
+            'film_classifier': {'prediction': 'HEALTHY', 'percentage': 10.0},
+            'explanations': [explanation_payload()] * 3,
+        }
+        response = APIClient().post(
+            f'/api/demo/{uuid.uuid4()}/analyze/', {'file': demo_uploads()}, format='multipart'
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data['explanations']), 3)
+        self.assertEqual(response.data['explanations'][0]['cam']['size'], 3)
+        self.assertEqual(Patient.objects.count(), 0)
+        self.assertEqual(AudioFile.objects.count(), 0)
+
+    def test_stub_backend_has_no_explanations(self):
+        with override_settings(DEMO_INFERENCE_BACKEND='stub'):
+            response = APIClient().post(
+                f'/api/demo/{uuid.uuid4()}/analyze/', {'file': demo_uploads()}, format='multipart'
+            )
+        self.assertIsNone(response.data['explanations'])
 
 
 class ServiceSexMappingTest(TestCase):

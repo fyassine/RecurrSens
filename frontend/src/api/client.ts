@@ -376,11 +376,29 @@ export async function uploadAudio(
 // See docs/research/live-demo-qr-flow.md before changing this.
 // ---------------------------------------------------------------------------
 
+/**
+ * Grad-CAM picture of one recording. Both grids are base64 uint8 with row 0 =
+ * lowest mel bin: `mel` is n_mels x n_frames (0..255 = -80..0 dB), `cam` is
+ * size x size (0..255 = 0..1) spanning the clip's whole time axis.
+ */
+export type DemoExplanation = {
+  duration_s: number;
+  /** The model's probability of an abnormal finding for this recording, 0..1. */
+  probability: number;
+  mel: { n_mels: number; n_frames: number; data: string };
+  cam: { size: number; data: string };
+  phonation_overlap: number;
+  glottal_band_overlap: number;
+  formant_band_overlap: number;
+};
+
 export type DemoAnalysis = {
   prediction: string;
   confidence: number;
   favorable: boolean;
   gradcam: { prediction: string; confidence: number } | null;
+  /** One entry per recording, in upload order (I, A, U); null when unavailable. */
+  explanations: DemoExplanation[] | null;
   backend: string;
   /** Number of recordings the verdict was averaged over (one per vowel). */
   recordings: number;

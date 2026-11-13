@@ -39,6 +39,8 @@ real service's `/predict` response (`film_classifier` / `gradcam_pro`, each with
 Selection is via `DEMO_INFERENCE_BACKEND` ('stub' | 'http').
 """
 
+import base64
+import binascii
 import hashlib
 import logging
 from collections.abc import Sequence
@@ -90,16 +92,57 @@ class DemoPrediction:
 
 
 @dataclass(frozen=True)
+class DemoExplanation:
+    """
+    Grad-CAM explanation of one recording: the log-mel spectrogram the model saw
+    and the region of it the decision came from. Derived data only (a picture
+    of the spectrum), never the audio. Mirrors one entry of the real service's
+    `explanations` list; the two byte grids are base64 uint8 as received.
+
+    `mel` is `n_mels x n_frames` (row 0 = lowest mel bin, 0..255 = -80..0 dB);
+    `cam` is `cam_size x cam_size` (row 0 = lowest mel bin, columns span the
+    clip's time axis, 0..255 = 0..1).
+    """
+
+    duration_s: float
+    probability: float
+    n_mels: int
+    n_frames: int
+    mel: str
+    cam_size: int
+    cam: str
+    phonation_overlap: float
+    glottal_band_overlap: float
+    formant_band_overlap: float
+
+    def to_payload(self) -> dict:
+        """The shape the real service sent and the frontend reads."""
+        return {
+            'duration_s': self.duration_s,
+            'probability': self.probability,
+            'mel': {'n_mels': self.n_mels, 'n_frames': self.n_frames, 'data': self.mel},
+            'cam': {'size': self.cam_size, 'data': self.cam},
+            'phonation_overlap': self.phonation_overlap,
+            'glottal_band_overlap': self.glottal_band_overlap,
+            'formant_band_overlap': self.formant_band_overlap,
+        }
+
+
+@dataclass(frozen=True)
 class DemoInferenceResult:
     """
     Mirrors the real service's `InferenceResult` (`/predict` response body).
 
-    Deliberately holds only the verdict — never the audio it was derived from.
+    Deliberately holds only the verdict and the explanation pictures — never the
+    audio they were derived from.
     """
 
     film_classifier: DemoPrediction
     gradcam_pro: DemoPrediction | None
     backend: str
+    # One entry per uploaded recording, in upload order. None when the backend
+    # has no explanation to give (the stub, or a service without Grad-CAM).
+    explanations: tuple[DemoExplanation, ...] | None = None
 
 
 class DemoInferenceBackend(Protocol):
@@ -201,6 +244,70 @@ def _service_sex(gender: str) -> str:
     return 'female' if gender.strip().upper() in ('F', 'W') else 'male'
 
 
+# Upper bounds for the explanation grids, so a misbehaving service cannot make
+# this view relay an arbitrarily large body to a booth visitor's phone.
+_MAX_MEL_BINS = 256
+_MAX_MEL_FRAMES = 2000
+_MAX_CAM_SIZE = 224
+
+
+def _grid_matches(encoded, expected_bytes: int) -> bool:
+    if not isinstance(encoded, str):
+        return False
+    try:
+        return len(base64.b64decode(encoded, validate=True)) == expected_bytes
+    except (binascii.Error, ValueError):
+        return False
+
+
+def _unit_interval(value) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        return None
+    return float(value) if 0.0 <= value <= 1.0 else None
+
+
+def _parse_explanation(item) -> DemoExplanation | None:
+    if not isinstance(item, dict):
+        return None
+    mel, cam = item.get('mel'), item.get('cam')
+    if not isinstance(mel, dict) or not isinstance(cam, dict):
+        return None
+    n_mels, n_frames, cam_size = mel.get('n_mels'), mel.get('n_frames'), cam.get('size')
+    if not all(isinstance(v, int) and not isinstance(v, bool) for v in (n_mels, n_frames, cam_size)):
+        return None
+    if not (1 <= n_mels <= _MAX_MEL_BINS and 1 <= n_frames <= _MAX_MEL_FRAMES):
+        return None
+    if not 1 <= cam_size <= _MAX_CAM_SIZE:
+        return None
+    if not _grid_matches(mel.get('data'), n_mels * n_frames):
+        return None
+    if not _grid_matches(cam.get('data'), cam_size * cam_size):
+        return None
+
+    duration = item.get('duration_s')
+    if isinstance(duration, bool) or not isinstance(duration, int | float) or duration <= 0:
+        return None
+    fractions = [
+        _unit_interval(item.get(key))
+        for key in ('probability', 'phonation_overlap', 'glottal_band_overlap', 'formant_band_overlap')
+    ]
+    if any(f is None for f in fractions):
+        return None
+
+    return DemoExplanation(
+        duration_s=float(duration),
+        probability=fractions[0],
+        n_mels=n_mels,
+        n_frames=n_frames,
+        mel=mel['data'],
+        cam_size=cam_size,
+        cam=cam['data'],
+        phonation_overlap=fractions[1],
+        glottal_band_overlap=fractions[2],
+        formant_band_overlap=fractions[3],
+    )
+
+
 class HttpDemoInferenceBackend:
     """
     Posts the in-memory recording to the real inference service and returns its
@@ -261,7 +368,25 @@ class HttpDemoInferenceBackend:
             film_classifier=film,
             gradcam_pro=self._prediction(payload.get('gradcam_pro')),
             backend=self.name,
+            explanations=self._explanations(payload.get('explanations')),
         )
+
+    def _explanations(self, block) -> tuple[DemoExplanation, ...] | None:
+        """Validated explanation list, or None if absent or malformed in any
+        entry: a half-usable picture is worse than none, and the verdict above
+        does not depend on it."""
+        if not isinstance(block, list) or not block:
+            return None
+        if len(block) > settings.DEMO_MAX_RECORDINGS:
+            return None
+        parsed = []
+        for item in block:
+            explanation = _parse_explanation(item)
+            if explanation is None:
+                logger.warning('Live demo inference returned a malformed explanation; dropped')
+                return None
+            parsed.append(explanation)
+        return tuple(parsed)
 
     def _prediction(self, block) -> DemoPrediction | None:
         if not isinstance(block, dict):
