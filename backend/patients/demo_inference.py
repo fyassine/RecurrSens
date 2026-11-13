@@ -137,12 +137,21 @@ class DemoInferenceResult:
     audio they were derived from.
     """
 
-    film_classifier: DemoPrediction
+    film_classifier: DemoPrediction | None
     gradcam_pro: DemoPrediction | None
     backend: str
     # One entry per uploaded recording, in upload order. None when the backend
     # has no explanation to give (the stub, or a service without Grad-CAM).
     explanations: tuple[DemoExplanation, ...] | None = None
+
+    @property
+    def verdict(self) -> DemoPrediction:
+        """What the visitor is shown: the Grad-CAM model's verdict when the service sends one
+        (the demo is judged by that model alone, and its explanation pictures belong to it),
+        else the FiLM verdict of an older service."""
+        verdict = self.gradcam_pro or self.film_classifier
+        assert verdict is not None  # enforced by `HttpDemoInferenceBackend._parse`
+        return verdict
 
 
 class DemoInferenceBackend(Protocol):
@@ -360,13 +369,14 @@ class HttpDemoInferenceBackend:
 
     def _parse(self, payload: dict) -> DemoInferenceResult:
         film = self._prediction(payload.get('film_classifier'))
-        if film is None:
-            logger.warning('Live demo inference response had no usable film_classifier block')
+        gradcam = self._prediction(payload.get('gradcam_pro'))
+        if film is None and gradcam is None:
+            logger.warning('Live demo inference response had no usable gradcam_pro or film_classifier block')
             raise DemoInferenceError('Analyse derzeit nicht verfügbar.')
 
         return DemoInferenceResult(
             film_classifier=film,
-            gradcam_pro=self._prediction(payload.get('gradcam_pro')),
+            gradcam_pro=gradcam,
             backend=self.name,
             explanations=self._explanations(payload.get('explanations')),
         )

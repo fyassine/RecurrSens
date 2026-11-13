@@ -246,9 +246,33 @@ class HttpBackendParsingTest(TestCase):
         )
         self.assertIsNone(result.gradcam_pro)
 
-    def test_missing_film_block_raises(self):
+    def test_missing_both_verdict_blocks_raises(self):
         with self.assertRaises(DemoInferenceError):
-            self.backend._parse({'gradcam_pro': {'prediction': 'HEALTHY', 'percentage': 90.0}})
+            self.backend._parse({'explanations': []})
+        with self.assertRaises(DemoInferenceError):
+            self.backend._parse({'film_classifier': None, 'gradcam_pro': {'prediction': 'X'}})
+
+    def test_gradcam_alone_is_a_valid_response(self):
+        result = self.backend._parse({'gradcam_pro': {'prediction': 'INFECTED', 'percentage': 80.0}})
+        self.assertIsNone(result.film_classifier)
+        self.assertEqual(result.verdict.prediction, INFECTED)
+        self.assertEqual(result.verdict.percentage, 80.0)
+
+    def test_verdict_is_the_gradcam_model_when_both_are_present(self):
+        result = self.backend._parse(
+            {
+                'film_classifier': {'prediction': 'INFECTED', 'percentage': 90.0},
+                'gradcam_pro': {'prediction': 'HEALTHY', 'percentage': 20.0},
+            }
+        )
+        self.assertEqual(result.verdict.prediction, HEALTHY)
+        self.assertEqual(result.verdict.percentage, 80.0)  # inverted: confidence in HEALTHY
+
+    def test_verdict_falls_back_to_film_for_a_service_without_gradcam(self):
+        result = self.backend._parse(
+            {'film_classifier': {'prediction': 'INFECTED', 'percentage': 62.0}}
+        )
+        self.assertEqual(result.verdict.prediction, INFECTED)
 
     @mock.patch('patients.demo_inference.requests.post')
     def test_sends_one_file_part_per_recording(self, mock_post):
@@ -350,6 +374,21 @@ class ExplanationEndpointTest(TestCase):
         self.assertEqual(response.data['explanations'][0]['cam']['size'], 3)
         self.assertEqual(Patient.objects.count(), 0)
         self.assertEqual(AudioFile.objects.count(), 0)
+
+    @mock.patch('patients.demo_inference.requests.post')
+    def test_endpoint_reports_the_gradcam_verdict(self, mock_post):
+        mock_post.return_value.raise_for_status.return_value = None
+        mock_post.return_value.json.return_value = {
+            'film_classifier': {'prediction': 'INFECTED', 'percentage': 95.0},
+            'gradcam_pro': {'prediction': 'HEALTHY', 'percentage': 30.0},
+            'explanations': [explanation_payload()] * 3,
+        }
+        response = APIClient().post(
+            f'/api/demo/{uuid.uuid4()}/analyze/', {'file': demo_uploads()}, format='multipart'
+        )
+        self.assertEqual(response.data['prediction'], HEALTHY)
+        self.assertEqual(response.data['confidence'], 70.0)
+        self.assertTrue(response.data['favorable'])
 
     def test_stub_backend_has_no_explanations(self):
         with override_settings(DEMO_INFERENCE_BACKEND='stub'):

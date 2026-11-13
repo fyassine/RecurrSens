@@ -191,22 +191,22 @@ class LiveDemoAnalyzeView(APIView):
             # intent survives future edits to the code below.
             del recordings
 
-        film = result.film_classifier
+        verdict = result.verdict
         gradcam = result.gradcam_pro
 
         # Deliberately free of anything that could tie back to a person: the
         # booth token, the recording count, and the verdict, nothing else.
         logger.info(
             f'Live demo analysis for booth token {token} via {result.backend} backend '
-            f'({len(files)} recordings): {film.prediction} ({film.percentage}%) — '
+            f'({len(files)} recordings): {verdict.prediction} ({verdict.percentage}%) — '
             f'nothing persisted'
         )
 
         return Response(
             {
-                'prediction': film.prediction,
-                'confidence': film.percentage,
-                'favorable': film.is_favorable,
+                'prediction': verdict.prediction,
+                'confidence': verdict.percentage,
+                'favorable': verdict.is_favorable,
                 'gradcam': (
                     {'prediction': gradcam.prediction, 'confidence': gradcam.percentage}
                     if gradcam
