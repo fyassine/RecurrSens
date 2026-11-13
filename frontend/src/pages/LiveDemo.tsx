@@ -23,11 +23,10 @@
  * ===========================================================================
  */
 
-import { useMemo, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { useParams, useSearchParams } from 'react-router-dom';
 import {
   Alert,
-  Anchor,
   Button,
   Card,
   Chip,
@@ -38,9 +37,11 @@ import {
   Text,
   Title,
 } from '@mantine/core';
-import { AlertTriangle, CheckCircle2, RotateCcw, ShieldCheck, Timer } from 'lucide-react';
+import { AnimatePresence, motion } from 'motion/react';
+import { AlertTriangle, ArrowLeft, CheckCircle2, RotateCcw, ShieldCheck, Timer } from 'lucide-react';
 import AudioRecorder from '../components/AudioRecorder';
 import DemoSaliency from '../components/DemoSaliency';
+import WaveLogo from '../components/WaveLogo';
 import { analyzeDemoRecording, type DemoAnalysis, type DemoRecording } from '../api/client';
 import { calculateRMS, getAudioDuration } from '../utils';
 
@@ -103,6 +104,9 @@ export default function LiveDemo() {
     [tokenFromUrl],
   );
 
+  // DEV-only preview helper: `?mock=1` (or `?mock=ok`) jumps to a synthetic result.
+  const [searchParams] = useSearchParams();
+
   const [phase, setPhase] = useState<Phase>('record');
   const [currentIndex, setCurrentIndex] = useState(0);
   const [blobs, setBlobs] = useState<(Blob | null)[]>(() => DEMO_EXERCISES.map(() => null));
@@ -111,6 +115,17 @@ export default function LiveDemo() {
   const [result, setResult] = useState<DemoAnalysis | null>(null);
   const [sex, setSex] = useState<'M' | 'F' | null>(null);
   const [ageBand, setAgeBand] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!import.meta.env.DEV || searchParams.get('mock') === null) return;
+    const favorable = searchParams.get('mock') === 'ok';
+    void import('../dev/demoMock').then(({ mockDemoAnalysis }) => {
+      setResult(mockDemoAnalysis(favorable));
+      setPhase('result');
+    });
+    // Run once on mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const currentExercise = DEMO_EXERCISES[currentIndex];
   const isLastExercise = currentIndex === DEMO_EXERCISES.length - 1;
@@ -211,58 +226,80 @@ export default function LiveDemo() {
   };
 
   return (
-    <div className="mx-auto flex min-h-screen max-w-[560px] flex-col justify-center p-4">
-      <Card withBorder radius="md" p="lg">
-        <Title order={3} mb={4}>
-          RecurrSens — Live-Demo
-        </Title>
-        <Text size="sm" c="dimmed" mb="lg">
-          Drei kurze Aufnahmen, ein Ergebnis. Ihre Stimme wird nicht gespeichert.
-        </Text>
-
-        {phase === 'record' && (
-          <RecordStep
-            exercise={currentExercise}
-            stepNumber={currentIndex + 1}
-            stepCount={DEMO_EXERCISES.length}
-            isLastExercise={isLastExercise}
-            hasBlob={!!currentBlob}
-            canGoBack={currentIndex > 0}
-            qualityError={qualityError}
-            requestError={requestError}
-            sex={sex}
-            ageBand={ageBand}
-            onSexChange={setSex}
-            onAgeBandChange={setAgeBand}
-            onRecordingComplete={handleRecordingComplete}
-            onRecordingError={(message) => setQualityError(message)}
-            onRecordingReset={() => {
-              setBlobs((prev) => {
-                const next = [...prev];
-                next[currentIndex] = null;
-                return next;
-              });
-              setQualityError(null);
-            }}
-            onBack={handleBack}
-            onNext={handleNext}
-            onAnalyze={handleAnalyze}
-          />
-        )}
-
-        {phase === 'analyzing' && (
-          <Stack align="center" gap="md" py="xl">
-            <Loader />
+    <div className="min-h-dvh bg-[var(--mantine-color-body)] px-4 py-6 sm:py-10">
+      <div className="mx-auto w-full max-w-[640px]">
+        <header className="mb-5 flex items-center gap-3">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand-900">
+            <WaveLogo size={30} />
+          </div>
+          <div className="min-w-0">
+            <Title order={3} lh={1.2}>
+              RecurrSens
+            </Title>
             <Text size="sm" c="dimmed">
-              Aufnahmen werden analysiert…
+              Live-Demo · Drei kurze Aufnahmen, ein Ergebnis
             </Text>
-          </Stack>
-        )}
+          </div>
+        </header>
 
-        {phase === 'result' && result && <ResultStep result={result} onRestart={restart} />}
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={phase}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.2 }}
+          >
+            <Card withBorder radius="md" p="lg" shadow="sm">
+              {phase === 'record' && (
+                <RecordStep
+                  exercise={currentExercise}
+                  stepNumber={currentIndex + 1}
+                  stepCount={DEMO_EXERCISES.length}
+                  isLastExercise={isLastExercise}
+                  hasBlob={!!currentBlob}
+                  canGoBack={currentIndex > 0}
+                  qualityError={qualityError}
+                  requestError={requestError}
+                  sex={sex}
+                  ageBand={ageBand}
+                  onSexChange={setSex}
+                  onAgeBandChange={setAgeBand}
+                  onRecordingComplete={handleRecordingComplete}
+                  onRecordingError={(message) => setQualityError(message)}
+                  onRecordingReset={() => {
+                    setBlobs((prev) => {
+                      const next = [...prev];
+                      next[currentIndex] = null;
+                      return next;
+                    });
+                    setQualityError(null);
+                  }}
+                  onBack={handleBack}
+                  onNext={handleNext}
+                  onAnalyze={handleAnalyze}
+                />
+              )}
+
+              {phase === 'analyzing' && (
+                <Stack align="center" gap="md" py="xl">
+                  <Loader />
+                  <Text size="sm" c="dimmed">
+                    Aufnahmen werden analysiert…
+                  </Text>
+                </Stack>
+              )}
+
+              {phase === 'result' && result && (
+                <ResultStep result={result} onRestart={restart} />
+              )}
+            </Card>
+          </motion.div>
+        </AnimatePresence>
 
         <PrivacyFooter />
-      </Card>
+      </div>
+
     </div>
   );
 }
@@ -313,29 +350,34 @@ function RecordStep({
   return (
     <Stack gap="lg">
       <div>
-        <div className="mb-2 flex items-center justify-between">
-          <Text size="xs" c="dimmed" fw={600}>
+        <div className="mb-2 flex min-h-9 items-center justify-between">
+          <Text size="sm" c="dimmed" fw={600}>
             Aufnahme {stepNumber} von {stepCount}
           </Text>
           {canGoBack && (
-            <Anchor size="xs" component="button" type="button" onClick={onBack}>
+            <Button
+              variant="subtle"
+              size="compact-md"
+              leftSection={<ArrowLeft size={16} />}
+              onClick={onBack}
+            >
               Zurück
-            </Anchor>
+            </Button>
           )}
         </div>
-        <Progress value={(stepNumber / stepCount) * 100} size="xs" mb="md" />
+        <Progress value={(stepNumber / stepCount) * 100} size="sm" />
       </div>
 
       {isFirstStep && (
         <Stack gap="xs">
-          <Text size="xs" c="dimmed" fw={600}>
+          <Text size="sm" c="dimmed" fw={600}>
             Für eine genauere Analyse: Geschlecht und Altersgruppe
           </Text>
           <Group gap="xs">
-            <Chip checked={sex === 'M'} onChange={() => onSexChange('M')} size="sm">
+            <Chip checked={sex === 'M'} onChange={() => onSexChange('M')} size="md">
               Männlich
             </Chip>
-            <Chip checked={sex === 'F'} onChange={() => onSexChange('F')} size="sm">
+            <Chip checked={sex === 'F'} onChange={() => onSexChange('F')} size="md">
               Weiblich
             </Chip>
           </Group>
@@ -345,7 +387,7 @@ function RecordStep({
                 key={band.label}
                 checked={ageBand === band.label}
                 onChange={() => onAgeBandChange(band.label)}
-                size="sm"
+                size="md"
               >
                 {band.label}
               </Chip>
@@ -361,7 +403,7 @@ function RecordStep({
         <Text size="sm">{exercise.description}</Text>
         <div className="mt-3 flex items-center gap-2">
           <Timer size={14} />
-          <Text size="xs" c="dimmed">
+          <Text size="sm" c="dimmed">
             Mind. {exercise.minSeconds} Sek. · Aufnahmetaste gedrückt halten
           </Text>
         </div>
@@ -400,22 +442,27 @@ function ResultStep({ result, onRestart }: { result: DemoAnalysis; onRestart: ()
   // an alarming diagnosis would be both misleading and unkind.
   const favorable = result.favorable;
   const accent = favorable ? 'var(--mantine-color-green-6)' : 'var(--mantine-color-orange-6)';
+  const circle = favorable
+    ? 'bg-green-100 dark:bg-green-950/40'
+    : 'bg-orange-100 dark:bg-orange-950/40';
   const surface = favorable
-    ? 'bg-green-50 dark:bg-green-950/30'
-    : 'bg-orange-50 dark:bg-orange-950/30';
+    ? 'border-green-200 bg-green-50 dark:border-green-900/50 dark:bg-green-950/30'
+    : 'border-orange-200 bg-orange-50 dark:border-orange-900/50 dark:bg-orange-950/30';
 
   return (
     <Stack gap="lg">
-      <div className={`flex flex-col items-center gap-3 rounded-lg p-6 text-center ${surface}`}>
-        {favorable ? (
-          <CheckCircle2 size={48} color={accent} />
-        ) : (
-          <AlertTriangle size={48} color={accent} />
-        )}
+      <div className={`flex flex-col items-center gap-2 rounded-lg border p-5 text-center ${surface}`}>
+        <div className={`flex h-16 w-16 items-center justify-center rounded-full ${circle}`}>
+          {favorable ? (
+            <CheckCircle2 size={36} color={accent} />
+          ) : (
+            <AlertTriangle size={36} color={accent} />
+          )}
+        </div>
 
-        <Text fw={700} size="xl" style={{ color: accent }}>
+        <Title order={3} style={{ color: accent }}>
           {favorable ? 'Unauffälliger Befund' : 'Auffälliger Befund'}
-        </Text>
+        </Title>
 
         {/* The numeric confidence, displayed prominently. */}
         <Text fw={800} style={{ fontSize: '3rem', lineHeight: 1.1, color: accent }}>
@@ -433,7 +480,7 @@ function ResultStep({ result, onRestart }: { result: DemoAnalysis; onRestart: ()
           mt="xs"
         />
 
-        <Text size="xs" c="dimmed" mt={4}>
+        <Text size="sm" c="dimmed" mt={4}>
           Gemittelt über {result.recordings} Aufnahmen (I, A, U)
         </Text>
       </div>
@@ -453,14 +500,17 @@ function ResultStep({ result, onRestart }: { result: DemoAnalysis; onRestart: ()
           explainable machine learning and clinician ratings"): a model's
           confidence is not the same thing as a clinician's judgement, and
           presenting it as one is exactly the failure mode that work documents. */}
-      <Text size="xs" c="dimmed" ta="center">
-        Der Konfidenzwert beschreibt, wie sicher sich das Modell bei dieser Aufnahme ist. Er
-        ersetzt keine ärztliche Beurteilung und ist nicht mit ihr gleichzusetzen.
-      </Text>
+      <div className="rounded-lg bg-blue-50 p-4 dark:bg-blue-950/30">
+        <Text size="sm">
+          Der Konfidenzwert beschreibt, wie sicher sich das Modell bei dieser Aufnahme ist. Er
+          ersetzt keine ärztliche Beurteilung und ist nicht mit ihr gleichzusetzen.
+        </Text>
+      </div>
 
       <Alert color="gray" icon={<ShieldCheck size={18} />}>
-        Ihre Aufnahmen wurden ausschließlich im Arbeitsspeicher verarbeitet und sind bereits
-        gelöscht. Es wurde nichts gespeichert.
+        <Text size="sm">
+          Ihre Aufnahmen wurden nur im Arbeitsspeicher verarbeitet und sind bereits gelöscht.
+        </Text>
       </Alert>
 
       <Button
@@ -478,7 +528,7 @@ function ResultStep({ result, onRestart }: { result: DemoAnalysis; onRestart: ()
 
 function PrivacyFooter() {
   return (
-    <Text size="xs" c="dimmed" ta="center" mt="lg">
+    <Text size="xs" c="dimmed" ta="center" mt="lg" pb="xl">
       Demonstration ohne diagnostische Aussagekraft. Es werden keine Aufnahmen und keine
       personenbezogenen Daten gespeichert.
     </Text>

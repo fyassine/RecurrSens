@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { screen } from '@testing-library/react';
+import { fireEvent, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '../test/render';
 import type { DemoExplanation } from '../api/client';
 import { colorizeGrid, decodeGrid, frequencyFraction } from '../utils/spectrogram';
@@ -64,17 +65,29 @@ describe('DemoSaliency', () => {
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
   });
 
-  it('renders a spectrogram and a highlighted version for every recording', () => {
+  it('shows one highlighted plot per vowel tab and the original while the button is held', async () => {
     renderWithProviders(
       <DemoSaliency explanations={[explanation(), explanation(), explanation()]} labels={labels} />,
     );
 
+    expect(screen.getAllByRole('img')).toHaveLength(1);
+    expect(
+      screen.getByLabelText('Spektrogramm Vokal I mit hervorgehobenen Bereichen'),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Modellwert dieser Aufnahme: 31 %/)).toBeInTheDocument();
+
+    const hold = screen.getByRole('button', { name: /Original gedrückt halten/ });
+    fireEvent.pointerDown(hold);
     expect(screen.getByLabelText('Spektrogramm Vokal I')).toBeInTheDocument();
+    fireEvent.pointerUp(hold);
+    expect(
+      screen.getByLabelText('Spektrogramm Vokal I mit hervorgehobenen Bereichen'),
+    ).toBeInTheDocument();
+
+    await userEvent.click(screen.getByText('U'));
     expect(
       screen.getByLabelText('Spektrogramm Vokal U mit hervorgehobenen Bereichen'),
     ).toBeInTheDocument();
-    expect(screen.getAllByRole('img')).toHaveLength(6);
-    expect(screen.getAllByText(/Modellwert dieser Aufnahme: 31 %/)).toHaveLength(3);
     expect(screen.getByText(/keine ärztliche Aussage/)).toBeInTheDocument();
   });
 
