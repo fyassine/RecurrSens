@@ -16,7 +16,7 @@ const VIRIDIS = [
 
 export const CAM_ALPHA = 0.55;
 export const FMAX_HZ = 8000;
-export const FREQUENCY_TICKS_HZ = [500, 1000, 2000, 4000, 8000];
+export const FREQUENCY_TICKS_HZ = [500, 1000, 2000, 4000]; // 8 kHz is the top edge: its label would collide with the caption above
 
 const N_MELS = 128;
 
