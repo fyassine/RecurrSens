@@ -7,6 +7,8 @@
  * is unchanged.
  */
 
+import { cleanSamples } from './cleanAudio';
+
 export const DEMO_TRIM_START_SECONDS = 0.3;
 
 /** Encode mono float samples (−1…1) as a 16-bit PCM WAV file. */
@@ -50,9 +52,25 @@ export function trimToMono(channels: Float32Array[], skip: number): Float32Array
   return out;
 }
 
+export type PrepareOptions = {
+  /** Seconds cut from the start of the recording. */
+  trimSeconds?: number;
+  /** High-pass + gentle noise gate after trimming. */
+  denoise?: boolean;
+};
+
+/** Trim the start and (optionally) reduce background noise; returns a mono WAV. */
+export function prepareDemoAudio(
+  blob: Blob,
+  { trimSeconds = DEMO_TRIM_START_SECONDS, denoise = true }: PrepareOptions = {},
+): Promise<Blob> {
+  return trimAudioStart(blob, trimSeconds, denoise);
+}
+
 export async function trimAudioStart(
   blob: Blob,
   seconds: number = DEMO_TRIM_START_SECONDS,
+  denoise = false,
 ): Promise<Blob> {
   const arrayBuffer = await blob.arrayBuffer();
   const AudioCtx =
@@ -66,7 +84,8 @@ export async function trimAudioStart(
     const channels = Array.from({ length: decoded.numberOfChannels }, (_, c) =>
       decoded.getChannelData(c),
     );
-    return encodeWav(trimToMono(channels, skip), decoded.sampleRate);
+    const mono = trimToMono(channels, skip);
+    return encodeWav(denoise ? cleanSamples(mono, decoded.sampleRate) : mono, decoded.sampleRate);
   } finally {
     await ctx.close();
   }

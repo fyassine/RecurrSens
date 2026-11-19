@@ -30,6 +30,8 @@ interface AudioRecorderProps {
   micStream?: MediaStream | null;
   hasQualityError?: boolean;
   messages?: RecorderMessages;
+  /** Passed to getUserMedia as `audio`; defaults to `true` (browser defaults). */
+  audioConstraints?: MediaTrackConstraints;
   onRecordingComplete: (blob: Blob) => void;
   onRecordingReset?: () => void;
   onRecordingError?: (message: string) => void;
@@ -40,6 +42,7 @@ export default function AudioRecorder({
   micStream: externalStream,
   hasQualityError = false,
   messages = DEFAULT_MESSAGES,
+  audioConstraints,
   onRecordingComplete,
   onRecordingReset,
   onRecordingError,
@@ -114,7 +117,7 @@ export default function AudioRecorder({
 
     try {
       const mediaStream =
-        externalStream ?? (await navigator.mediaDevices.getUserMedia({ audio: true }));
+        externalStream ?? (await navigator.mediaDevices.getUserMedia({ audio: audioConstraints ?? true }));
 
       if (!isPressingRef.current) {
         if (!externalStream) mediaStream.getTracks().forEach((t) => t.stop());

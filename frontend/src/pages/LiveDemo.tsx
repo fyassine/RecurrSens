@@ -45,7 +45,7 @@ import DemoSaliency from '../components/DemoSaliency';
 import WaveLogo from '../components/WaveLogo';
 import { analyzeDemoRecording, type DemoAnalysis, type DemoRecording } from '../api/client';
 import { calculateRMS, getAudioDuration } from '../utils';
-import { trimAudioStart } from '../utils/trimAudio';
+import { prepareDemoAudio } from '../utils/trimAudio';
 import { LANGS, type DemoStrings, type Lang } from '../i18n/demo';
 import { DemoLangProvider, useDemoLang } from '../i18n/useDemoLang';
 
@@ -79,6 +79,15 @@ const DEMO_EXERCISES: DemoExercise[] = [
 // Same thresholds as the patient wizard (useExerciseSession), so a demo
 // recording is held to the same signal quality as a clinical one.
 const THRESHOLDS = { MIN_DBFS: -30, MAX_DBFS: -6 };
+
+// Ask the browser for its noise suppression (a noisy seminar room is expected)
+// but not automatic gain control, which pumps the level and distorts vowels.
+const DEMO_AUDIO_CONSTRAINTS: MediaTrackConstraints = {
+  noiseSuppression: true,
+  echoCancellation: true,
+  autoGainControl: false,
+  channelCount: 1,
+};
 
 type Phase = 'record' | 'analyzing' | 'result';
 
@@ -192,7 +201,10 @@ function LiveDemoPage() {
           const original = blobs[i] as Blob;
           let blob = original;
           try {
-            blob = await trimAudioStart(original);
+            // `?denoise=0` keeps only the trim, for A/B comparison.
+            blob = await prepareDemoAudio(original, {
+              denoise: searchParams.get('denoise') !== '0',
+            });
           } catch {
             /* keep original */
           }
@@ -430,6 +442,7 @@ function RecordStep({
         key={exercise.exerciseId}
         hasQualityError={!!qualityError}
         messages={t.recorder}
+        audioConstraints={DEMO_AUDIO_CONSTRAINTS}
         onRecordingComplete={onRecordingComplete}
         onRecordingError={onRecordingError}
         onRecordingReset={onRecordingReset}
