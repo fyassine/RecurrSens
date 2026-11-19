@@ -18,6 +18,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Button, Collapse, SegmentedControl, Stack, Text, UnstyledButton } from '@mantine/core';
 import { ChevronDown, Fingerprint, HelpCircle } from 'lucide-react';
 import type { DemoExplanation } from '../api/client';
+import { useDemoLang } from '../i18n/useDemoLang';
 import {
   CAM_ALPHA,
   CIVIDIS_LUT,
@@ -107,19 +108,21 @@ function SpectrogramCanvas({
 export type SaliencyLabel = { exerciseId: string; short: string };
 
 function Legend() {
+  const { t } = useDemoLang();
   return (
     <div className="flex items-center gap-2 text-xs text-[var(--mantine-color-dimmed)]" aria-hidden="true">
-      <span>weniger wichtig</span>
+      <span>{t.saliency.lessImportant}</span>
       <span
         className="h-2 flex-1 rounded-full"
         style={{ background: 'linear-gradient(to right,#440154,#3b528b,#21908d,#5dc863,#fde725)' }}
       />
-      <span>wichtiger</span>
+      <span>{t.saliency.moreImportant}</span>
     </div>
   );
 }
 
 function HowToRead() {
+  const { t } = useDemoLang();
   const [open, setOpen] = useState(false);
   return (
     <div>
@@ -130,33 +133,20 @@ function HowToRead() {
       >
         <HelpCircle size={16} />
         <Text size="sm" fw={600} inherit>
-          Wie lese ich das?
+          {t.saliency.howToRead}
         </Text>
         <ChevronDown size={16} className={open ? 'rotate-180 transition-transform' : 'transition-transform'} />
       </UnstyledButton>
       <Collapse in={open}>
         <Stack gap="xs" pb="xs">
           <Text size="sm" c="dimmed">
-            Das Spektrogramm zeigt Ihre Stimme: Zeit von links nach rechts, Frequenz (kHz) von unten
-            nach oben. Helle Bereiche im Bild markieren, was die Entscheidung des Modells am stärksten
-            beeinflusst hat. Halten Sie die Taste gedrückt, um das unveränderte Original zu sehen.
+            {t.saliency.howToReadBody}
           </Text>
         </Stack>
       </Collapse>
     </div>
   );
 }
-
-function Disclaimer() {
-  return (
-    <Text size="xs" c="dimmed">
-      Die Hervorhebung zeigt, welche Teile des Signals das Modell berücksichtigt hat. Sie ist keine
-      ärztliche Aussage und kein Hinweis auf eine bestimmte Ursache.
-    </Text>
-  );
-}
-
-const labelOf = (labels: SaliencyLabel[], i: number) => labels[i]?.short ?? `Aufnahme ${i + 1}`;
 
 export default function DemoSaliency({
   explanations,
@@ -165,8 +155,10 @@ export default function DemoSaliency({
   explanations: DemoExplanation[];
   labels: SaliencyLabel[];
 }) {
+  const { t } = useDemoLang();
   const [index, setIndex] = useState('0');
   const [holding, setHolding] = useState(false);
+  const labelOf = (list: SaliencyLabel[], k: number) => list[k]?.short ?? t.saliency.recording(k + 1);
   const i = Number(index);
   const explanation = explanations[i] ?? explanations[0];
   const label = labelOf(labels, i);
@@ -175,7 +167,7 @@ export default function DemoSaliency({
   return (
     <Stack gap="sm" data-testid="demo-saliency">
       <Text fw={600} size="md">
-        Worauf das Modell geachtet hat
+        {t.saliency.heading}
       </Text>
 
       <SegmentedControl
@@ -185,15 +177,15 @@ export default function DemoSaliency({
         onChange={setIndex}
         data={explanations.map((_, k) => ({
           value: String(k),
-          label: labelOf(labels, k).replace('Vokal ', ''),
+          label: labelOf(labels, k).split(' ').pop() ?? String(k + 1),
         }))}
-        aria-label="Aufnahme wählen"
+        aria-label={t.saliency.pick}
       />
 
       <SpectrogramCanvas
         explanation={explanation}
         overlay={!holding}
-        label={`Spektrogramm ${label}${holding ? '' : ' mit hervorgehobenen Bereichen'}`}
+        label={t.saliency.plotLabel(label, !holding)}
       />
 
       <div className="flex items-center justify-between gap-2">
@@ -201,14 +193,14 @@ export default function DemoSaliency({
           {label}
           <Text span size="sm" c="dimmed" fw={400}>
             {' '}
-            · Modellwert dieser Aufnahme: {(explanation.probability * 100).toFixed(0)} %
+            · {t.saliency.modelScore((explanation.probability * 100).toFixed(0))}
           </Text>
         </Text>
       </div>
 
       {holding ? (
         <Text size="xs" c="dimmed" aria-live="polite">
-          Original: Spektrogramm Ihrer Aufnahme ohne Hervorhebung
+          {t.saliency.originalCaption}
         </Text>
       ) : (
         <Legend />
@@ -231,11 +223,10 @@ export default function DemoSaliency({
         onContextMenu={(e) => e.preventDefault()}
         style={{ touchAction: 'manipulation', userSelect: 'none', WebkitTouchCallout: 'none' }}
       >
-        Original gedrückt halten
+        {t.saliency.holdOriginal}
       </Button>
 
       <HowToRead />
-      <Disclaimer />
     </Stack>
   );
 }

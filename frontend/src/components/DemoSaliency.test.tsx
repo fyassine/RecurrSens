@@ -88,7 +88,7 @@ describe('DemoSaliency', () => {
     expect(
       screen.getByLabelText('Spektrogramm Vokal U mit hervorgehobenen Bereichen'),
     ).toBeInTheDocument();
-    expect(screen.getByText(/keine ärztliche Aussage/)).toBeInTheDocument();
+    expect(screen.queryByText(/keine ärztliche Aussage/)).not.toBeInTheDocument();
   });
 
   it('survives a malformed grid without throwing', () => {

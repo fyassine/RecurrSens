@@ -3,11 +3,33 @@ import { ActionIcon, Button, Progress, Text } from '@mantine/core';
 import { Play, Square, Mic, RotateCcw } from 'lucide-react';
 import AudioVisualizer from './AudioVisualizer';
 import { formatTime, getAudioDuration } from '../utils';
+import type { RecorderMessages } from '../i18n/demo';
+
+// German defaults keep the patient wizard unchanged; the live demo passes its
+// own (German or English) messages.
+const DEFAULT_MESSAGES: RecorderMessages = {
+  tooQuiet: 'Die Aufnahme ist zu leise. Bitte sprechen Sie lauter oder näher am Mikrofon.',
+  micError:
+    'Mikrofonfehler während der Aufnahme. Bitte prüfen Sie das Mikrofon und versuchen Sie es erneut.',
+  micNotFound:
+    'Mikrofon konnte nicht gefunden werden. Bitte stellen Sie sicher, dass ein Mikrofon angeschlossen ist.',
+  micInsecure:
+    'Mikrofon erfordert eine sichere Verbindung (HTTPS). Bitte verwenden Sie https://recurrsens.eu',
+  micDenied:
+    'Zugriff auf das Mikrofon wurde verweigert. Bitte erlauben Sie den Zugriff in den Browser-Einstellungen.',
+  holdToRecord: 'Gedrückt halten zum Aufnehmen',
+  recording: (time) => `Aufnahme läuft… (${time})`,
+  listen: 'Anhören',
+  reRecord: 'Neu aufnehmen',
+  failed: 'Aufnahme fehlgeschlagen',
+  ready: 'Aufnahme bereit',
+};
 
 interface AudioRecorderProps {
   exampleAudioUrl?: string;
   micStream?: MediaStream | null;
   hasQualityError?: boolean;
+  messages?: RecorderMessages;
   onRecordingComplete: (blob: Blob) => void;
   onRecordingReset?: () => void;
   onRecordingError?: (message: string) => void;
@@ -17,6 +39,7 @@ export default function AudioRecorder({
   exampleAudioUrl,
   micStream: externalStream,
   hasQualityError = false,
+  messages = DEFAULT_MESSAGES,
   onRecordingComplete,
   onRecordingReset,
   onRecordingError,
@@ -121,13 +144,13 @@ export default function AudioRecorder({
 
       mediaRecorder.onerror = () => {
         cleanupRecording(externalStream ? undefined : mediaStream);
-        onRecordingError?.('Mikrofonfehler während der Aufnahme. Bitte prüfen Sie das Mikrofon und versuchen Sie es erneut.');
+        onRecordingError?.(messages.micError);
       };
 
       mediaRecorder.onstop = () => {
         if (chunksRef.current.length === 0) {
           cleanupRecording(externalStream ? undefined : mediaStream);
-          onRecordingError?.('Die Aufnahme ist zu leise. Bitte sprechen Sie lauter oder näher am Mikrofon.');
+          onRecordingError?.(messages.tooQuiet);
           return;
         }
 
@@ -136,7 +159,7 @@ export default function AudioRecorder({
 
         if (blob.size === 0) {
           cleanupRecording(externalStream ? undefined : mediaStream);
-          onRecordingError?.('Die Aufnahme ist zu leise. Bitte sprechen Sie lauter oder näher am Mikrofon.');
+          onRecordingError?.(messages.tooQuiet);
           return;
         }
 
@@ -168,7 +191,7 @@ export default function AudioRecorder({
       isStartingRef.current = false;
       cleanupRecording();
 
-      let message = 'Mikrofon konnte nicht gefunden werden. Bitte stellen Sie sicher, dass ein Mikrofon angeschlossen ist.';
+      let message = messages.micNotFound;
       const errName =
         err instanceof Error
           ? err.name
@@ -176,9 +199,9 @@ export default function AudioRecorder({
             ? String((err as { name?: unknown }).name)
             : undefined;
       if (!window.isSecureContext) {
-        message = 'Mikrofon erfordert eine sichere Verbindung (HTTPS). Bitte verwenden Sie https://recurrsens.eu';
+        message = messages.micInsecure;
       } else if (errName === 'NotAllowedError') {
-        message = 'Zugriff auf das Mikrofon wurde verweigert. Bitte erlauben Sie den Zugriff in den Browser-Einstellungen.';
+        message = messages.micDenied;
       }
 
       if (onRecordingError) onRecordingError(message);
@@ -327,8 +350,8 @@ export default function AudioRecorder({
           </button>
           <Text size="sm" c="dimmed" ta="center">
             {isRecording
-              ? `Aufnahme läuft… (${formatTime(recordingDuration)})`
-              : 'Gedrückt halten zum Aufnehmen'}
+              ? messages.recording(formatTime(recordingDuration))
+              : messages.holdToRecord}
           </Text>
         </>
       )}
@@ -348,7 +371,7 @@ export default function AudioRecorder({
               onClick={playRecording}
               disabled={isPlaying}
             >
-              Anhören
+              {messages.listen}
             </Button>
             <Button
               variant={hasQualityError ? 'filled' : 'outline'}
@@ -356,7 +379,7 @@ export default function AudioRecorder({
               leftSection={<RotateCcw size={16} />}
               onClick={resetRecording}
             >
-              Neu aufnehmen
+              {messages.reRecord}
             </Button>
           </div>
           <Text
@@ -365,7 +388,7 @@ export default function AudioRecorder({
             fw={hasQualityError ? 600 : 400}
             c={hasQualityError ? 'red' : 'dimmed'}
           >
-            {hasQualityError ? 'Aufnahme fehlgeschlagen' : 'Aufnahme bereit'}
+            {hasQualityError ? messages.failed : messages.ready}
           </Text>
         </div>
       )}
