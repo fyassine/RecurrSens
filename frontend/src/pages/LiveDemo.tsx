@@ -33,6 +33,7 @@ import {
   Group,
   Loader,
   Progress,
+  SegmentedControl,
   Stack,
   Text,
   Title,
@@ -44,6 +45,9 @@ import DemoSaliency from '../components/DemoSaliency';
 import WaveLogo from '../components/WaveLogo';
 import { analyzeDemoRecording, type DemoAnalysis, type DemoRecording } from '../api/client';
 import { calculateRMS, getAudioDuration } from '../utils';
+import { trimAudioStart } from '../utils/trimAudio';
+import { LANGS, type DemoStrings, type Lang } from '../i18n/demo';
+import { DemoLangProvider, useDemoLang } from '../i18n/useDemoLang';
 
 // Representative ages sent to the FiLM model for each age-band chip — the demo
 // only has budget for a coarse band, not an exact age (see the design doc's
@@ -63,37 +67,31 @@ const AGE_BANDS: { label: string; age: number }[] = [
 // model averages its verdict over every recording it receives, so asking for
 // all three neutral-pitch vowels (instead of just `a_n`) gives it the input
 // shape it was designed for.
-type DemoExercise = { exerciseId: string; title: string; description: string; minSeconds: number };
+// Titles/descriptions live in the i18n dictionary (src/i18n/demo.ts), keyed by exerciseId.
+type DemoExercise = { exerciseId: string; minSeconds: number };
 
 const DEMO_EXERCISES: DemoExercise[] = [
-  {
-    exerciseId: 'i_n',
-    title: 'Vokal I (normale Tonlage)',
-    description: 'Sagen Sie ca. 2 Sekunden lang ein klares "Iiiii" in normaler Tonlage.',
-    minSeconds: 2,
-  },
-  {
-    exerciseId: 'a_n',
-    title: 'Vokal A (normale Tonlage)',
-    description: 'Sagen Sie ca. 2 Sekunden lang ein klares "Aaaaa" in normaler Tonlage.',
-    minSeconds: 2,
-  },
-  {
-    exerciseId: 'u_n',
-    title: 'Vokal U (normale Tonlage)',
-    description: 'Sagen Sie ca. 2 Sekunden lang ein klares "Uuuuu" in normaler Tonlage.',
-    minSeconds: 2,
-  },
+  { exerciseId: 'i_n', minSeconds: 2 },
+  { exerciseId: 'a_n', minSeconds: 2 },
+  { exerciseId: 'u_n', minSeconds: 2 },
 ];
 
 // Same thresholds as the patient wizard (useExerciseSession), so a demo
 // recording is held to the same signal quality as a clinical one.
 const THRESHOLDS = { MIN_DBFS: -30, MAX_DBFS: -6 };
-const TOO_QUIET = 'Die Aufnahme ist zu leise. Bitte sprechen Sie lauter oder näher am Mikrofon.';
 
 type Phase = 'record' | 'analyzing' | 'result';
 
 export default function LiveDemo() {
+  return (
+    <DemoLangProvider>
+      <LiveDemoPage />
+    </DemoLangProvider>
+  );
+}
+
+function LiveDemoPage() {
+  const { t, lang, setLang } = useDemoLang();
   const { token: tokenFromUrl } = useParams<{ token?: string }>();
 
   // A booth token normally arrives in the QR-encoded URL (/demo/{uuid}), the
@@ -135,7 +133,7 @@ export default function LiveDemo() {
     setRequestError(null);
 
     if (recorded.size === 0) {
-      setQualityError(TOO_QUIET);
+      setQualityError(t.recorder.tooQuiet);
       return;
     }
 
@@ -144,23 +142,21 @@ export default function LiveDemo() {
     try {
       const dbfs = await calculateRMS(recorded);
       if (dbfs < THRESHOLDS.MIN_DBFS) {
-        setQualityError(TOO_QUIET);
+        setQualityError(t.recorder.tooQuiet);
         return;
       }
       if (dbfs > THRESHOLDS.MAX_DBFS) {
-        setQualityError('Die Aufnahme ist zu laut und übersteuert. Bitte etwas mehr Abstand zum Mikrofon.');
+        setQualityError(t.tooLoud);
         return;
       }
 
       const duration = await getAudioDuration(recorded);
       if (duration < currentExercise.minSeconds) {
-        setQualityError(
-          `Die Aufnahme ist zu kurz (${duration.toFixed(1)}s). Bitte mindestens ${currentExercise.minSeconds} Sekunden aufnehmen.`,
-        );
+        setQualityError(t.tooShort(duration.toFixed(1), currentExercise.minSeconds));
         return;
       }
     } catch {
-      setQualityError(TOO_QUIET);
+      setQualityError(t.recorder.tooQuiet);
       return;
     }
 
@@ -188,10 +184,21 @@ export default function LiveDemo() {
     setPhase('analyzing');
     setRequestError(null);
     try {
-      const recordings: DemoRecording[] = DEMO_EXERCISES.map((exercise, i) => ({
-        exerciseId: exercise.exerciseId,
-        blob: blobs[i] as Blob,
-      }));
+      // Drop the first 0.3 s of each recording (button click / mic start-up).
+      // Quality checks above already ran on the untrimmed audio. If trimming
+      // fails for any reason, send the original rather than break the demo.
+      const recordings: DemoRecording[] = await Promise.all(
+        DEMO_EXERCISES.map(async (exercise, i) => {
+          const original = blobs[i] as Blob;
+          let blob = original;
+          try {
+            blob = await trimAudioStart(original);
+          } catch {
+            /* keep original */
+          }
+          return { exerciseId: exercise.exerciseId, blob };
+        }),
+      );
       const age = AGE_BANDS.find((band) => band.label === ageBand)?.age;
       const analysis = await analyzeDemoRecording(
         token,
@@ -201,10 +208,9 @@ export default function LiveDemo() {
       setResult(analysis);
       setPhase('result');
     } catch (err: unknown) {
-      const detail =
-        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ??
-        'Die Analyse ist fehlgeschlagen. Bitte versuchen Sie es erneut.';
-      setRequestError(detail);
+      // Server messages are German-only, so show a localized message by status.
+      const status = (err as { response?: { status?: number } })?.response?.status;
+      setRequestError(status === 413 ? t.tooLarge : t.analysisFailed);
       setPhase('record');
     } finally {
       // The recordings are dropped as soon as they have been sent — the
@@ -232,14 +238,21 @@ export default function LiveDemo() {
           <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand-900">
             <WaveLogo size={30} />
           </div>
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <Title order={3} lh={1.2}>
               RecurrSens
             </Title>
             <Text size="sm" c="dimmed">
-              Live-Demo · Drei kurze Aufnahmen, ein Ergebnis
+              {t.subtitle}
             </Text>
           </div>
+          <SegmentedControl
+            size="sm"
+            value={lang}
+            onChange={(value) => setLang(value as Lang)}
+            data={LANGS.map((l) => ({ value: l, label: l.toUpperCase() }))}
+            aria-label={t.langLabel}
+          />
         </header>
 
         <AnimatePresence mode="wait">
@@ -253,6 +266,7 @@ export default function LiveDemo() {
             <Card withBorder radius="md" p="lg" shadow="sm">
               {phase === 'record' && (
                 <RecordStep
+                  t={t}
                   exercise={currentExercise}
                   stepNumber={currentIndex + 1}
                   stepCount={DEMO_EXERCISES.length}
@@ -285,19 +299,19 @@ export default function LiveDemo() {
                 <Stack align="center" gap="md" py="xl">
                   <Loader />
                   <Text size="sm" c="dimmed">
-                    Aufnahmen werden analysiert…
+                    {t.analyzing}
                   </Text>
                 </Stack>
               )}
 
               {phase === 'result' && result && (
-                <ResultStep result={result} onRestart={restart} />
+                <ResultStep t={t} result={result} onRestart={restart} />
               )}
             </Card>
           </motion.div>
         </AnimatePresence>
 
-        <PrivacyFooter />
+        <PrivacyFooter text={t.footer} />
       </div>
 
     </div>
@@ -305,6 +319,7 @@ export default function LiveDemo() {
 }
 
 function RecordStep({
+  t,
   exercise,
   stepNumber,
   stepCount,
@@ -324,6 +339,7 @@ function RecordStep({
   onNext,
   onAnalyze,
 }: {
+  t: DemoStrings;
   exercise: DemoExercise;
   stepNumber: number;
   stepCount: number;
@@ -346,13 +362,14 @@ function RecordStep({
   const isFirstStep = stepNumber === 1;
   const demographicsComplete = !!sex && !!ageBand;
   const canAdvance = hasBlob && !qualityError && (!isFirstStep || demographicsComplete);
+  const text = t.exercises[exercise.exerciseId];
 
   return (
     <Stack gap="lg">
       <div>
         <div className="mb-2 flex min-h-9 items-center justify-between">
           <Text size="sm" c="dimmed" fw={600}>
-            Aufnahme {stepNumber} von {stepCount}
+            {t.recordingOf(stepNumber, stepCount)}
           </Text>
           {canGoBack && (
             <Button
@@ -361,7 +378,7 @@ function RecordStep({
               leftSection={<ArrowLeft size={16} />}
               onClick={onBack}
             >
-              Zurück
+              {t.back}
             </Button>
           )}
         </div>
@@ -371,14 +388,14 @@ function RecordStep({
       {isFirstStep && (
         <Stack gap="xs">
           <Text size="sm" c="dimmed" fw={600}>
-            Für eine genauere Analyse: Geschlecht und Altersgruppe
+            {t.demographicsHint}
           </Text>
           <Group gap="xs">
             <Chip checked={sex === 'M'} onChange={() => onSexChange('M')} size="md">
-              Männlich
+              {t.male}
             </Chip>
             <Chip checked={sex === 'F'} onChange={() => onSexChange('F')} size="md">
-              Weiblich
+              {t.female}
             </Chip>
           </Group>
           <Group gap="xs">
@@ -398,13 +415,13 @@ function RecordStep({
 
       <div className="rounded-lg bg-blue-50 p-4 dark:bg-blue-950/30">
         <Text fw={600} size="md" mb="xs">
-          {exercise.title}
+          {text.title}
         </Text>
-        <Text size="sm">{exercise.description}</Text>
+        <Text size="sm">{text.description}</Text>
         <div className="mt-3 flex items-center gap-2">
           <Timer size={14} />
           <Text size="sm" c="dimmed">
-            Mind. {exercise.minSeconds} Sek. · Aufnahmetaste gedrückt halten
+            {t.minSeconds(exercise.minSeconds)}
           </Text>
         </div>
       </div>
@@ -412,13 +429,14 @@ function RecordStep({
       <AudioRecorder
         key={exercise.exerciseId}
         hasQualityError={!!qualityError}
+        messages={t.recorder}
         onRecordingComplete={onRecordingComplete}
         onRecordingError={onRecordingError}
         onRecordingReset={onRecordingReset}
       />
 
       {qualityError && (
-        <Alert color="red" title="Aufnahmequalität nicht ausreichend">
+        <Alert color="red" title={t.qualityTitle}>
           {qualityError}
         </Alert>
       )}
@@ -430,13 +448,21 @@ function RecordStep({
         disabled={!canAdvance}
         onClick={isLastExercise ? onAnalyze : onNext}
       >
-        {isLastExercise ? 'Auswerten' : 'Weiter'}
+        {isLastExercise ? t.evaluate : t.next}
       </Button>
     </Stack>
   );
 }
 
-function ResultStep({ result, onRestart }: { result: DemoAnalysis; onRestart: () => void }) {
+function ResultStep({
+  t,
+  result,
+  onRestart,
+}: {
+  t: DemoStrings;
+  result: DemoAnalysis;
+  onRestart: () => void;
+}) {
   // Green means favourable/normal; anything else uses amber rather than red.
   // This is a booth demo with no clinical validity, so a result that reads as
   // an alarming diagnosis would be both misleading and unkind.
@@ -461,7 +487,7 @@ function ResultStep({ result, onRestart }: { result: DemoAnalysis; onRestart: ()
         </div>
 
         <Title order={3} style={{ color: accent }}>
-          {favorable ? 'Unauffälliger Befund' : 'Auffälliger Befund'}
+          {favorable ? t.normal : t.abnormal}
         </Title>
 
         {/* The numeric confidence, displayed prominently. */}
@@ -469,7 +495,7 @@ function ResultStep({ result, onRestart }: { result: DemoAnalysis; onRestart: ()
           {result.confidence.toFixed(0)}%
         </Text>
         <Text size="sm" c="dimmed">
-          Konfidenz des Modells
+          {t.confidence}
         </Text>
 
         <Progress
@@ -481,7 +507,7 @@ function ResultStep({ result, onRestart }: { result: DemoAnalysis; onRestart: ()
         />
 
         <Text size="sm" c="dimmed" mt={4}>
-          Gemittelt über {result.recordings} Aufnahmen (I, A, U)
+          {t.averagedOver(result.recordings)}
         </Text>
       </div>
 
@@ -490,27 +516,13 @@ function ResultStep({ result, onRestart }: { result: DemoAnalysis; onRestart: ()
           explanations={result.explanations}
           labels={DEMO_EXERCISES.map((e) => ({
             exerciseId: e.exerciseId,
-            short: e.title.replace(' (normale Tonlage)', ''),
+            short: t.exercises[e.exerciseId].short,
           }))}
         />
       )}
 
-      {/* Framing borrowed from the reference paper ("Identifying bias in models
-          that detect vocal fold paralysis from audio recordings using
-          explainable machine learning and clinician ratings"): a model's
-          confidence is not the same thing as a clinician's judgement, and
-          presenting it as one is exactly the failure mode that work documents. */}
-      <div className="rounded-lg bg-blue-50 p-4 dark:bg-blue-950/30">
-        <Text size="sm">
-          Der Konfidenzwert beschreibt, wie sicher sich das Modell bei dieser Aufnahme ist. Er
-          ersetzt keine ärztliche Beurteilung und ist nicht mit ihr gleichzusetzen.
-        </Text>
-      </div>
-
       <Alert color="gray" icon={<ShieldCheck size={18} />}>
-        <Text size="sm">
-          Ihre Aufnahmen wurden nur im Arbeitsspeicher verarbeitet und sind bereits gelöscht.
-        </Text>
+        <Text size="sm">{t.recordingsDeleted}</Text>
       </Alert>
 
       <Button
@@ -520,17 +532,16 @@ function ResultStep({ result, onRestart }: { result: DemoAnalysis; onRestart: ()
         leftSection={<RotateCcw size={16} />}
         onClick={onRestart}
       >
-        Nochmal
+        {t.again}
       </Button>
     </Stack>
   );
 }
 
-function PrivacyFooter() {
+function PrivacyFooter({ text }: { text: string }) {
   return (
     <Text size="xs" c="dimmed" ta="center" mt="lg" pb="xl">
-      Demonstration ohne diagnostische Aussagekraft. Es werden keine Aufnahmen und keine
-      personenbezogenen Daten gespeichert.
+      {text}
     </Text>
   );
 }
