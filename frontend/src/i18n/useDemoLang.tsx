@@ -16,7 +16,7 @@ const DemoLangContext = createContext<Ctx | null>(null);
 
 export function DemoLangProvider({ children }: { children: ReactNode }) {
   const [lang, setLangState] = useState<Lang>(() =>
-    resolveInitialLang(window.location.search, readSaved(), navigator.language ?? ''),
+    resolveInitialLang(window.location.search, readSaved()),
   );
 
   const setLang = useCallback((next: Lang) => {

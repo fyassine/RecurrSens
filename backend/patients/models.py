@@ -611,3 +611,28 @@ class PatientAuditLog(models.Model):
 
     def __str__(self):
         return f'{self.get_event_type_display()} — {self.patient.patient_id} @ {self.created_at:%Y-%m-%d %H:%M}'
+
+
+class DemoVisit(models.Model):
+    """
+    One visit (browser tab) of the live demo: when it was opened, on what kind
+    of device, and whether the visitor reached a result.
+
+    Deliberately holds no audio, demographics, verdict or IP address.
+    """
+
+    # Minted by the browser and kept for the lifetime of the tab.
+    id = models.UUIDField(primary_key=True, editable=False)
+    booth_token = models.UUIDField(verbose_name='Booth-Token')
+    device_info = models.JSONField(default=dict, blank=True, verbose_name='Geräteinformationen')
+    opened_at = models.DateTimeField(auto_now_add=True, verbose_name='Geöffnet am')
+    completed_at = models.DateTimeField(null=True, blank=True, verbose_name='Abgeschlossen am')
+
+    class Meta:
+        ordering = ['-opened_at']
+        verbose_name = 'Demo-Besuch'
+        verbose_name_plural = 'Demo-Besuche'
+
+    def __str__(self):
+        state = 'abgeschlossen' if self.completed_at else 'geöffnet'
+        return f'{self.opened_at:%Y-%m-%d %H:%M} ({state})'

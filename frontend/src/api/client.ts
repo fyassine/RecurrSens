@@ -432,6 +432,15 @@ export async function analyzeDemoRecording(
   return data;
 }
 
+export type DemoVisitEvent = 'opened' | 'completed';
+
+export async function logDemoVisit(
+  token: string,
+  payload: { visit_id: string; event: DemoVisitEvent; device: object },
+): Promise<void> {
+  await publicApi.post(`/demo/${token}/visit/`, payload);
+}
+
 export type FeedbackPayload = {
   phase: 'PRE_OP' | 'POST_OP';
   rating?: number | null;

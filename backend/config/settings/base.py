@@ -133,6 +133,8 @@ REST_FRAMEWORK = {
         # Live demo. Generous because a conference booth NATs every visitor
         # behind one public IP, and DRF throttles anonymous callers by IP.
         'demo_inference': config('DEMO_THROTTLE_RATE', default='300/hour'),
+        # Two calls per demo visit (opened, completed), same shared-NAT reasoning.
+        'demo_visit': config('DEMO_VISIT_THROTTLE_RATE', default='1200/hour'),
     },
 }
 

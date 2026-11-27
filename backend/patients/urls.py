@@ -6,13 +6,13 @@ Routes are organized into three groups:
 2. Patient-facing endpoints (/api/p/{token}/...) — UUID token auth
 3. Public endpoints (/api/exercises/, /api/audio/...) — no auth
 4. Export (/api/export/) — JWT required
-5. Live demo (/api/demo/...) — no auth, stores nothing (see demo_views.py)
+5. Live demo (/api/demo/...) — no auth, stores no audio or results; logs visits only
 """
 
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
-from . import demo_views, views
+from . import demo_views, demo_visits, views
 
 app_name = 'patients'
 
@@ -102,6 +102,12 @@ urlpatterns = [
         'demo/<uuid:token>/analyze/',
         demo_views.LiveDemoAnalyzeView.as_view(),
         name='live-demo-analyze',
+    ),
+    # Usage log (opened / completed + device info). See demo_visits.py.
+    path(
+        'demo/<uuid:token>/visit/',
+        demo_visits.LiveDemoVisitView.as_view(),
+        name='live-demo-visit',
     ),
     # =========================================================================
     # Exercises (public)
