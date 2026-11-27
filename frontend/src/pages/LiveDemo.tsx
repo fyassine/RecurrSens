@@ -11,8 +11,9 @@
  * It takes three short sustained-vowel recordings (i_n, a_n, u_n — the same
  * neutral pitch the real model averages over), posts them together to an
  * endpoint that classifies them in memory and stores nothing, and shows the
- * result. There is no patient record, no upload, no persistence — on the
- * client or the server. The `token` in the URL is an opaque booth id printed
+ * result. There is no patient record and no upload; recordings and results are
+ * not persisted. Only the visit itself is logged (opened / completed, device
+ * type — see utils/demoVisit.ts). The `token` in the URL is an opaque booth id printed
  * on the QR poster; it identifies no one and is never looked up in the
  * database.
  *
@@ -46,7 +47,8 @@ import WaveLogo from '../components/WaveLogo';
 import { analyzeDemoRecording, type DemoAnalysis, type DemoRecording } from '../api/client';
 import { calculateRMS, getAudioDuration } from '../utils';
 import { prepareDemoAudio } from '../utils/trimAudio';
-import { LANGS, type DemoStrings, type Lang } from '../i18n/demo';
+import { trackDemoVisit } from '../utils/demoVisit';
+import { LANGS, LANG_NAMES, type DemoStrings, type Lang } from '../i18n/demo';
 import { DemoLangProvider, useDemoLang } from '../i18n/useDemoLang';
 
 // Representative ages sent to the FiLM model for each age-band chip — the demo
@@ -134,6 +136,13 @@ function LiveDemoPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    if (import.meta.env.DEV && searchParams.get('mock') !== null) return;
+    trackDemoVisit(token, 'opened');
+    // Run once per token; the query string does not matter afterwards.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
+
   const currentExercise = DEMO_EXERCISES[currentIndex];
   const isLastExercise = currentIndex === DEMO_EXERCISES.length - 1;
   const currentBlob = blobs[currentIndex];
@@ -219,6 +228,7 @@ function LiveDemoPage() {
       );
       setResult(analysis);
       setPhase('result');
+      trackDemoVisit(token, 'completed');
     } catch (err: unknown) {
       // Server messages are German-only, so show a localized message by status.
       const status = (err as { response?: { status?: number } })?.response?.status;
@@ -259,10 +269,10 @@ function LiveDemoPage() {
             </Text>
           </div>
           <SegmentedControl
-            size="sm"
+            size="xs"
             value={lang}
             onChange={(value) => setLang(value as Lang)}
-            data={LANGS.map((l) => ({ value: l, label: l.toUpperCase() }))}
+            data={LANGS.map((l) => ({ value: l, label: LANG_NAMES[l] }))}
             aria-label={t.langLabel}
           />
         </header>

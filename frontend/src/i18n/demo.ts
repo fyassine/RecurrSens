@@ -4,7 +4,10 @@
  */
 
 export type Lang = 'de' | 'en';
-export const LANGS: Lang[] = ['de', 'en'];
+export const LANGS: Lang[] = ['en', 'de'];
+
+// Each language named in itself, as shown in the switcher.
+export const LANG_NAMES: Record<Lang, string> = { en: 'English', de: 'Deutsch' };
 
 export type RecorderMessages = {
   tooQuiet: string;
@@ -122,7 +125,7 @@ const de: DemoStrings = {
     'Ihre Aufnahmen wurden nur im Arbeitsspeicher verarbeitet und sind bereits gelöscht.',
   again: 'Nochmal',
   footer:
-    'Demonstration ohne diagnostische Aussagekraft. Es werden keine Aufnahmen und keine personenbezogenen Daten gespeichert.',
+    'Demonstration ohne diagnostische Aussagekraft. Aufnahmen werden nicht gespeichert.',
   langLabel: 'Sprache',
   saliency: {
     heading: 'Worauf das Modell geachtet hat',
@@ -198,7 +201,7 @@ const en: DemoStrings = {
     'Your recordings were processed in memory only and have already been deleted.',
   again: 'Start over',
   footer:
-    'Demonstration without diagnostic value. No recordings and no personal data are stored.',
+    'Demonstration without diagnostic value. Recordings are not stored.',
   langLabel: 'Language',
   saliency: {
     heading: 'What the model focused on',
@@ -223,12 +226,11 @@ const isLang = (value: string | null | undefined): value is Lang =>
   !!value && (LANGS as string[]).includes(value);
 
 /**
- * Initial language: `?lang=de|en` → saved choice → browser language
- * (German if it starts with "de", otherwise English).
+ * Initial language: `?lang=de|en` → saved choice → English.
  */
-export function resolveInitialLang(search: string, saved: string | null, browser: string): Lang {
+export function resolveInitialLang(search: string, saved: string | null): Lang {
   const fromUrl = new URLSearchParams(search).get('lang');
   if (isLang(fromUrl)) return fromUrl;
   if (isLang(saved)) return saved;
-  return browser.toLowerCase().startsWith('de') ? 'de' : 'en';
+  return 'en';
 }

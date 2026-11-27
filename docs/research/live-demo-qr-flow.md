@@ -423,3 +423,16 @@ patient to create, and no cleanup afterwards, because nothing was kept.
 | `frontend/src/components/DemoSaliency.tsx`, `src/utils/spectrogram.ts` | Spectrogram + Grad-CAM canvas drawing |
 | `frontend/src/api/client.ts` | `analyzeDemoRecording()` |
 | `backend/config/settings/base.py` | `DEMO_*` settings |
+
+## Visit log
+
+`POST /api/demo/{token}/visit/` records one `DemoVisit` per browser tab: booth
+token, device and browser details, `opened_at`, and `completed_at` (set once a
+result is shown; empty means the visitor only opened the page). No audio,
+demographics, verdict or IP address is stored. Rows are kept until deleted by
+hand. Read them on the server:
+
+```bash
+docker compose -p recurrsens-demo -f docker-compose.demo.yml exec -T backend \
+  python manage.py demo_visits          # add --csv for an export
+```
